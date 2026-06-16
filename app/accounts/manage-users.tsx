@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import AppTextInput from '@/src/components/AppTextInput';
 import { styles as ds } from '@/src/theme/styles';
 
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, ActivityIndicator } from 'react-native';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -17,11 +17,14 @@ import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContex
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
 import {
-  manageUsersSearchHaystack,
   personListDisplayName,
   staffRoleDepartmentLine,
   studentEnrollmentSubtitle,
 } from '../../src/utils/displayHelpers';
+
+/** Higher page size than the API default so the un-searched browse list is usable. */
+const LIST_PAGE_SIZE = 100;
+const SEARCH_DEBOUNCE_MS = 400;
 
 export default function ManageUsersScreen() {
   const {
@@ -39,54 +42,78 @@ export default function ManageUsersScreen() {
   } = useAuth();
   const [activeTab, setActiveTab] = useState<'student' | 'staff'>('student');
   const [users, setUsers] = useState<any[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  useEffect(() => {
-    loadUsers();
-  }, [activeTab, user?.userId]);
-  useEffect(() => {
-    if (searchQuery) {
-      const lowerInfo = searchQuery.toLowerCase();
-      const kind = activeTab === 'student' ? 'student' : 'staff';
-      const filtered = users.filter((u) =>
-        manageUsersSearchHaystack(u as Record<string, unknown>, kind).includes(lowerInfo)
-      );
-      setFilteredUsers(filtered);
-    } else {
-      setFilteredUsers(users);
-    }
-  }, [searchQuery, users, activeTab]);
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      if (user?.userId) {
+
+  // Guards against out-of-order responses: only the latest request may commit.
+  const requestSeq = useRef(0);
+
+  /**
+   * Server-side fetch. The search term is sent to the backend (`?search=`),
+   * which applies a case-insensitive DB filter across the FULL dataset.
+   * There is no client-side `.filter()` — results always come from the API.
+   */
+  const loadUsers = useCallback(
+    async (tab: 'student' | 'staff', search: string, { isSearch }: { isSearch?: boolean } = {}) => {
+      if (!user?.userId) return;
+      const seq = ++requestSeq.current;
+      if (isSearch) setSearching(true); else setLoading(true);
+      try {
+        const trimmed = search.trim();
         let list: any[] = [];
-        if (activeTab === 'student') {
-          const response = await StudentService.getAll();
+        if (tab === 'student') {
+          const response = await StudentService.getAll({
+            search: trimmed || undefined,
+            limit: LIST_PAGE_SIZE,
+            page: 1,
+          });
           list = Array.isArray(response) ? response : response?.data ?? [];
         } else {
-          const raw = await StaffService.getAll();
-          list = Array.isArray(raw) ? raw : [];
+          list = await StaffService.getAll({
+            search: trimmed || undefined,
+            limit: LIST_PAGE_SIZE,
+            page: 1,
+          });
         }
-        if (__DEV__) {
-          const data = {
-            students: activeTab === 'student' ? list : [],
-            staff: activeTab === 'staff' ? list : [],
-          };
-          console.log('RAW STUDENT RESPONSE:', JSON.stringify(data?.students?.[0], null, 2));
-          console.log('RAW STAFF RESPONSE:', JSON.stringify(data?.staff?.[0], null, 2));
-        }
+        // Ignore stale responses from a superseded request.
+        if (seq !== requestSeq.current) return;
         setUsers(list);
-        setFilteredUsers(list);
+      } catch (e) {
+        if (seq !== requestSeq.current) return;
+        setUsers([]);
+        alertCompat('Error', 'Failed to load users');
+      } finally {
+        if (seq === requestSeq.current) {
+          setLoading(false);
+          setSearching(false);
+        }
       }
-    } catch (e) {
+    },
+    [user?.userId]
+  );
 
-      alertCompat("Error", "Failed to load users");
-    } finally {
-      setLoading(false);
+  // Initial load + full reload whenever the tab or signed-in user changes.
+  // Switching tabs clears the search so we don't carry a stale term across tabs.
+  useEffect(() => {
+    setSearchQuery('');
+    loadUsers(activeTab, '');
+  }, [activeTab, user?.userId, loadUsers]);
+
+  // Debounced server-side search: re-fetch from the API as the term settles.
+  // Skips the very first run so we don't double-fetch on mount / tab switch.
+  const didMountRef = useRef(false);
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
     }
-  };
+    const timer = setTimeout(() => {
+      loadUsers(activeTab, searchQuery, { isSearch: true });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchQuery, activeTab, loadUsers]);
+
   const handleEdit = (user: any) => {
     if (activeTab === 'student') {
       router.push({
@@ -119,7 +146,7 @@ export default function ManageUsersScreen() {
           } else {
             await StaffService.delete(targetUser.id);
           }
-          loadUsers();
+          loadUsers(activeTab, searchQuery);
           alertCompat("Success", "User deleted.");
         } catch (e) {
           const message = e instanceof APIError ? e.message : 'Failed to delete user';
@@ -173,11 +200,12 @@ export default function ManageUsersScreen() {
     <View style={[styles.searchContainer, ds.searchBarWrapper]}>
       <Ionicons name="search" size={20} color="#9CA3AF" />
       <AppTextInput style={[ds.inputInChrome, styles.searchInput]} placeholder={`Search ${activeTab === 'student' ? 'Students' : 'Staff'}...`} value={searchQuery} onChangeText={setSearchQuery} />
+      {searching ? <ActivityIndicator size="small" color="#3B82F6" /> : null}
     </View>
     {/* LIST */}
     {loading ? <LogoLoader size={60} color="#3B82F6" style={{
       marginTop: 40
-    }} /> : <FlatList data={filteredUsers} renderItem={renderItem} keyExtractor={(item) => item.id} contentContainerStyle={styles.list} ListEmptyComponent={<Text style={styles.emptyText}>No users found.</Text>} />}
+    }} /> : <FlatList data={users} renderItem={renderItem} keyExtractor={(item) => item.id} contentContainerStyle={styles.list} ListEmptyComponent={<Text style={styles.emptyText}>{searchQuery.trim() ? 'No matches found.' : 'No users found.'}</Text>} />}
     {/* FAB to Add New */}
     <TouchableOpacity style={styles.fab} onPress={() => {
       if (activeTab === 'student') router.push('/accounts/addStudent'); else router.push('/accounts/addStaff');

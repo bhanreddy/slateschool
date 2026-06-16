@@ -110,7 +110,7 @@ function staffRowsFromListResponse(res: Staff[] | StaffListPage): Staff[] {
 }
 
 export const StaffService = {
-    getAll: async (params?: { status_id?: number }): Promise<Staff[]> => {
+    getAll: async (params?: { status_id?: number; search?: string; limit?: number; page?: number }): Promise<Staff[]> => {
         const res = await api.get<Staff[] | StaffListPage>('/staff', params);
         return staffRowsFromListResponse(res);
     },
