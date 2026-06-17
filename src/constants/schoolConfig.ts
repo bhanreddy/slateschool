@@ -42,54 +42,54 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
     ...defaultLightTheme,
     colors: {
       ...defaultLightTheme.colors,
-      // Primary brand color – Deep Navy Blue (from logo)
-      primary: '#113053',
-      primaryLight: '#1D69A6',
-      primaryDark: '#0C223C',
-      // Secondary color – Slate Blue (from logo)
-      secondary: '#889BAC',
-      // Accent color – Amber Gold (from logo)
-      accent: '#F09822',
-      // Backgrounds – subtle blue-tinted cool gray
-      background: '#F4F6F9',
+      // Primary brand color – Rich purple (logo outer ring)
+      primary: '#6B2FA0',
+      primaryLight: '#9B59B6',
+      primaryDark: '#4A1A75',
+      // Secondary color – Orange/Amber (logo sun motif)
+      secondary: '#F5921B',
+      // Accent color – Golden amber (logo sun rays)
+      accent: '#F9A825',
+      // Backgrounds – warm purple-tinted neutrals
+      background: '#FAF5FF',
       surface: '#FFFFFF',
       card: '#FFFFFF',
-      // Text colors – deep slate navy palette
-      textPrimary: '#112233',
-      textStrong: '#091420',
-      textSecondary: '#475D73',
-      textMuted: '#8092A6',
-      text: '#112233',
-      textTertiary: '#8092A6',
-      // Borders – blue-tinted gray
-      border: '#D1DCE5',
-      borderLight: '#E9EFF4',
+      // Text colors – deep purple palette
+      textPrimary: '#4A1A75',
+      textStrong: '#2D0A4E',
+      textSecondary: '#475569',
+      textMuted: '#64748B',
+      text: '#4A1A75',
+      textTertiary: '#64748B',
+      // Borders – purple-tinted
+      border: '#EDE4F5',
+      borderLight: '#F5EEFA',
       // Semantic colors
-      danger: '#EF4444',
+      danger: '#D32F2F',
       success: '#10B981',
       warning: '#F59E0B',
-      info: '#1D69A6',
-      notification: '#EF4444',
-      // Navigation – soft blue-gray pill tints
-      navPill: '#EBF2F7',
-      navIconActive: '#113053',
-      navIconInactive: '#8092A6',
+      info: '#6B2FA0',
+      notification: '#F5921B',
+      // Navigation – purple pill tints
+      navPill: '#F3E5F5',
+      navIconActive: '#6B2FA0',
+      navIconInactive: '#64748B',
       // Header/Footer backgrounds (with transparency for glass effect)
-      headerBg: 'rgba(244, 246, 249, 0.88)',
+      headerBg: 'rgba(250,245,255, 0.88)',
       footerBg: 'rgba(255,255,255, 0.92)',
       // Alert colors
-      alertBg: '#FEFCE8',
-      alertBorder: '#FEF08A',
-      alertIcon: '#EAB308',
-      alertText: '#854D0E',
+      alertBg: '#F3E5F5',
+      alertBorder: '#CE93D8',
+      alertIcon: '#6B2FA0',
+      alertText: '#4A1A75',
       alertBgDanger: '#FEF2F2',
       alertBorderDanger: '#FECACA',
-      alertIconDanger: '#EF4444',
+      alertIconDanger: '#D32F2F',
       alertTextDanger: '#991B1B',
-      alertBgInfo: '#EDF7FC',
-      alertBorderInfo: '#B3DFEF',
-      alertIconInfo: '#1D69A6',
-      alertTextInfo: '#0A5F8A',
+      alertBgInfo: '#F3E5F5',
+      alertBorderInfo: '#CE93D8',
+      alertIconInfo: '#6B2FA0',
+      alertTextInfo: '#4A1A75',
     },
     typography: {
       fontFamily: 'System',
@@ -153,54 +153,54 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
     ...defaultDarkTheme,
     colors: {
       ...defaultDarkTheme.colors,
-      // Primary – slate blue for dark mode legibility
-      primary: '#889BAC',
-      primaryLight: '#A6B7C7',
-      primaryDark: '#4F657B',
-      // Secondary – light gold
-      secondary: '#F2BF71',
-      // Accent – amber gold
-      accent: '#F09822',
-      // Dark backgrounds – deep navy-tinted tones
-      background: '#09111C',
-      surface: '#111C2B',
-      card: '#111C2B',
+      // Primary – lighter purple for dark mode legibility
+      primary: '#B57EDC',
+      primaryLight: '#CE93D8',
+      primaryDark: '#9B59B6',
+      // Secondary – light orange for dark mode
+      secondary: '#FFB74D',
+      // Accent – golden amber for dark backgrounds
+      accent: '#FFD54F',
+      // Dark backgrounds – deep purple-ink tones
+      background: '#1A0A2E',
+      surface: '#2D1B4E',
+      card: '#2D1B4E',
       // Light text for dark backgrounds
-      textPrimary: '#E1E7EE',
-      textStrong: '#F1F4F8',
-      textSecondary: '#8B9EAF',
-      textMuted: '#576C7E',
-      text: '#E1E7EE',
-      textTertiary: '#576C7E',
-      // Darker borders – deep navy border
-      border: '#1E2D3F',
-      borderLight: '#2C3F54',
+      textPrimary: '#F3E5F5',
+      textStrong: '#FFFFFF',
+      textSecondary: '#D1C4E9',
+      textMuted: '#9575CD',
+      text: '#F3E5F5',
+      textTertiary: '#9575CD',
+      // Darker borders – purple-ink
+      border: '#3D2060',
+      borderLight: '#4A2878',
       // Lighter semantic colors for dark mode
       danger: '#F87171',
       success: '#34D399',
       warning: '#FBBF24',
-      info: '#1D69A6',
-      notification: '#F87171',
-      // Navigation – slate blue tint
-      navPill: 'rgba(136, 155, 172, 0.15)',
-      navIconActive: '#889BAC',
-      navIconInactive: '#415366',
-      // Header/Footer with dark navy glass effect
-      headerBg: 'rgba(9, 17, 28, 0.88)',
-      footerBg: 'rgba(17, 28, 43, 0.92)',
+      info: '#B57EDC',
+      notification: '#FFB74D',
+      // Navigation – purple tint
+      navPill: 'rgba(107,47,160, 0.2)',
+      navIconActive: '#CE93D8',
+      navIconInactive: '#7E57C2',
+      // Header/Footer with dark purple glass effect
+      headerBg: 'rgba(26,10,46, 0.88)',
+      footerBg: 'rgba(45,27,78, 0.92)',
       // Alert colors (dark mode)
-      alertBg: 'rgba(234,179,8, 0.1)',
-      alertBorder: 'rgba(234,179,8, 0.2)',
-      alertIcon: '#FBBF24',
-      alertText: '#FEF08A',
-      alertBgDanger: 'rgba(239,68,68, 0.1)',
-      alertBorderDanger: 'rgba(239,68,68, 0.2)',
+      alertBg: 'rgba(107,47,160, 0.12)',
+      alertBorder: 'rgba(107,47,160, 0.25)',
+      alertIcon: '#CE93D8',
+      alertText: '#E1BEE7',
+      alertBgDanger: 'rgba(248,113,113, 0.1)',
+      alertBorderDanger: 'rgba(248,113,113, 0.2)',
       alertIconDanger: '#F87171',
       alertTextDanger: '#FECACA',
-      alertBgInfo: 'rgba(29, 105, 166, 0.12)',
-      alertBorderInfo: 'rgba(29, 105, 166, 0.25)',
-      alertIconInfo: '#1D69A6',
-      alertTextInfo: '#B3DFEF',
+      alertBgInfo: 'rgba(107,47,160, 0.15)',
+      alertBorderInfo: 'rgba(107,47,160, 0.3)',
+      alertIconInfo: '#B57EDC',
+      alertTextInfo: '#E1BEE7',
     },
     typography: {
       fontFamily: 'System',
@@ -264,45 +264,47 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
 
 export const SCHOOL_CONFIG = {
   // The official name of the school displayed in headers and reports
-  name: "Samskruthe School Nawabpet",
+  name: "Geetanjali High School Maddur",
 
   // Short line under the school name on the header ribbon (gold text)
-  tagline: "Enlighting young minds",
+  tagline: "Build Your Own Identity",
 
   // Motto / core values shown in the first info column of the ribbon (letterhead)
-  motto: "Education is not Business, it is a Mission",
+  motto: "Thought , Action , Progress",
 
   // The school logo used in headers and reports
   // Ensure the image exists in assets/images/
   logo: require('../../assets/images/icon.png'),
 
   // Optional: School Address for reports
-  address: "Samskruthe School ,Nawabpet.,Nawabpet,Dist Vikarabad., Telangana-501111",
+  address: "Geetanjali High School Maddur, Narayanapet Road, Maddur, Narayanapet District, Telangana - 509411",
 
   // Optional: Contact info for reports
-  contact: "9000700973",
+  contact: "9573276939",
 
   // Optional: School email for letterhead / reports
-  email: "pjrsamskruthe@gmail.com",
+  email: "geetanjalihighschool.vvm@gmail.com",
 
   // Website or Email
-  website: "www.nexsyrus.com",
+  website: "www.ghsmaddur.in",
 
   // CBSE Affiliation No (if applicable)
   cbseAffiliationNo: "NA",
 
   // School Code (if applicable)
-  schoolCode: "SSNAWABPET",
+  schoolCode: "46117",
 
   /**
    * Colour theme for ribbon / letterhead chrome (SchoolRibbon, etc.).
-   * Adjust `ribbonGradient` stops for your brand; `accent` drives gold trim and taglines.
+   * Extracted from the logo: rich purple ring with golden-orange accents.
    */
   theme: {
-    /** Stripes, tagline text, soft dividers – amber gold from logo */
-    accent: '#F09822',
-    /** Four-stop diagonal ribbon – deep navy to royal/slate blue */
-    ribbonGradient: ['#113053', '#163E6A', '#1D69A6', '#4F657B'] as const,
+    /** Golden-orange stripes, dividers, and trim (logo sun rays) */
+    accent: '#F9A825',
+    /** Tagline text – warm gold */
+    ribbonTagline: '#FFE082',
+    /** Four-stop diagonal ribbon – deep purple to medium purple (logo outer ring) */
+    ribbonGradient: ['#3D1266', '#6B2FA0', '#7B2FB5', '#9B59B6'] as const,
     /** Optional stops for expo-linear-gradient (length must match ribbonGradient) */
     ribbonGradientLocations: [0, 0.30, 0.65, 1] as const,
     /** Main title on the ribbon */
@@ -319,6 +321,3 @@ export const SCHOOL_CONFIG = {
     statusBarOnRibbon: 'light' as 'light' | 'dark',
   },
 };
-
-export const SCHOOL_RECOGNITION_LINE = 'Recognised by Govt. of Telangana';
-
