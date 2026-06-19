@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useApiQuery } from '../../src/hooks/useApiQuery';
 import { AnalyticsData } from '../../src/services/analyticsService';
+import { FeeService } from '../../src/services/feeService';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContext';
 import LogoLoader from '../../src/components/LogoLoader';
@@ -630,10 +631,21 @@ const MobileAnalyticsSection = ({ data, loading, styles, isDark, contentW, confi
 };
 
 // ─── Dashboard ────────────────────────────────────────────────────────────────
+function mapDashboardTransactions(rows: any[]) {
+  return (Array.isArray(rows) ? rows : []).map((tx: any) => ({
+    id: tx.id,
+    name: tx.student_name || '—',
+    class: tx.class_name || '—',
+    type: tx.fee_type || 'Fee',
+    amount: `+₹${Number(tx.amount ?? 0).toLocaleString('en-IN')}`,
+    time: new Date(tx.collected_at || tx.paid_at || tx.payment_date || tx.created_at || Date.now()).toLocaleDateString('en-IN'),
+  }));
+}
+
 export default function AccountsDashboard() {
   const router = useRouter();
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const { theme, isDark } = useTheme();
   const { shellActive } = useAccountsWebChrome();
   const layout = useLayout(shellActive);
@@ -652,24 +664,19 @@ export default function AccountsDashboard() {
   const carouselRef = useRef<ScrollView>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const authUserId = user?.userId || user?.id || null;
+  const canSeeAllCollections = role === 'admin' || role === 'principal';
+
   const { data: statsData, loading: statsLoading } = useApiQuery<any>(
     '/fees/dashboard-stats',
     'accounts-dashboard-stats',
     DASHBOARD_CACHE_TTL_MS,
-    user?.id,
+    authUserId,
     { query: { for_accounts: '1' } }
   );
 
-  const { data: txData, loading: txLoading } = useApiQuery<any[]>(
-    '/fees/transactions',
-    'accounts-dashboard-transactions',
-    DASHBOARD_CACHE_TTL_MS,
-    user?.id,
-    { query: { limit: 5 } }
-  );
-
   useEffect(() => {
-    setLoading(statsLoading || txLoading);
+    setLoading(statsLoading);
     setAnalyticsLoading(statsLoading);
     if (!statsData) return;
 
@@ -710,20 +717,36 @@ export default function AccountsDashboard() {
       insights: rawStats.system_insights || [],
     };
     setAnalytics(reconstructedAnalytics);
-  }, [statsData, statsLoading, txLoading]);
 
-  useEffect(() => {
-    if (!txData) return;
-    const transactionsArray = Array.isArray(txData) ? txData : (txData as any)?.data || [];
-    setTransactions(transactionsArray.map((tx: any) => ({
-      id: tx.id,
-      name: tx.student_name,
-      class: tx.class_name || tx.payment_method?.toUpperCase() || 'CASH',
-      type: tx.fee_type || 'Fee',
-      amount: `+₹${tx.amount.toLocaleString()}`,
-      time: new Date(tx.collected_at || tx.payment_date || tx.paid_at || tx.created_at || Date.now()).toLocaleDateString()
-    })));
-  }, [txData]);
+    const recentFromStats = rawStats.recent_transactions;
+    if (Array.isArray(recentFromStats) && recentFromStats.length > 0) {
+      setTransactions(mapDashboardTransactions(recentFromStats));
+      return;
+    }
+
+    if (!authUserId) {
+      setTransactions([]);
+      return;
+    }
+
+    let cancelled = false;
+    FeeService.getTransactions({
+      limit: 5,
+      ...(canSeeAllCollections ? {} : { received_by: authUserId }),
+    })
+      .then((rows) => {
+        if (cancelled) return;
+        const list = Array.isArray(rows) ? rows : (rows as any)?.data ?? [];
+        setTransactions(mapDashboardTransactions(list));
+      })
+      .catch(() => {
+        if (!cancelled) setTransactions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [statsData, statsLoading, authUserId, canSeeAllCollections]);
 
   const carouselCards = useMemo(() => {
     const cards = [];

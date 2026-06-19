@@ -17,6 +17,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { StudentService } from '@/src/services/studentService';
+import type { Student } from '@/src/types/models';
 import { CertificateService } from '@/src/services/certificateService';
 import { FeeService } from '@/src/services/feeService';
 import { SchoolSettingsService, SchoolSettings } from '@/src/services/schoolSettingsService';
@@ -632,17 +633,17 @@ const bfStyles = StyleSheet.create({
     marginBottom: 60,
     zIndex: 1,
   },
-  titleText: { fontSize: 17, fontWeight: '800', color: BONAFIDE_BLUE, letterSpacing: 0.8, textAlign: 'center' },
+  titleText: { fontSize: 19, fontWeight: '800', color: BONAFIDE_BLUE, letterSpacing: 0.8, textAlign: 'center' },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, marginBottom: 14, zIndex: 1 },
-  metaText: { fontSize: 15, color: BONAFIDE_BLUE, fontWeight: '600' },
-  metaVal: { fontWeight: '800', textDecorationLine: 'underline' },
+  metaText: { fontSize: 17, color: BONAFIDE_BLUE, fontWeight: '600' },
+  metaVal: { fontSize: 19, fontWeight: '800', textDecorationLine: 'underline' },
   body: { zIndex: 1, gap: 14 },
-  bodyLine: { fontSize: 17, lineHeight: 28, color: BONAFIDE_BLUE, fontWeight: '500' },
-  dobWordsLine: { fontSize: 16, color: BONAFIDE_BLUE, fontWeight: '700', textDecorationLine: 'underline', marginTop: 4, marginBottom: 12 },
-  bold: { fontWeight: '800' },
+  bodyLine: { fontSize: 19, lineHeight: 32, color: BONAFIDE_BLUE, fontWeight: '500' },
+  dobWordsLine: { fontSize: 18, color: BONAFIDE_BLUE, fontWeight: '700', textDecorationLine: 'underline', marginTop: 4, marginBottom: 12 },
+  bold: { fontSize: 21, fontWeight: '800' },
   footer: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 36, paddingTop: 8, zIndex: 1 },
-  footerText: { fontSize: 15, color: BONAFIDE_BLUE, fontWeight: '600', flex: 1 },
-  footerSign: { fontSize: 16, fontWeight: '800', color: BONAFIDE_BLUE, textAlign: 'right', minWidth: 140 },
+  footerText: { fontSize: 17, color: BONAFIDE_BLUE, fontWeight: '600', flex: 1 },
+  footerSign: { fontSize: 18, fontWeight: '800', color: BONAFIDE_BLUE, textAlign: 'right', minWidth: 140 },
 });
 
 const cpStyles = StyleSheet.create({
@@ -1269,13 +1270,16 @@ function buildCertificateHTML(
     .bf-school-recognition { font-size: 13px; color: ${BONAFIDE_BLUE}; margin-top: 4px; font-weight: 700; }
     .bf-school-addr { font-size: 14px; color: ${BONAFIDE_BLUE}; margin-top: 5px; font-weight: 600; white-space: pre-line; line-height: 1.45; }
     .bf-school-contact { font-size: 12.5px; color: ${BONAFIDE_BLUE}; margin-top: 4px; font-weight: 500; }
-    .bf-title-box { text-align: center; border: 1.5px solid ${BONAFIDE_BLUE}; border-radius: 4px; padding: 6px 18px; margin: 8px auto 20px; width: fit-content; font-size: 16px; font-weight: 800; color: ${BONAFIDE_BLUE}; letter-spacing: 0.8px; }
-    .bf-meta { display: flex; justify-content: space-between; font-size: 14px; color: ${BONAFIDE_BLUE}; font-weight: 600; margin: 8px 0 12px; }
+    .bf-title-box { text-align: center; border: 1.5px solid ${BONAFIDE_BLUE}; border-radius: 4px; padding: 6px 18px; margin: 8px auto 20px; width: fit-content; font-size: 19px; font-weight: 800; color: ${BONAFIDE_BLUE}; letter-spacing: 0.8px; }
+    .bf-meta { display: flex; justify-content: space-between; font-size: 17px; color: ${BONAFIDE_BLUE}; font-weight: 600; margin: 8px 0 12px; }
+    .bf-meta u { font-size: 19px; font-weight: 800; }
     .bf-body { }
-    .bf-line { font-size: 16px; line-height: 26px; color: ${BONAFIDE_BLUE}; margin: 0 0 10px; }
+    .bf-line { font-size: 19px; line-height: 32px; color: ${BONAFIDE_BLUE}; margin: 0 0 10px; font-weight: 500; }
+    .bf-line strong { font-size: 21px; font-weight: 800; }
     .bf-line-dob { margin-top: 14px; }
-    .bf-dob-words { font-size: 15px; color: ${BONAFIDE_BLUE}; font-weight: 700; text-decoration: underline; margin: 5px 0 12px; }
-    .bf-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 8px; font-size: 14px; color: ${BONAFIDE_BLUE}; font-weight: 600; }
+    .bf-dob-words { font-size: 18px; color: ${BONAFIDE_BLUE}; font-weight: 700; text-decoration: underline; margin: 5px 0 12px; }
+    .bf-footer { display: flex; justify-content: space-between; align-items: flex-end; margin-top: 24px; padding-top: 8px; font-size: 17px; color: ${BONAFIDE_BLUE}; font-weight: 600; }
+    .bf-footer strong { font-size: 19px; font-weight: 800; }
   </style></head><body>
   <div class="certificate-print-root">
     ${logoDataUri ? `<div class="certificate-watermark"><img src="${logoDataUri}" alt="" /></div>` : ''}
@@ -1289,6 +1293,17 @@ function buildCertificateHTML(
 function parentDisplayName(p: any): string {
   if (p?.display_name?.trim()) return p.display_name.trim();
   return `${p?.first_name || ''} ${p?.last_name || ''}`.trim();
+}
+
+function studentRecordName(student: Student): string {
+  return student.display_name || `${student.first_name || ''} ${student.last_name || ''}`.trim() || 'Student';
+}
+
+function studentRecordClass(student: Student): string {
+  const enrollment = student.current_enrollment;
+  const cls = enrollment?.class_name || enrollment?.class_code || '—';
+  const sec = enrollment?.section_name;
+  return sec ? `${cls} – ${sec}` : cls;
 }
 
 function buildStudentDataFromRecord(
@@ -1344,6 +1359,7 @@ export default function CertificateGenerator() {
 
   const [studentId, setStudentId] = useState('');
   const [loading, setLoading] = useState(false);
+  const [searchMatches, setSearchMatches] = useState<Student[] | null>(null);
   const [studentData, setStudentData] = useState<StudentData | null>(null);
   const [tcFields, setTcFields] = useState<TCEditableFields>(DEFAULT_TC_FIELDS);
   const [selectedType, setSelectedType] = useState<CertificateType>(null);
@@ -1365,6 +1381,16 @@ export default function CertificateGenerator() {
       .catch(() => { /* keep SCHOOL_CONFIG fallback */ });
   }, []);
 
+  const loadStudentFromRecord = useCallback(async (studentRecord: Student) => {
+    const silent = { silent: true } as const;
+    const [parents, enrollments] = await Promise.all([
+      StudentService.getParents(studentRecord.id, silent).catch(() => [] as any[]),
+      StudentService.getEnrollments(studentRecord.id, silent).catch(() => [] as any[]),
+    ]);
+    setStudentData(buildStudentDataFromRecord(studentRecord, parents, enrollments));
+    setSearchMatches(null);
+  }, []);
+
   // ── Fetch student ──────────────────────────────────────────────────────────
   const handleSearch = async () => {
     if (!studentId.trim()) {
@@ -1374,34 +1400,44 @@ export default function CertificateGenerator() {
     setLoading(true);
     setGenerated(false);
     setStudentData(null);
+    setSearchMatches(null);
     setSelectedType(null);
     setTcFields(DEFAULT_TC_FIELDS);
     try {
+      const query = studentId.trim();
       const silent = { silent: true } as const;
-      let studentRecord: any = null;
-      const results = await StudentService.search(studentId.trim());
-      if (results?.length > 0) {
-        const exact = results.find((s: any) => s.admission_no === studentId.trim());
-        studentRecord = exact || results[0];
-      }
-      if (!studentRecord) {
+      const results = await StudentService.search(query, 20);
+
+      if (results.length === 0) {
         try {
-          studentRecord = await StudentService.getById(studentId.trim(), silent);
-        } catch { /* noop */ }
+          const student = await StudentService.getById(query, silent);
+          await loadStudentFromRecord(student);
+          return;
+        } catch {
+          alertCompat('Not Found', 'No student matched the given ID, admission number, or name.');
+          return;
+        }
       }
-      if (!studentRecord?.id) {
-        alertCompat('Not Found', 'No student matched the given ID or Admission No.');
+
+      if (results.length === 1) {
+        await loadStudentFromRecord(results[0]);
         return;
       }
 
-      const [parents, enrollments] = await Promise.all([
-        StudentService.getParents(studentRecord.id, silent).catch(() => [] as any[]),
-        StudentService.getEnrollments(studentRecord.id, silent).catch(() => [] as any[]),
-      ]);
-
-      setStudentData(buildStudentDataFromRecord(studentRecord, parents, enrollments));
+      setSearchMatches(results);
     } catch (err: any) {
       alertCompat('Error', err?.message || 'Could not fetch student data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSelectSearchMatch = async (student: Student) => {
+    setLoading(true);
+    try {
+      await loadStudentFromRecord(student);
+    } catch (err: any) {
+      alertCompat('Error', err?.message || 'Could not load the selected student.');
     } finally {
       setLoading(false);
     }
@@ -1532,6 +1568,7 @@ export default function CertificateGenerator() {
   const handleReset = () => {
     setGenerated(false);
     setStudentData(null);
+    setSearchMatches(null);
     setSelectedType(null);
     setStudentId('');
     setTcFields(DEFAULT_TC_FIELDS);
@@ -1584,6 +1621,55 @@ export default function CertificateGenerator() {
             )}
           </TouchableOpacity>
         </Animated.View>
+
+        {searchMatches && searchMatches.length > 0 && !studentData && (
+          <Animated.View entering={FadeInDown.delay(40).duration(350)} style={styles.matchSection}>
+            <Text style={styles.matchHint}>
+              {searchMatches.length} students matched — select the correct one
+            </Text>
+            {searchMatches.map((student, index) => (
+              <Pressable
+                key={student.id}
+                onPress={() => handleSelectSearchMatch(student)}
+                disabled={loading}
+                style={({ pressed }) => [
+                  styles.matchCard,
+                  pressed && styles.matchCardPressed,
+                  loading && styles.matchCardDisabled,
+                ]}
+              >
+                <View style={styles.studentAvatar}>
+                  <Text style={styles.studentAvatarText}>
+                    {studentRecordName(student).charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <View style={styles.studentInfo}>
+                  <Text style={styles.studentName} numberOfLines={1}>
+                    {studentRecordName(student)}
+                  </Text>
+                  <View style={styles.studentMetaRow}>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>{studentRecordClass(student)}</Text>
+                    </View>
+                    <View style={styles.metaChip}>
+                      <Text style={styles.metaChipText}>#{student.admission_no}</Text>
+                    </View>
+                    {student.category?.name ? (
+                      <View style={styles.metaChip}>
+                        <Text style={styles.metaChipText}>{student.category.name}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={18}
+                  color={isDark ? 'rgba(255,255,255,0.25)' : '#9CA3AF'}
+                />
+              </Pressable>
+            ))}
+          </Animated.View>
+        )}
 
         {/* ── Step 2: Student found + Select type ── */}
         {studentData && !generated && (
@@ -1687,6 +1773,11 @@ const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   searchBtnDisabled: { opacity: 0.6, shadowOpacity: 0 },
   searchBtnGrad: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 20 },
   searchBtnText: { color: '#FFF', fontWeight: '800', fontSize: 15 },
+  matchSection: { marginBottom: 16, gap: 8 },
+  matchHint: { fontSize: 13, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.45)' : '#64748B', marginBottom: 4 },
+  matchCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: isDark ? '#1C1F2A' : '#FFFFFF', borderRadius: 16, padding: 14, borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#E5E7EB' },
+  matchCardPressed: { opacity: 0.85, borderColor: '#4F46E5' },
+  matchCardDisabled: { opacity: 0.6 },
   studentStrip: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: isDark ? '#1C1F2A' : '#FFFFFF', borderRadius: 18, padding: 14, marginBottom: 16, borderWidth: 1, borderLeftWidth: 4, borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', borderLeftColor: '#4F46E5', ...Platform.select({ ios: { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.12, shadowRadius: 10 }, android: { elevation: 3 } }) },
   studentAvatar: { width: 46, height: 46, borderRadius: 14, backgroundColor: isDark ? 'rgba(79,70,229,0.2)' : '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   studentAvatarText: { fontSize: 20, fontWeight: '800', color: '#4F46E5' },

@@ -115,7 +115,6 @@ export function buildCollectionCsv(rows: FeeTransaction[], meta: CollectionRepor
       'Admission no',
       'Class · Section',
       'Time',
-      'Receipt / Transaction ref',
       'Amount',
     ].map(escapeCsv).join(','),
   ];
@@ -130,18 +129,17 @@ export function buildCollectionCsv(rows: FeeTransaction[], meta: CollectionRepor
         row.admission_no ?? '—',
         formatClassSection(row.class_name, row.section_name),
         formatTime(row.paid_at),
-        row.transaction_ref ?? '—',
         Number(row.amount || 0).toFixed(2),
       ].map(escapeCsv).join(','),
     );
   }
 
   lines.push('');
-  lines.push(`Grand total,,,,,,,,${totals.grandTotal.toFixed(2)}`);
+  lines.push(`Grand total,,,,,,,${totals.grandTotal.toFixed(2)}`);
   for (const mode of PAYMENT_MODES) {
     const bucket = totals.byMode[mode];
     if (!bucket || bucket.count === 0) continue;
-    lines.push(`${formatPaymentMethod(mode)} subtotal,,,,,,,${bucket.count} txn,${bucket.total.toFixed(2)}`);
+    lines.push(`${formatPaymentMethod(mode)} subtotal,,,,,,${bucket.count} txn,${bucket.total.toFixed(2)}`);
   }
 
   return lines.join('\n');
@@ -204,7 +202,6 @@ function buildCollectionHtml(rows: FeeTransaction[], meta: CollectionReportMeta)
         <td>${escapeHtml(row.admission_no ?? '—')}</td>
         <td>${escapeHtml(formatClassSection(row.class_name, row.section_name))}</td>
         <td>${escapeHtml(formatTime(row.paid_at))}</td>
-        <td>${escapeHtml(row.transaction_ref ?? '—')}</td>
         <td class="num">${escapeHtml(formatAmount(Number(row.amount || 0)))}</td>
       </tr>`,
     )
@@ -285,16 +282,15 @@ function buildCollectionHtml(rows: FeeTransaction[], meta: CollectionReportMeta)
           <th>Adm no</th>
           <th>Class · Section</th>
           <th>Time</th>
-          <th>Ref</th>
           <th class="num">Amount</th>
         </tr>
       </thead>
       <tbody>
-        ${tableRows || '<tr><td colspan="9">No collections recorded today.</td></tr>'}
+        ${tableRows || '<tr><td colspan="8">No collections recorded today.</td></tr>'}
       </tbody>
       <tfoot>
         <tr>
-          <td colspan="8"><strong>Grand total (${totals.count} transactions)</strong></td>
+          <td colspan="7"><strong>Grand total (${totals.count} transactions)</strong></td>
           <td class="num"><strong>${escapeHtml(formatAmount(totals.grandTotal))}</strong></td>
         </tr>
       </tfoot>

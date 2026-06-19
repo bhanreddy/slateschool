@@ -96,8 +96,8 @@ export const StudentService = {
     /**
      * Search students by name or admission number
      */
-    search: async (query: string): Promise<Student[]> => {
-        const response = await api.get<{ data: Student[] }>('/students', { search: query, limit: 5 });
+    search: async (query: string, limit = 5): Promise<Student[]> => {
+        const response = await api.get<{ data: Student[] }>('/students', { search: query, limit });
         // Handle both array response and { data: [] } response formats from paginated API
         if (Array.isArray(response)) return response;
         return response.data || [];
@@ -128,15 +128,25 @@ export const StudentService = {
         const results = await StudentService.search(trimmed);
         if (results.length > 0) {
             const normalized = trimmed.toLowerCase();
-            const exactAdmission = results.find((s) => s.admission_no === trimmed);
-            if (exactAdmission) return { status: 'found', student: exactAdmission };
+            const exactAdmissionMatches = results.filter((s) => s.admission_no === trimmed);
+            if (exactAdmissionMatches.length === 1) {
+                return { status: 'found', student: exactAdmissionMatches[0] };
+            }
+            if (exactAdmissionMatches.length > 1) {
+                return { status: 'ambiguous', students: exactAdmissionMatches };
+            }
 
-            const exactName = results.find((s) => {
+            const exactNameMatches = results.filter((s) => {
                 const displayName = s.display_name?.toLowerCase() ?? '';
                 const fullName = [s.first_name, s.last_name].filter(Boolean).join(' ').trim().toLowerCase();
                 return displayName === normalized || fullName === normalized;
             });
-            if (exactName) return { status: 'found', student: exactName };
+            if (exactNameMatches.length === 1) {
+                return { status: 'found', student: exactNameMatches[0] };
+            }
+            if (exactNameMatches.length > 1) {
+                return { status: 'ambiguous', students: exactNameMatches };
+            }
 
             if (results.length === 1) return { status: 'found', student: results[0] };
 
