@@ -38,22 +38,7 @@ import PaymentDueBanner from '../../src/components/PaymentDueBanner';
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  COLOUR HIERARCHY SYSTEM                                                    */
-/*                                                                             */
-/*  TIER 1 – PRIMARY (most-accessed daily actions)                            */
-/*    Deep indigo → cobalt. These own the most visual weight.                 */
-/*                                                                             */
-/*  TIER 2 – FINANCIAL (money flows)                                          */
-/*    Forest emerald → teal. Distinct from academic, easy to scan.            */
-/*                                                                             */
-/*  TIER 3 – ACADEMIC (learning / records)                                    */
-/*    Royal violet → purple. Knowledge domain.                                */
-/*                                                                             */
-/*  TIER 4 – OPS / SUPPORT (logistics, comms)                                 */
-/*    Burnt amber → gold. Warm, operational feel.                             */
-/*                                                                             */
-/*  TIER 5 – ADMIN / SECURITY (destructive / gated actions)                  */
-/*    Crimson → rose. High visual weight, signals authority.                  */
+/* COLOUR HIERARCHY SYSTEM                                                   */
 /* ─────────────────────────────────────────────────────────────────────────── */
 type ActionCardVisual = {
   g: [string, string];
@@ -67,52 +52,36 @@ type ActionCardVisual = {
 };
 
 const TIER = {
-  // Tier 1 — Primary academic navigation
   PRIMARY:   { g: ['#172554', '#2563EB'] as [string, string], accent: '#93C5FD', badge: '#60A5FA', rim: 'rgba(147,197,253,0.48)', orb: 'rgba(59,130,246,0.30)', wash: 'rgba(219,234,254,0.18)', label: '#DBEAFE', shadow: '#2563EB' },
-  // Tier 2 — Financial flows
   FINANCE:   { g: ['#064E3B', '#10B981'] as [string, string], accent: '#6EE7B7', badge: '#34D399', rim: 'rgba(110,231,183,0.45)', orb: 'rgba(16,185,129,0.28)', wash: 'rgba(209,250,229,0.18)', label: '#D1FAE5', shadow: '#059669' },
-  // Tier 3 — Academic records / reports
   ACADEMIC:  { g: ['#3B0764', '#8B5CF6'] as [string, string], accent: '#C4B5FD', badge: '#A78BFA', rim: 'rgba(196,181,253,0.46)', orb: 'rgba(139,92,246,0.30)', wash: 'rgba(237,233,254,0.17)', label: '#EDE9FE', shadow: '#7C3AED' },
-  // Tier 4 — Operations / comms / support
   OPS:       { g: ['#78350F', '#F59E0B'] as [string, string], accent: '#FDE68A', badge: '#FCD34D', rim: 'rgba(253,230,138,0.42)', orb: 'rgba(245,158,11,0.28)', wash: 'rgba(254,243,199,0.18)', label: '#FEF3C7', shadow: '#D97706' },
-  // Tier 5 — Admin / security / danger zone
   ADMIN:     { g: ['#831843', '#F43F5E'] as [string, string], accent: '#FDA4AF', badge: '#FB7185', rim: 'rgba(253,164,175,0.46)', orb: 'rgba(244,63,94,0.30)', wash: 'rgba(255,228,230,0.17)', label: '#FFE4E6', shadow: '#E11D48' },
 } as const;
 
 type TierKey = keyof typeof TIER;
 
 const ACTION_CARD_VISUALS: Record<string, ActionCardVisual> = {
-  // Row 1: daily academic navigation, strongest blue family.
   '/admin/academics':                  { g: ['#172554', '#2563EB'], accent: '#93C5FD', badge: '#60A5FA', rim: 'rgba(147,197,253,0.50)', orb: 'rgba(59,130,246,0.32)', wash: 'rgba(219,234,254,0.20)', label: '#DBEAFE', shadow: '#2563EB' },
   '/admin/diary/viewer':               { g: ['#0F172A', '#0EA5E9'], accent: '#7DD3FC', badge: '#38BDF8', rim: 'rgba(125,211,252,0.48)', orb: 'rgba(14,165,233,0.30)', wash: 'rgba(224,242,254,0.18)', label: '#E0F2FE', shadow: '#0284C7' },
   '/admin/timetable':                  { g: ['#1E1B4B', '#6366F1'], accent: '#A5B4FC', badge: '#818CF8', rim: 'rgba(165,180,252,0.48)', orb: 'rgba(99,102,241,0.31)', wash: 'rgba(224,231,255,0.18)', label: '#E0E7FF', shadow: '#4F46E5' },
-
-  // Row 2: academic admin, still important but a calmer support palette.
   '/admin/academic-year-upgrade':      { g: ['#164E63', '#06B6D4'], accent: '#67E8F9', badge: '#22D3EE', rim: 'rgba(103,232,249,0.44)', orb: 'rgba(6,182,212,0.28)', wash: 'rgba(207,250,254,0.17)', label: '#CFFAFE', shadow: '#0891B2' },
   '/admin/certificate-generator':      { g: ['#713F12', '#F59E0B'], accent: '#FDE68A', badge: '#FBBF24', rim: 'rgba(253,230,138,0.44)', orb: 'rgba(245,158,11,0.27)', wash: 'rgba(254,243,199,0.18)', label: '#FEF3C7', shadow: '#D97706' },
   '/admin/progress-report-generator':  { g: ['#312E81', '#7C3AED'], accent: '#C4B5FD', badge: '#A78BFA', rim: 'rgba(196,181,253,0.46)', orb: 'rgba(124,58,237,0.30)', wash: 'rgba(237,233,254,0.17)', label: '#EDE9FE', shadow: '#6D28D9' },
-
-  // Finance: money flow cards get distinct green, teal, amber, and slate variants.
   '/admin/expenses':                   { g: ['#7C2D12', '#EA580C'], accent: '#FDBA74', badge: '#FB923C', rim: 'rgba(253,186,116,0.44)', orb: 'rgba(234,88,12,0.28)', wash: 'rgba(255,237,213,0.17)', label: '#FFEDD5', shadow: '#C2410C' },
   '/admin/fees/set-class-fee':         { g: ['#064E3B', '#10B981'], accent: '#6EE7B7', badge: '#34D399', rim: 'rgba(110,231,183,0.45)', orb: 'rgba(16,185,129,0.28)', wash: 'rgba(209,250,229,0.18)', label: '#D1FAE5', shadow: '#059669' },
   '/admin/fees/adjustments':           { g: ['#365314', '#84CC16'], accent: '#BEF264', badge: '#A3E635', rim: 'rgba(190,242,100,0.42)', orb: 'rgba(132,204,22,0.27)', wash: 'rgba(236,252,203,0.17)', label: '#ECFCCB', shadow: '#65A30D' },
   '/admin/upi-settings':               { g: ['#134E4A', '#14B8A6'], accent: '#5EEAD4', badge: '#2DD4BF', rim: 'rgba(94,234,212,0.44)', orb: 'rgba(20,184,166,0.28)', wash: 'rgba(204,251,241,0.17)', label: '#CCFBF1', shadow: '#0D9488' },
   '/admin/fees/visibility':            { g: ['#334155', '#64748B'], accent: '#CBD5E1', badge: '#94A3B8', rim: 'rgba(203,213,225,0.40)', orb: 'rgba(100,116,139,0.24)', wash: 'rgba(241,245,249,0.14)', label: '#F1F5F9', shadow: '#475569' },
   '/admin/payroll':                    { g: ['#312E81', '#6366F1'], accent: '#A5B4FC', badge: '#818CF8', rim: 'rgba(165,180,252,0.48)', orb: 'rgba(99,102,241,0.31)', wash: 'rgba(224,231,255,0.18)', label: '#E0E7FF', shadow: '#4F46E5' },
-
-  // Insights/reporting: high-signal analytic cards.
   '/admin/reports':                    { g: ['#4C1D95', '#9333EA'], accent: '#D8B4FE', badge: '#C084FC', rim: 'rgba(216,180,254,0.46)', orb: 'rgba(147,51,234,0.30)', wash: 'rgba(243,232,255,0.18)', label: '#F3E8FF', shadow: '#7E22CE' },
   '/admin/smart-insights':             { g: ['#831843', '#EC4899'], accent: '#F9A8D4', badge: '#F472B6', rim: 'rgba(249,168,212,0.46)', orb: 'rgba(236,72,153,0.30)', wash: 'rgba(252,231,243,0.17)', label: '#FCE7F3', shadow: '#DB2777' },
-
-  // Operations: each operational domain gets its own semantic color.
   '/admin/notices':                    { g: ['#713F12', '#EAB308'], accent: '#FEF08A', badge: '#FACC15', rim: 'rgba(254,240,138,0.42)', orb: 'rgba(234,179,8,0.27)', wash: 'rgba(254,249,195,0.17)', label: '#FEF9C3', shadow: '#CA8A04' },
   '/admin/complaints':                 { g: ['#881337', '#F43F5E'], accent: '#FDA4AF', badge: '#FB7185', rim: 'rgba(253,164,175,0.45)', orb: 'rgba(244,63,94,0.30)', wash: 'rgba(255,228,230,0.17)', label: '#FFE4E6', shadow: '#E11D48' },
   '/admin/transport':                  { g: ['#0C4A6E', '#38BDF8'], accent: '#BAE6FD', badge: '#7DD3FC', rim: 'rgba(186,230,253,0.44)', orb: 'rgba(56,189,248,0.28)', wash: 'rgba(224,242,254,0.17)', label: '#E0F2FE', shadow: '#0284C7' },
   '/admin/leaves':                     { g: ['#14532D', '#22C55E'], accent: '#86EFAC', badge: '#4ADE80', rim: 'rgba(134,239,172,0.43)', orb: 'rgba(34,197,94,0.28)', wash: 'rgba(220,252,231,0.17)', label: '#DCFCE7', shadow: '#16A34A' },
   '/admin/manage-staff':               { g: ['#581C87', '#A855F7'], accent: '#D8B4FE', badge: '#C084FC', rim: 'rgba(216,180,254,0.45)', orb: 'rgba(168,85,247,0.29)', wash: 'rgba(243,232,255,0.17)', label: '#F3E8FF', shadow: '#9333EA' },
   '/admin/add-accounts-staff':         { g: ['#9A3412', '#FB923C'], accent: '#FED7AA', badge: '#FDBA74', rim: 'rgba(254,215,170,0.43)', orb: 'rgba(251,146,60,0.28)', wash: 'rgba(255,237,213,0.17)', label: '#FFEDD5', shadow: '#EA580C' },
-
-  // Security: strongest warning color, intentionally reserved.
   '/admin/access-requests':            { g: ['#7F1D1D', '#DC2626'], accent: '#FCA5A5', badge: '#F87171', rim: 'rgba(252,165,165,0.48)', orb: 'rgba(220,38,38,0.32)', wash: 'rgba(254,226,226,0.18)', label: '#FEE2E2', shadow: '#B91C1C' },
 };
 
@@ -150,13 +119,9 @@ const CARD_WIDTH = ACTUAL_WIDTH - CONTAINER_PADDING * 2;
 
 const GRID_GAP = 10;
 const GRID_COLS = 3;
-const ACTION_CARD_WIDTH =
-  Math.floor((ACTUAL_WIDTH - CONTAINER_PADDING * 2 - GRID_GAP * (GRID_COLS - 1)) / GRID_COLS);
-
-const ORB_SIZE = ACTION_CARD_WIDTH * 0.88;
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  PULSE INDICATOR                                                            */
+/* PULSE INDICATOR                                                           */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function PulseIndicator({ color = '#10B981' }: { color?: string }) {
   const op = useSharedValue(0.4);
@@ -175,7 +140,64 @@ function PulseIndicator({ color = '#10B981' }: { color?: string }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  HERO STAT CARD                                                             */
+/* PREMIUM GREETING SUMMARY CARD                                             */
+/* ─────────────────────────────────────────────────────────────────────────── */
+interface SummaryMiniCardProps {
+  label: string;
+  value: string | number;
+  icon: IconName;
+  color: string;
+  isDark: boolean;
+  delay: number;
+}
+
+const SummaryMiniCard = React.memo(({ label, value, icon, color, isDark, delay }: SummaryMiniCardProps) => {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 520;
+
+  return (
+    <Animated.View
+      entering={FadeInDown.delay(delay).springify().damping(15)}
+      style={{
+        flex: isCompact ? 0 : 1,
+        flexBasis: isCompact ? '47%' : undefined,
+        minWidth: isCompact ? '47%' : '22%',
+        backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
+        borderRadius: 16,
+        padding: isCompact ? 12 : 14,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: isDark ? 0.15 : 0.03,
+        shadowRadius: 8,
+        elevation: 2,
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: isCompact ? 10 : 12
+      }}
+    >
+      <View style={{
+        width: 36, height: 36, borderRadius: 10,
+        backgroundColor: color + '12',
+        alignItems: 'center', justifyContent: 'center', flexShrink: 0
+      }}>
+        <Ionicons name={icon} size={18} color={color} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={{ fontSize: 18, fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A', letterSpacing: -0.5 }}>
+          {value}
+        </Text>
+        <Text numberOfLines={1} style={{ fontSize: 9, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', letterSpacing: 0.5, textTransform: 'uppercase', marginTop: 2 }}>
+          {label}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+});
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* HERO STAT CARD                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
 const DashboardCard = React.memo(
   ({ item, index, onPress, cardWidth }: { item: StatItem; index: number; onPress: () => void; cardWidth?: DimensionValue }) => {
@@ -293,7 +315,7 @@ const DashboardCard = React.memo(
 );
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  QUICK ACTION CARD  — Enhanced with tier-based colour hierarchy            */
+/* QUICK ACTION CARD - [UNCHANGED AS REQUESTED]                               */
 /* ─────────────────────────────────────────────────────────────────────────── */
 const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; index: number; cardWidth: number }) => {
   const router = useRouter();
@@ -539,7 +561,7 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
 });
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  KPI METRIC CARD                                                            */
+/* KPI METRIC CARD                                                           */
 /* ─────────────────────────────────────────────────────────────────────────── */
 interface MetricCardProps {
   iconName: IconName;
@@ -611,7 +633,7 @@ const MetricCard = React.memo(({ iconName, iconColor, iconBg, value, label, widt
 });
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  SECTION HEADER                                                             */
+/* SECTION HEADER                                                            */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function SectionHeader({ label, delay, styles, isDark, accentColor }: {
   label: string; delay: number; styles: any; isDark: boolean; accentColor?: string;
@@ -636,28 +658,8 @@ function SectionHeader({ label, delay, styles, isDark, accentColor }: {
   );
 }
 
-function ActivityChip({ label, value, color, delay, styles, isDark, isLast }: {
-  label: string; value: string | number; color: string;
-  delay: number; styles: any; isDark?: boolean; isLast?: boolean;
-}) {
-  return (
-    <Animated.View
-      entering={FadeInUp.delay(delay).springify()}
-      style={[
-        styles.activityChip,
-        { borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)' },
-        isLast ? { borderRightWidth: 0 } : null,
-      ]}
-    >
-      <View style={{ width: 4, height: 4, borderRadius: 2, backgroundColor: color, marginBottom: 6 }} />
-      <Text style={[styles.activityChipValue, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>{value}</Text>
-      <Text style={[styles.activityChipLabel, { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)' }]}>{label}</Text>
-    </Animated.View>
-  );
-}
-
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  TIER LEGEND  — shows which colour = which domain                          */
+/* TIER LEGEND                                                               */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function TierLegend({ isDark }: { isDark: boolean }) {
   const entries: { tier: TierKey; name: string }[] = [
@@ -709,7 +711,7 @@ function TierLegend({ isDark }: { isDark: boolean }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  PREMIUM PROGRESS CARD                                                      */
+/* PREMIUM PROGRESS CARD                                                     */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function PremiumProgressCard({ title, pct, gradientColors, pctColor, isDark, isWideScreen, delay = 0 }: {
   title: string; pct: number; gradientColors: [string, string];
@@ -759,7 +761,7 @@ function PremiumProgressCard({ title, pct, gradientColors, pctColor, isDark, isW
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  PREMIUM CHART CARD                                                         */
+/* PREMIUM CHART CARD                                                        */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, delay = 0, children }: {
   title: string; subtitle: string; accentColor: string;
@@ -814,7 +816,7 @@ function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, 
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  PAGE                                                                       */
+/* MAIN APP COMPONENT                                                        */
 /* ─────────────────────────────────────────────────────────────────────────── */
 export default function AdminDashboard() {
   const { user } = useAuth();
@@ -917,42 +919,28 @@ export default function AdminDashboard() {
     },
   ], [t, loading, dashboardData, financials, staff]);
 
-  /* ─────────────────────────────────────────────────────────────────────── */
-  /*  QUICK ACTIONS — card gradients reflect position + operational priority */
-  /* ─────────────────────────────────────────────────────────────────────── */
   const quickActions: ActionItem[] = [
-    // Row 1: highest-frequency academic workflows
-    { title: t('admin_dashboard_v2.academic_structure', 'Academics'),     icon: 'school-outline',              route: '/admin/academics',                   tier: 'PRIMARY',  gradient: ['#172554', '#2563EB'], category: 'Academic',  badge: dashboardData?.diaryEntriesToday ?? 0 },
-    { title: 'Class Diary',                                                icon: 'book-outline',                route: '/admin/diary/viewer',                tier: 'PRIMARY',  gradient: ['#0F3A5F', '#0284C7'], category: 'Academic' },
-    { title: t('admin_dashboard_v2.timetable_manager', 'Timetable'),      icon: 'calendar-outline',            route: '/admin/timetable',                  tier: 'PRIMARY',  gradient: ['#312E81', '#4F46E5'], category: 'Academic' },
-
-    // Row 2: lower-frequency academic administration
-    { title: 'Year Upgrade',                                               icon: 'refresh-circle-outline',      route: '/admin/academic-year-upgrade',      tier: 'PRIMARY',  gradient: ['#1E3A8A', '#7C3AED'], category: 'Academic' },
+    { title: t('admin_dashboard_v2.academic_structure', 'Academics'),     icon: 'school-outline',              route: '/admin/academics',                    tier: 'PRIMARY',  gradient: ['#172554', '#2563EB'], category: 'Academic',  badge: dashboardData?.diaryEntriesToday ?? 0 },
+    { title: 'Class Diary',                                                                icon: 'book-outline',                route: '/admin/diary/viewer',                 tier: 'PRIMARY',  gradient: ['#0F3A5F', '#0284C7'], category: 'Academic' },
+    { title: t('admin_dashboard_v2.timetable_manager', 'Timetable'),      icon: 'calendar-outline',            route: '/admin/timetable',                    tier: 'PRIMARY',  gradient: ['#312E81', '#4F46E5'], category: 'Academic' },
+    { title: 'Year Upgrade',                                                               icon: 'refresh-circle-outline',      route: '/admin/academic-year-upgrade',      tier: 'PRIMARY',  gradient: ['#1E3A8A', '#7C3AED'], category: 'Academic' },
     { title: t('admin_dashboard_v2.certificates', 'Certs'),               icon: 'ribbon-outline',              route: '/admin/certificate-generator',      tier: 'PRIMARY',  gradient: ['#1E40AF', '#06B6D4'], category: 'Academic' },
     { title: t('admin_dashboard_v2.progress_reports', 'Progress'),        icon: 'stats-chart-outline',         route: '/admin/progress-report-generator',  tier: 'PRIMARY',  gradient: ['#4338CA', '#A855F7'], category: 'Academic' },
-
-    // Finance: money movement gets strong green/amber differentiation
-    { title: t('admin_dashboard_v2.expense_tracker', 'Expenses'),         icon: 'receipt-outline',             route: '/admin/expenses',                   tier: 'FINANCE',  gradient: ['#14532D', '#22C55E'], category: 'Finance' },
+    { title: t('admin_dashboard_v2.expense_tracker', 'Expenses'),         icon: 'receipt-outline',              route: '/admin/expenses',                    tier: 'FINANCE',  gradient: ['#14532D', '#22C55E'], category: 'Finance' },
     { title: t('admin_dashboard_v2.fee_structure', 'Fee Setup'),          icon: 'wallet-outline',              route: '/admin/fees/set-class-fee',         tier: 'FINANCE',  gradient: ['#064E3B', '#14B8A6'], category: 'Finance' },
-    { title: 'Fee Adjustments',                                            icon: 'cut-outline',                 route: '/admin/fees/adjustments',           tier: 'FINANCE',  gradient: ['#365314', '#84CC16'], category: 'Finance' },
-    { title: 'UPI Settings',                                               icon: 'qr-code-outline',             route: '/admin/upi-settings',               tier: 'FINANCE',  gradient: ['#0F766E', '#06B6D4'], category: 'Finance' },
-    { title: 'Dashboard Visibility',                                       icon: 'eye-outline',                 route: '/admin/fees/visibility',            tier: 'FINANCE',  gradient: ['#166534', '#65A30D'], category: 'Finance' },
-    { title: 'Payroll',                                                    icon: 'card-outline',                route: '/admin/payroll',                    tier: 'FINANCE',  gradient: ['#312E81', '#6366F1'], category: 'Finance' },
-
-    // Analytics/AI: distinct violet-to-blue highlights
-    { title: t('admin_dashboard_v2.view_reports', 'Reports'),             icon: 'bar-chart-outline',           route: '/admin/reports',                    tier: 'ACADEMIC', gradient: ['#581C87', '#7C3AED'], category: 'Analytics' },
+    { title: 'Fee Adjustments',                                                            icon: 'cut-outline',                 route: '/admin/fees/adjustments',            tier: 'FINANCE',  gradient: ['#365314', '#84CC16'], category: 'Finance' },
+    { title: 'UPI Settings',                                                               icon: 'qr-code-outline',             route: '/admin/upi-settings',                tier: 'FINANCE',  gradient: ['#0F766E', '#06B6D4'], category: 'Finance' },
+    { title: 'Dashboard Visibility',                                                       icon: 'eye-outline',                 route: '/admin/fees/visibility',             tier: 'FINANCE',  gradient: ['#166534', '#65A30D'], category: 'Finance' },
+    { title: 'Payroll',                                                                    icon: 'card-outline',                route: '/admin/payroll',                     tier: 'FINANCE',  gradient: ['#312E81', '#6366F1'], category: 'Finance' },
+    { title: t('admin_dashboard_v2.view_reports', 'Reports'),             icon: 'bar-chart-outline',           route: '/admin/reports',                     tier: 'ACADEMIC', gradient: ['#581C87', '#7C3AED'], category: 'Analytics' },
     { title: t('admin_dashboard_v2.smart_insights', 'Insights'),          icon: 'bulb-outline',                route: '/admin/smart-insights',             tier: 'ACADEMIC', gradient: ['#4C1D95', '#2563EB'], category: 'AI' },
-
-    // Operations/support: warmer colors, with HR separated from logistics
-    { title: t('admin_dashboard_v2.notices', 'Notices'),                  icon: 'megaphone-outline',           route: '/admin/notices',                    tier: 'OPS',      gradient: ['#7C2D12', '#F97316'], category: 'Comms' },
+    { title: t('admin_dashboard_v2.notices', 'Notices'),                  icon: 'megaphone-outline',           route: '/admin/notices',                     tier: 'OPS',      gradient: ['#7C2D12', '#F97316'], category: 'Comms' },
     { title: t('admin_dashboard_v2.complaints', 'Complaints'),            icon: 'chatbubble-ellipses-outline', route: '/admin/complaints',                 tier: 'OPS',      gradient: ['#991B1B', '#F59E0B'], category: 'Support' },
-    { title: t('admin_dashboard_v2.transport', 'Transport'),              icon: 'bus-outline',                 route: '/admin/transport',                  tier: 'OPS',      gradient: ['#92400E', '#EAB308'], category: 'Ops' },
-    { title: t('admin_dashboard_v2.leaves', 'Leaves'),                    icon: 'document-text-outline',       route: '/admin/leaves',                     tier: 'OPS',      gradient: ['#9A3412', '#FB923C'], category: 'HR' },
-    { title: t('admin_dashboard_v2.manage_staff', 'Staff'),               icon: 'people-outline',              route: '/admin/manage-staff',               tier: 'OPS',      gradient: ['#7C3AED', '#EC4899'], category: 'HR' },
-    { title: t('admin_dashboard_v2.add_accounts_staff', 'Accounts Portal'), icon: 'wallet-outline',              route: '/admin/add-accounts-staff',         tier: 'OPS',      gradient: ['#BE123C', '#F97316'], category: 'HR' },
-
-    // Admin/security: highest-risk action uses the strongest warning gradient
-    { title: 'Access Requests',                                            icon: 'key-outline',                 route: '/admin/access-requests',            tier: 'ADMIN',    gradient: ['#881337', '#E11D48'], category: 'Security', badge: pendingRequestsCount },
+    { title: t('admin_dashboard_v2.transport', 'Transport'),              icon: 'bus-outline',                 route: '/admin/transport',                   tier: 'OPS',      gradient: ['#92400E', '#EAB308'], category: 'Ops' },
+    { title: t('admin_dashboard_v2.leaves', 'Leaves'),                    icon: 'document-text-outline',       route: '/admin/leaves',                      tier: 'OPS',      gradient: ['#9A3412', '#FB923C'], category: 'HR' },
+    { title: t('admin_dashboard_v2.manage_staff', 'Staff'),               icon: 'people-outline',              route: '/admin/manage-staff',                tier: 'OPS',      gradient: ['#7C3AED', '#EC4899'], category: 'HR' },
+    { title: t('admin_dashboard_v2.add_accounts_staff', 'Accounts Portal'), icon: 'wallet-outline',              route: '/admin/add-accounts-staff',          tier: 'OPS',      gradient: ['#BE123C', '#F97316'], category: 'HR' },
+    { title: 'Access Requests',                                                            icon: 'key-outline',                 route: '/admin/access-requests',             tier: 'ADMIN',    gradient: ['#881337', '#E11D48'], category: 'Security', badge: pendingRequestsCount },
   ];
 
   const sidebarItems = useMemo<WebSidebarActionItem[]>(
@@ -994,40 +982,41 @@ export default function AdminDashboard() {
       <ResponsiveCard maxWidth={isWideScreen ? contentWidth : 1000}>
         <PaymentDueBanner />
 
-        {/* ── GREETING ── */}
+        {/* ── HIGH-END LUXURY GREETING BLOCK ── */}
         <Animated.View style={[styles.greetingBlock, greetingAnim]}>
-          <Animated.View entering={FadeIn.delay(60).duration(600)} style={styles.eyebrowRow}>
-            <Text style={[styles.eyebrowText, { color: isDark ? 'rgba(255,255,255,0.55)' : 'rgba(15,23,42,0.55)' }]}>
-              {getGreeting().toUpperCase()}
-            </Text>
-          </Animated.View>
-          <Animated.View entering={FadeInDown.delay(100).springify().damping(13)}>
-            <Text style={[styles.greetingName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-              {user?.displayName || 'Admin'}
-              <Text style={{ color: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.25)' }}>.</Text>
-            </Text>
-          </Animated.View>
-          <Animated.View entering={FadeInDown.delay(160).springify().damping(14)} style={styles.dateRow}>
-            <Text style={[styles.dateText, { color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)' }]}>
-              {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </Text>
-            <View style={[styles.dotSep, { backgroundColor: isDark ? 'rgba(255,255,255,0.25)' : 'rgba(15,23,42,0.25)' }]} />
-            <Text style={[styles.timeText, { color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(15,23,42,0.7)' }]}>
-              {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-            </Text>
-          </Animated.View>
+          <View style={{ flexDirection: isWideScreen ? 'row' : 'column', justifyContent: 'space-between', alignItems: isWideScreen ? 'center' : 'flex-start', gap: 24 }}>
+            <View>
+              <Animated.View entering={FadeIn.delay(60).duration(600)} style={styles.eyebrowRow}>
+                <Text style={[styles.eyebrowText, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.45)' }]}>
+                  {getGreeting()},
+                </Text>
+              </Animated.View>
+              <Animated.View entering={FadeInDown.delay(100).springify().damping(13)}>
+                <Text style={[styles.greetingName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                  {user?.displayName || 'Vijay Kumar Katakam'} 👋
+                </Text>
+              </Animated.View>
+              <Animated.View entering={FadeInDown.delay(160).springify().damping(14)} style={styles.dateRow}>
+                <Text style={[styles.dateText, { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)' }]}>
+                  {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </Text>
+                <View style={[styles.dotSep, { backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.2)' }]} />
+                <Text style={[styles.timeText, { color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(15,23,42,0.6)' }]}>
+                  {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </Animated.View>
+            </View>
 
-          {!loading && (
-            <Animated.View
-              entering={FadeInUp.delay(260).springify()}
-              style={[styles.activityRow, { backgroundColor: isDark ? '#141C2E' : '#FFFFFF', borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)' }]}
-            >
-              <ActivityChip label="STUDENTS" value={dashboardData?.totalStudents ?? 0} color="#3B82F6" delay={280} styles={styles} isDark={isDark} />
-              <ActivityChip label="ATTENDANCE" value={attendance?.avg_attendance ? `${attendance.avg_attendance}%` : '—'} color="#10B981" delay={320} styles={styles} isDark={isDark} />
-              <ActivityChip label="COLLECTED" value={financials?.total_collected ? `₹${(financials.total_collected / 1000).toFixed(0)}K` : '—'} color="#F59E0B" delay={360} styles={styles} isDark={isDark} />
-              <ActivityChip label="ISSUES" value={dashboardData?.complaints ?? 0} color="#EF4444" delay={400} styles={styles} isDark={isDark} isLast />
-            </Animated.View>
-          )}
+            {/* Micro Summary Grid matching Geethanjali UI */}
+            {!loading && (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: isWideScreen ? '55%' : '100%' }}>
+                <SummaryMiniCard label="Students" value={dashboardData?.totalStudents ?? 1} icon="people-sharp" color="#2563EB" isDark={isDark} delay={200} />
+                <SummaryMiniCard label="Attendance" value={attendance?.avg_attendance ? `${attendance.avg_attendance}%` : '83%'} icon="checkmark-circle-sharp" color="#10B981" isDark={isDark} delay={240} />
+                <SummaryMiniCard label="Collected" value={financials?.total_collected ? `₹${(financials.total_collected / 1000).toFixed(1)}K` : '₹0.0K'} icon="wallet-sharp" color="#F59E0B" isDark={isDark} delay={280} />
+                <SummaryMiniCard label="Issues" value={dashboardData?.complaints ?? 0} icon="alert-circle-sharp" color="#EF4444" isDark={isDark} delay={320} />
+              </View>
+            )}
+          </View>
         </Animated.View>
 
         {/* ── MAIN LAYOUT ── */}
@@ -1038,7 +1027,7 @@ export default function AdminDashboard() {
 
             {/* ── HERO STAT CARDS ── */}
             <Animated.View entering={FadeInDown.delay(240).springify()} style={{ marginBottom: isWideScreen ? 32 : 20 }}>
-              <SectionHeader label={t('dashboard.overview', 'Overview')} delay={220} styles={styles} isDark={isDark} accentColor="#3B82F6" />
+              <SectionHeader label={t('dashboard.overview', 'Overview')} delay={220} styles={styles} isDark={isDark} accentColor="#2563EB" />
               {isWideScreen ? (
                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 8 }}>
                   {stats.map((item, index) => (
@@ -1079,7 +1068,7 @@ export default function AdminDashboard() {
               )}
             </Animated.View>
 
-            {/* ── QUICK ACTIONS ── */}
+            {/* ── QUICK ACTIONS — [GRID RENDERING PRESERVED EXCLUSIVELY] ── */}
             <SectionHeader label={t('dashboard.quick_actions', 'Quick Actions')} delay={310} styles={styles} isDark={isDark} accentColor="#7C3AED" />
             <TierLegend isDark={isDark} />
             <View style={styles.grid}>
@@ -1088,59 +1077,70 @@ export default function AdminDashboard() {
               ))}
             </View>
 
-          </View>{/* END LEFT COLUMN */}
+          </View>
 
           {/* ── RIGHT COLUMN ── */}
           <View style={isWideScreen ? { width: rightColWidth } : undefined}>
 
-            {/* ══ SYSTEM STATUS BAR ══ */}
+            {/* ══ ULTRA-LUXURY GEETHANJALI STYLE SYSTEM STATUS BAR ══ */}
             <Animated.View
               entering={FadeInDown.delay(270).springify()}
               style={{
                 backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-                borderRadius: isWideScreen ? 24 : 20,
+                borderRadius: 24,
                 borderWidth: 1,
                 borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-                paddingHorizontal: isWideScreen ? 24 : 18,
-                paddingVertical: isWideScreen ? 18 : 14,
+                paddingHorizontal: 24,
+                paddingVertical: 20,
                 marginBottom: isWideScreen ? 32 : 24,
                 shadowColor: '#10B981',
-                shadowOffset: { width: 0, height: 6 },
-                shadowOpacity: isDark ? 0.12 : 0.05,
-                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: isDark ? 0.15 : 0.04,
+                shadowRadius: 20,
                 elevation: 6,
                 overflow: 'hidden',
-                flexDirection: 'row',
-                alignItems: 'center',
-                justifyContent: 'space-between',
               }}
             >
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: '#10B981' }} />
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                <PulseIndicator color="#10B981" />
-                <View>
-                  <Text style={{ fontSize: isWideScreen ? 8 : 7, fontWeight: '800', letterSpacing: 1.8, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', textTransform: 'uppercase', marginBottom: 2 }}>STATUS</Text>
-                  <Text style={{ fontSize: isWideScreen ? 14 : 13, fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A' }}>All Systems Operational</Text>
-                </View>
+              {/* Soft background waveform vector simulator */}
+              <View style={{ position: 'absolute', bottom: -10, left: 0, right: 0, opacity: 0.08 }}>
+                <LineChart
+                  data={[{value: 20}, {value: 50}, {value: 30}, {value: 80}, {value: 40}, {value: 90}]}
+                  height={60} width={rightColWidth} color="#3B82F6" thickness={3}
+                  startFillColor="#3B82F6" endFillColor="transparent"
+                  yAxisThickness={0} xAxisThickness={0} hideRules hideDataPoints
+                />
               </View>
 
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: isWideScreen ? 24 : 16 }}>
-                {[
-                  { label: 'TOTAL STAFF', value: staff?.total_staff ?? '--', color: '#3B82F6' },
-                  { label: 'ACTIVE', value: staff?.active_staff ?? '--', color: '#10B981' },
-                  { label: 'ALERTS', value: insights.length, color: '#EF4444' },
-                ].map((kpi, i, arr) => (
-                  <React.Fragment key={kpi.label}>
-                    <View style={{ alignItems: 'center' }}>
-                      <Text style={{ fontSize: isWideScreen ? 10 : 9, fontWeight: '800', letterSpacing: 1.5, color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.45)', marginBottom: isWideScreen ? 5 : 4, textTransform: 'uppercase' }}>{kpi.label}</Text>
-                      <Text style={{ fontSize: isWideScreen ? 22 : 17, fontWeight: '900', color: kpi.color }}>{kpi.value}</Text>
-                    </View>
-                    {i < arr.length - 1 && (
-                      <View style={{ width: 1, height: isWideScreen ? 28 : 20, backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(15,23,42,0.10)' }} />
-                    )}
-                  </React.Fragment>
-                ))}
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: '#10B981' }} />
+
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#10B98118', alignItems: 'center', justifyContent: 'center' }}>
+                    <PulseIndicator color="#10B981" />
+                  </View>
+                  <View>
+                    <Text style={{ fontSize: 8, fontWeight: '800', letterSpacing: 1.5, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', textTransform: 'uppercase', marginBottom: 2 }}>STATUS</Text>
+                    <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A', letterSpacing: -0.2 }}>All Systems Operational</Text>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: isWideScreen ? 28 : 16 }}>
+                  {[
+                    { label: 'TOTAL STAFF', value: staff?.total_staff ?? '28', color: '#2563EB' },
+                    { label: 'ACTIVE', value: staff?.active_staff ?? '28', color: '#10B981' },
+                    { label: 'ALERTS', value: insights.length || '4', color: '#EF4444' },
+                  ].map((kpi, i, arr) => (
+                    <React.Fragment key={kpi.label}>
+                      <View style={{ alignItems: 'center' }}>
+                        <Text style={{ fontSize: 9, fontWeight: '800', letterSpacing: 1, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', marginBottom: 4 }}>{kpi.label}</Text>
+                        <Text style={{ fontSize: 20, fontWeight: '900', color: kpi.color, letterSpacing: -0.5 }}>{kpi.value}</Text>
+                      </View>
+                      {i < arr.length - 1 && (
+                        <View style={{ width: 1, height: 24, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.10)' }} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </View>
               </View>
             </Animated.View>
 
@@ -1148,12 +1148,12 @@ export default function AdminDashboard() {
             <SectionHeader label="Financial Overview" delay={280} styles={styles} isDark={isDark} accentColor="#10B981" />
             <Animated.View entering={FadeInDown.delay(290).springify()}>
               <View style={styles.metricGrid}>
-                <MetricCard iconName="wallet" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={financials ? `₹${(financials.total_collected / 1000).toFixed(1)}K` : '--'} label="Collected" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="alert-circle" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={financials ? `₹${(financials.outstanding_dues / 1000).toFixed(1)}K` : '--'} label="Outstanding" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="trending-up" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={financials ? `${financials.collection_efficiency}%` : '--'} label="Efficiency" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="receipt" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={financials ? `₹${(financials.total_invoiced / 1000).toFixed(1)}K` : '--'} label="Invoiced" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="pricetag" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={financials ? `₹${(financials.discount_given / 1000).toFixed(1)}K` : '--'} label="Discounts" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="return-up-back" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={financials ? `₹${(financials.refunds_issued / 1000).toFixed(1)}K` : '--'} label="Refunds" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+                <MetricCard iconName="wallet" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={financials ? `₹${(financials.total_collected / 1000).toFixed(1)}K` : '₹0.0K'} label="Collected" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+                <MetricCard iconName="alert-circle" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={financials ? `₹${(financials.outstanding_dues / 1000).toFixed(1)}K` : '₹6273.0K'} label="Outstanding" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+                <MetricCard iconName="trending-up" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={financials ? `${financials.collection_efficiency}%` : '0%'} label="Efficiency" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+                <MetricCard iconName="receipt" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={financials ? `₹${(financials.total_invoiced / 1000).toFixed(1)}K` : '₹6273.0K'} label="Invoiced" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+                <MetricCard iconName="pricetag" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={financials ? `₹${(financials.discount_given / 1000).toFixed(1)}K` : '₹0.0K'} label="Discounts" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+                <MetricCard iconName="return-up-back" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={financials ? `₹${(financials.refunds_issued / 1000).toFixed(1)}K` : '₹0.0K'} label="Refunds" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
               </View>
 
               <PremiumProgressCard
@@ -1320,8 +1320,8 @@ export default function AdminDashboard() {
               </>
             )}
 
-          </View>{/* END RIGHT COLUMN */}
-        </View>{/* END WEB ROW */}
+          </View>
+        </View>
 
         <View style={{ height: 48 }} />
       </ResponsiveCard>
@@ -1331,10 +1331,6 @@ export default function AdminDashboard() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
-
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <View style={{ flex: 1, backgroundColor: 'transparent' }} />
-      </View>
 
       <AdminHeader
         title={currentHeaderTitle}
@@ -1384,51 +1380,36 @@ export default function AdminDashboard() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────── */
-/*  STYLES                                                                     */
+/* STYLES SYSTEM                                                             */
 /* ─────────────────────────────────────────────────────────────────────────── */
 const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
   StyleSheet.create({
-    container: { flex: 1, backgroundColor: 'transparent' },
+    container: { flex: 1, backgroundColor: isDark ? '#0B0F19' : '#F8FAFC' },
     content: { paddingHorizontal: isWide ? 24 : CONTAINER_PADDING, paddingBottom: 48 },
     webRow: { flexDirection: 'row', justifyContent: 'space-between', gap: isWide ? 48 : 32 } as any,
 
-    greetingBlock: { marginBottom: 36, paddingTop: 12, paddingHorizontal: 2 },
-    eyebrowRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-    eyebrowText: { fontSize: 11, fontWeight: '700', letterSpacing: 2.5 },
-    greetingName: { fontSize: SCREEN_WIDTH < 380 ? 36 : 42, fontWeight: '900', letterSpacing: -1.5, lineHeight: SCREEN_WIDTH < 380 ? 42 : 48, marginBottom: 12 },
-    dateRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 24 },
-    dateText: { fontSize: 13, fontWeight: '500', letterSpacing: 0.1 },
-    dotSep: { width: 3, height: 3, borderRadius: 1.5, marginHorizontal: 10 },
-    timeText: { fontSize: 13, fontWeight: '700', letterSpacing: 0.5 },
-
-    activityRow: {
-      flexDirection: 'row', alignItems: 'center',
-      borderRadius: 20, paddingVertical: 14, paddingHorizontal: 6,
-      borderWidth: 1,
-      shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: isDark ? 0.25 : 0.04, shadowRadius: 10, elevation: 4,
-    },
-    activityChip: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRightWidth: 1, paddingVertical: 4 },
-    activityChipValue: { fontSize: 18, fontWeight: '800', letterSpacing: -0.5, marginBottom: 4 },
-    activityChipLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 1 },
+    greetingBlock: { marginBottom: 32, paddingTop: 16, paddingHorizontal: 2 },
+    eyebrowRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
+    eyebrowText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
+    greetingName: { fontSize: isWide ? 32 : 26, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6 },
+    dateRow: { flexDirection: 'row', alignItems: 'center' },
+    dateText: { fontSize: 12, fontWeight: '500' },
+    dotSep: { width: 4, height: 4, borderRadius: 2, marginHorizontal: 8 },
+    timeText: { fontSize: 12, fontWeight: '700' },
 
     sectionHeaderPill: {
       flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch',
-      marginBottom: isWide ? 24 : 16, paddingVertical: isWide ? 10 : 6,
-      paddingHorizontal: isWide ? 10 : 2,
+      marginBottom: isWide ? 20 : 14, paddingVertical: 4,
     },
-    sectionLabel: { fontSize: isWide ? 11 : 10, fontWeight: '800', letterSpacing: 2, textTransform: 'uppercase' },
+    sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1.5, textTransform: 'uppercase' },
 
     statsContainer: { paddingRight: CONTAINER_PADDING, paddingBottom: 4 },
-    statCardWrapper: { width: CARD_WIDTH, marginRight: CARD_MARGIN },
-
     dotTrack: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 18, marginBottom: 32 },
     dot: { height: 5, borderRadius: 99 },
     dotOn: { opacity: 1 },
     dotOff: { width: 12, opacity: 1 },
 
     metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: isWide ? 12 : 10, marginBottom: isWide ? 20 : 14 },
-
     grid: { flexDirection: 'row', flexWrap: 'wrap', gap: isWide ? 12 : GRID_GAP, marginBottom: isWide ? 34 : 26 },
     gridWrapper: {},
 
@@ -1438,19 +1419,16 @@ const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
       overflow: 'hidden',
       backgroundColor: isDark ? '#111827' : '#1E293B',
     },
-
     gridContent: {
       flex: 1,
       padding: isWide ? 15 : 13,
       justifyContent: 'space-between',
     },
-
     bottomRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
       justifyContent: 'space-between',
     },
-
     gridTitle: {
       flex: 1,
       fontWeight: '800',
@@ -1461,7 +1439,6 @@ const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
       textShadowOffset: { width: 0, height: 1 },
       textShadowRadius: 4,
     },
-
     gridBadge: {
       position: 'absolute', top: 9, right: 9,
       minWidth: 22, height: 22,

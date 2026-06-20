@@ -170,7 +170,7 @@ export default function SetClassFeeScreen() {
     if (nextMode === 'per_section') {
       alertCompat(
         'Switch to Per Section?',
-        'This will copy class fees to each section and remove class-level fee structures. Each section can then be edited individually. Continue?',
+        'Class fees are copied to each section so you can edit sections individually. Paid amounts carry over and class fees are kept hidden — switch back any time to restore them. Continue?',
         [
           { text: 'Cancel', style: 'cancel', onPress: () => setPendingFeeMode(null) },
           { text: 'Continue', onPress: () => void applyFeeModeChange('per_section') },
@@ -181,7 +181,7 @@ export default function SetClassFeeScreen() {
 
     alertCompat(
       'Switch to Per Class?',
-      'Section-level fee structures will be removed. One fee applies to the entire class. Existing payments are kept.',
+      'One fee applies to the whole class. Paid amounts carry over and your section fees are kept hidden — switch back any time to restore them.',
       [
         { text: 'Cancel', style: 'cancel', onPress: () => setPendingFeeMode(null) },
         { text: 'Switch', onPress: () => void applyFeeModeChange('per_class') },
@@ -199,8 +199,8 @@ export default function SetClassFeeScreen() {
       alertCompat(
         'Success',
         nextMode === 'per_section'
-          ? `Per-section mode enabled. ${result.seeded_count ?? 0} fee row(s) seeded.`
-          : 'Per-class mode enabled.'
+          ? `Per-section mode enabled. ${result.seeded_count ?? 0} section fee(s) added; paid amounts preserved.`
+          : 'Per-class mode enabled. Paid amounts preserved.'
       );
     } catch (error: any) {
       setPendingFeeMode(null);
