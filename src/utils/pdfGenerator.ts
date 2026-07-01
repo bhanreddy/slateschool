@@ -635,6 +635,138 @@ const BASE_CSS = `
   .receipt-banner-right { text-align: right; }
   .receipt-banner-date { font-size: 8px; color: #4B5563; margin-top: 1px; }
 
+  /* ── Two-up compact fee receipt (2 copies side-by-side in the top half) ── */
+  .receipt-duplex {
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    gap: 12px;
+    width: 100%;
+    /* Fill the full inner height of the half-page (.receipt-page 561px − 40px
+       padding) so each bordered copy occupies the whole top half, not ~1/3. */
+    min-height: 521px;
+  }
+  .receipt-card {
+    flex: 1 1 0;
+    min-width: 0;
+    border: 1.4px solid #111827;
+    border-radius: 6px;
+    padding: 9px 11px;
+    display: flex;
+    flex-direction: column;
+    color: #111827;
+    font-size: 9px;
+    line-height: 1.3;
+    background: #fff;
+  }
+  .rc-metarow {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 8px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.4px; color: #4B5563; margin-bottom: 5px;
+  }
+  .rc-metarow .rc-rcpt { color: #111827; font-size: 9px; }
+  .rc-header {
+    display: flex; align-items: center; gap: 8px;
+    padding-bottom: 6px; margin-bottom: 6px;
+    border-bottom: 1.5px solid #111827;
+  }
+  .rc-logo { width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; }
+  .rc-logo-fallback {
+    width: 36px; height: 36px; flex-shrink: 0; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    background: #F3F4F6; border: 1px solid #E5E7EB;
+    font-size: 13px; font-weight: 800; color: #374151;
+  }
+  .rc-head-text { flex: 1; min-width: 0; text-align: center; }
+  .rc-school { font-size: 12.5px; font-weight: 800; line-height: 1.15; color: #111827; }
+  .rc-school-sub { font-size: 7.5px; color: #6B7280; margin-top: 2px; line-height: 1.25; }
+  .rc-info {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px;
+    margin-bottom: 6px;
+  }
+  .rc-info .full { grid-column: 1 / -1; }
+  .rc-info .lbl {
+    display: block; font-size: 6.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.4px; color: #9CA3AF; margin-bottom: 1px;
+  }
+  .rc-info .val { display: block; font-size: 10px; font-weight: 700; color: #111827; }
+  .rc-info .val.big { font-size: 13px; line-height: 1.2; }
+  .rc-table { width: 100%; border-collapse: collapse; margin-bottom: 6px; }
+  .rc-table th {
+    text-align: left; font-size: 7px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.4px; color: #111827; background: #F3F4F6;
+    padding: 4px 6px; border: 1px solid #E5E7EB;
+  }
+  .rc-table th:last-child, .rc-table td:last-child { text-align: right; }
+  .rc-table td { font-size: 9px; padding: 4px 6px; border: 1px solid #F3F4F6; }
+  .rc-table td.amt { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .rc-totals { margin-bottom: 6px; }
+  .rc-totrow {
+    display: flex; justify-content: space-between; font-size: 9px;
+    padding: 2px 0; color: #4B5563; border-bottom: 1px dashed #E5E7EB;
+  }
+  .rc-totrow span:last-child { font-variant-numeric: tabular-nums; color: #111827; }
+  .rc-totrow.grand {
+    font-size: 13px; font-weight: 800; color: #111827;
+    border-bottom: none; border-top: 1.5px solid #111827;
+    padding-top: 4px; margin-top: 1px;
+  }
+  .rc-totrow.grand span:last-child { font-weight: 800; }
+  .rc-words {
+    font-size: 8px; border: 1px solid #D1D5DB; border-radius: 4px;
+    padding: 4px 6px; margin-bottom: 6px; line-height: 1.35;
+  }
+  .rc-words strong { font-weight: 700; }
+  .rc-due {
+    display: flex; justify-content: space-between; align-items: center;
+    border: 1.4px solid #111827; border-radius: 5px;
+    padding: 5px 9px; margin-bottom: 8px;
+  }
+  .rc-due-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #374151; }
+  .rc-due-val { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; color: #111827; }
+  .rc-badge {
+    display: inline-block; margin-top: 2px;
+    font-size: 6.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+    border: 1px solid #111827; border-radius: 10px; padding: 1px 6px; color: #111827;
+  }
+  .rc-foot {
+    margin-top: auto; display: flex; justify-content: space-between; align-items: flex-end;
+    padding-top: 4px;
+  }
+  .rc-foot-meta { font-size: 7.5px; color: #4B5563; line-height: 1.5; }
+  .rc-foot-meta b { color: #111827; }
+  .rc-sign { text-align: center; }
+  .rc-sign-line { border-top: 1px solid #6B7280; padding-top: 2px; min-width: 90px; font-size: 7.5px; color: #4B5563; }
+  .rc-dues { border: 1px solid #E5E7EB; border-radius: 5px; overflow: hidden; margin-bottom: 6px; }
+  .rc-dues-title {
+    display: flex; justify-content: space-between; align-items: center;
+    background: #F3F4F6; padding: 4px 6px;
+    font-size: 7px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #374151;
+  }
+  .rc-dues-title span { font-size: 7px; font-weight: 500; color: #6B7280; text-transform: none; letter-spacing: 0; }
+  .rc-dues-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .rc-dues-table th {
+    text-align: left; font-size: 6.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+    color: #6B7280; padding: 3px 6px; border-bottom: 1px solid #E5E7EB; background: #F9FAFB;
+  }
+  .rc-dues-table th:not(:first-child), .rc-dues-table td:not(:first-child) { text-align: right; }
+  .rc-dues-table td {
+    font-size: 8px; padding: 3px 6px; border-bottom: 1px solid #F3F4F6;
+    color: #374151; font-variant-numeric: tabular-nums;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rc-dues-table td.fee { font-weight: 600; color: #111827; }
+  .rc-dues-table tbody tr:last-child td { border-bottom: none; }
+  .rc-dues-table tr.paid td { color: #6B7280; }
+  .rc-dues-table tr.this-pay { background: #EEF0F3; }
+  .rc-dues-table tr.this-pay td { color: #111827; }
+  .rc-dues-table tr.this-pay td.fee { font-weight: 700; }
+  .rc-dues-table tfoot td {
+    font-size: 8px; font-weight: 800; color: #111827;
+    border-top: 1.5px solid #D1D5DB; padding: 3px 6px;
+  }
+  .rc-dues-table tfoot td.fee { text-transform: uppercase; font-size: 7px; letter-spacing: 0.3px; }
+
   /* ── Print-specific overrides ── */
   @media print {
     html, body { height: auto !important; overflow: visible !important; }
@@ -762,258 +894,134 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     const displayOutstanding = useAllFeesSummary ? totalOutstandingAll : balanceDue;
     const isFullyPaid = displayOutstanding <= 0;
 
-    const feeDuesRowsHtml = feeDues
-      .map((line) => {
-        const netDue = Math.max(0, line.amount_due - (line.discount ?? 0));
-        const isPaid = line.balance_due <= 0;
-        const isThisPayment =
-          line.student_fee_id != null &&
-          line.student_fee_id === transaction.student_fee_id;
-        const rowClass = [
-          isThisPayment ? 'dues-highlight' : '',
-          isPaid ? 'dues-paid' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
-        const paymentTag = isThisPayment
-          ? '<span class="dues-payment-tag">This payment</span>'
-          : '';
-        return `
-                <tr class="${rowClass}">
-                  <td class="col-fee">${escapeHtml(line.fee_type)}${paymentTag}</td>
-                  <td class="col-year">${escapeHtml(line.academic_year || '—')}</td>
-                  <td class="col-num">₹${fmtINR(netDue)}</td>
-                  <td class="col-num col-num-paid">₹${fmtINR(line.amount_paid)}</td>
-                  <td class="col-due">₹${fmtINR(line.balance_due)}</td>
-                </tr>`;
-      })
-      .join('');
+    const logoBase64 = await loadLogoAsBase64(SCHOOL_CONFIG.logo);
+    const cardLogoHtml = logoBase64
+      ? `<img src="${logoBase64}" class="rc-logo" alt="" />`
+      : `<div class="rc-logo-fallback">${SCHOOL_CONFIG.name.slice(0, 2).toUpperCase()}</div>`;
 
-    const allFeeDuesSectionHtml =
+    const fatherName = transaction.father_name || '';
+    const clerkName = transaction.received_by || '';
+    const dueLabel = isFullyPaid ? 'Total Outstanding' : 'Outstanding Balance';
+    const dueValue = isFullyPaid ? '₹0.00' : `₹${fmtINR(displayOutstanding)}`;
+    const dueBadge = isFullyPaid ? 'Fully Paid' : 'Due Pending';
+    const remarksText = (transaction.remarks || '').trim();
+
+    // Compact "all assigned fee dues" breakdown — fills the card with real data
+    // instead of whitespace. Capped so an unusually long list can't overflow the
+    // half-page (the true totals still come from the footer row).
+    const MAX_DUES_ROWS = 7;
+    const shownDues = feeDues.slice(0, MAX_DUES_ROWS);
+    const hiddenDuesCount = feeDues.length - shownDues.length;
+    const duesRowsHtml =
+      shownDues
+        .map((line) => {
+          const netDue = Math.max(0, line.amount_due - (line.discount ?? 0));
+          const isPaid = line.balance_due <= 0;
+          const isThisPayment =
+            line.student_fee_id != null &&
+            line.student_fee_id === transaction.student_fee_id;
+          const cls = [isThisPayment ? 'this-pay' : '', isPaid ? 'paid' : '']
+            .filter(Boolean)
+            .join(' ');
+          return `<tr class="${cls}"><td class="fee">${escapeHtml(line.fee_type)}</td><td>₹${fmtINR(netDue)}</td><td>₹${fmtINR(line.amount_paid)}</td><td>₹${fmtINR(line.balance_due)}</td></tr>`;
+        })
+        .join('') +
+      (hiddenDuesCount > 0
+        ? `<tr><td class="fee" colspan="4" style="text-align:center;color:#6B7280;font-weight:500;">+ ${hiddenDuesCount} more fee type${hiddenDuesCount === 1 ? '' : 's'}</td></tr>`
+        : '');
+    const duesSectionHtml =
       feeDues.length > 0
-        ? `
-            <div class="dues-section">
-              <div class="dues-section-title">
-                All Assigned Fee Dues
-                <span>${feeDues.length} fee type${feeDues.length === 1 ? '' : 's'}</span>
-              </div>
-              <table class="dues-table">
-                <thead>
-                  <tr>
-                    <th class="col-fee">Fee Type</th>
-                    <th class="col-year">Academic Year</th>
-                    <th class="col-num">Total</th>
-                    <th class="col-num">Paid</th>
-                    <th class="col-num">Balance Due</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${feeDuesRowsHtml}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td class="col-label" colspan="2">Total (all fee types)</td>
-                    <td class="col-num">₹${fmtINR(totalAssignedDue)}</td>
-                    <td class="col-num">₹${fmtINR(totalPaidAll)}</td>
-                    <td class="col-due-total">₹${fmtINR(totalOutstandingAll)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          `
+        ? `<div class="rc-dues">
+            <div class="rc-dues-title">All Assigned Fee Dues<span>${feeDues.length} fee type${feeDues.length === 1 ? '' : 's'}</span></div>
+            <table class="rc-dues-table">
+              <thead><tr><th style="width:40%;">Fee Type</th><th>Total</th><th>Paid</th><th>Balance</th></tr></thead>
+              <tbody>${duesRowsHtml}</tbody>
+              <tfoot><tr><td class="fee">Total</td><td>₹${fmtINR(totalAssignedDue)}</td><td>₹${fmtINR(totalPaidAll)}</td><td>₹${fmtINR(totalOutstandingAll)}</td></tr></tfoot>
+            </table>
+          </div>`
         : '';
 
-    const logoBase64 = await loadLogoAsBase64(SCHOOL_CONFIG.logo);
-    const logoHtml = logoBase64
-      ? `<img src="${logoBase64}" class="school-logo" alt="" />`
-      : `<div class="school-logo-fallback">${SCHOOL_CONFIG.name.slice(0, 2).toUpperCase()}</div>`;
-    const schoolBrandHtml = `
-              <div class="school-brand">
-                ${logoHtml}
-                <div class="school-info">
-                  <div class="school-name">${SCHOOL_CONFIG.name}</div>
-                  <div class="school-sub">${SCHOOL_CONFIG.address || ''}</div>
-                  ${SCHOOL_RECOGNITION_LINE ? `<div class="school-reg">${SCHOOL_RECOGNITION_LINE}</div>` : ''}
-                </div>
-              </div>`;
-    const watermarkHtml = logoBase64
-      ? `<img src="${logoBase64}" class="watermark-logo" alt="" />`
-      : `<div class="watermark">${SCHOOL_CONFIG.name.slice(0, 2).toUpperCase()}</div>`;
+    // One compact receipt copy — sized so two sit side-by-side in the top half.
+    const renderReceiptCard = () => `
+      <div class="receipt-card">
+        <div class="rc-metarow">
+          <span>Receipt No: <b class="rc-rcpt">${escapeHtml(receiptNo)}</b></span>
+          <span>${dateFull} · ${dateTime}</span>
+        </div>
+        <div class="rc-header">
+          ${cardLogoHtml}
+          <div class="rc-head-text">
+            <div class="rc-school">${SCHOOL_CONFIG.name}</div>
+            <div class="rc-school-sub">${[SCHOOL_CONFIG.address, `Academic Year: ${academicYearText}`].filter(Boolean).join(' · ')}</div>
+          </div>
+        </div>
+        <div class="rc-info">
+          <div class="full"><span class="lbl">Student Name</span><span class="val big">${escapeHtml(studentName)}</span></div>
+          ${fatherName ? `<div class="full"><span class="lbl">Father's Name</span><span class="val">${escapeHtml(fatherName)}</span></div>` : ''}
+          <div><span class="lbl">Admission No</span><span class="val">${escapeHtml(admissionNo)}</span></div>
+          <div><span class="lbl">Class &amp; Section</span><span class="val big">${escapeHtml(classSectionText || '—')}</span></div>
+        </div>
+        <table class="rc-table">
+          <thead><tr><th>Fee Description</th><th>Amount (₹)</th></tr></thead>
+          <tbody>
+            <tr><td>${escapeHtml(feeName)}</td><td class="amt">${amountFmt}</td></tr>
+          </tbody>
+        </table>
+        <div class="rc-totals">
+          <div class="rc-totrow"><span>Total Fee</span><span>₹${totalFeeFmt}</span></div>
+          ${(transaction.discount ?? 0) > 0 ? `<div class="rc-totrow"><span>Discount</span><span>− ₹${fmtINR(transaction.discount ?? 0)}</span></div>` : ''}
+          <div class="rc-totrow grand"><span>Amount Paid</span><span>₹${amountFmt}</span></div>
+        </div>
+        <div class="rc-words"><strong>In Words:</strong> ${words}</div>
+        ${remarksText ? `<div class="rc-words"><strong>Remarks:</strong> ${escapeHtml(remarksText)}</div>` : ''}
+        ${duesSectionHtml}
+        <div class="rc-due">
+          <div class="rc-due-label">${dueLabel}</div>
+          <div style="text-align:right;">
+            <div class="rc-due-val">${dueValue}</div>
+            <span class="rc-badge">${dueBadge}</span>
+          </div>
+        </div>
+        <div class="rc-foot">
+          <div class="rc-foot-meta">
+            <div>Mode: <b>${paymentMethod}</b></div>
+            <div>Print Date: ${dateFull}</div>
+          </div>
+          <div class="rc-sign">
+            <div class="rc-sign-line">${clerkName ? escapeHtml(clerkName) + ' · ' : ''}Clerk</div>
+          </div>
+        </div>
+      </div>
+    `;
 
-    const html = `
+    // Two identical copies side-by-side, filling the top half of the A4 sheet
+    // (the .receipt-page is 148.5mm tall). Tear down the middle → payer copy +
+    // office copy. The bottom half of the sheet is intentionally left blank.
+    const receiptPageHtml = `
+          <div class="page receipt-page">
+            <div class="receipt-duplex">
+              ${renderReceiptCard()}
+              ${renderReceiptCard()}
+            </div>
+          </div>
+    `;
+
+    const wrapHtml = () => `
       <html>
         <head>
           <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
           <style>${BASE_CSS}</style>
         </head>
         <body>
-          <div class="page receipt-page">
-            ${watermarkHtml}
-
-            <!-- Header -->
-            <div class="doc-header">
-              ${schoolBrandHtml}
-              <div class="doc-title-block">
-                <div class="doc-title">RECEIPT</div>
-                <div class="doc-no">${receiptNo}</div>
-                <div style="margin-top:4px;">
-                  <span class="badge badge-paid">PAYMENT RECEIVED</span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Banner: Paid Amount -->
-            <div class="receipt-banner">
-              <div>
-                <div class="receipt-banner-label">Amount Received</div>
-                <div class="receipt-banner-amount">₹${amountFmt}</div>
-              </div>
-              <div class="receipt-banner-right">
-                <span class="method-chip">${paymentMethod}</span>
-                <div class="receipt-banner-date">${dateFull} · ${dateTime}</div>
-              </div>
-            </div>
-
-            <!-- Info Grid -->
-            <div class="info-grid">
-              <div class="info-box highlight">
-                <div class="info-label">Received From</div>
-                <div class="info-value">${studentName}</div>
-                <div class="info-sub">Admission No: ${admissionNo}</div>
-                ${classSectionText ? `<div class="info-sub">Class &amp; Section: ${classSectionText}</div>` : ''}
-              </div>
-              <div class="info-box">
-                <div class="info-label">Payment Details</div>
-                <div class="info-value">${feeName}</div>
-                <div class="info-sub">Academic Year: ${academicYearText}</div>
-              </div>
-              <div class="info-box">
-                <div class="info-label">Receipt Date</div>
-                <div class="info-value">${dateFull}</div>
-                <div class="info-sub">Time: ${dateTime}</div>
-              </div>
-              <div class="info-box">
-                <div class="info-label">Payment Mode</div>
-                <div class="info-value">${paymentMethod}</div>
-                <div class="info-sub">Ref: ${receiptNo}</div>
-              </div>
-            </div>
-
-            <!-- Table -->
-            <table>
-              <thead>
-                <tr>
-                  <th style="width:50%;">Description</th>
-                  <th>Fee Type</th>
-                  <th>Academic Year</th>
-                  <th>Amount (₹)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>
-                    <div class="td-desc-main">${feeName}</div>
-                    <div class="td-desc-sub">Payment by ${studentName}</div>
-                  </td>
-                  <td>${feeName}</td>
-                  <td>${academicYearText}</td>
-                  <td>${amountFmt}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <!-- Totals
-                 The standalone "Balance Due" row is intentionally suppressed when the
-                 All Assigned Fee Dues table renders (useAllFeesSummary), because the
-                 dues-table footer and the due-amount bar below both already state the
-                 outstanding figure. One number, one place per context. -->
-            <div class="totals-section">
-              <div class="totals-box">
-                <div class="totals-row">
-                  <span>Total Fee</span>
-                  <span>₹${totalFeeFmt}</span>
-                </div>
-                ${(transaction.discount ?? 0) > 0 ? `
-                <div class="totals-row">
-                  <span>Discount</span>
-                  <span>− ₹${fmtINR(transaction.discount ?? 0)}</span>
-                </div>` : ''}
-                <div class="totals-row grand">
-                  <span>Total Received</span>
-                  <span>₹${amountFmt}</span>
-                </div>
-                <div class="totals-row paid-row">
-                  <span>Total Paid (Fee)</span>
-                  <span>₹${totalPaidFmt}</span>
-                </div>
-                ${useAllFeesSummary ? '' : `
-                <div class="totals-row due-row">
-                  <span>Balance Due</span>
-                  <span>₹${balanceDueFmt}</span>
-                </div>`}
-              </div>
-            </div>
-
-            <!-- Amount in Words -->
-            <div class="amount-words">
-              <strong>Amount in Words:</strong> ${words}
-            </div>
-
-            ${allFeeDuesSectionHtml}
-
-            <!-- Due Amount Highlight -->
-            <div class="due-amount-bar ${isFullyPaid ? 'clear' : 'pending'}">
-              <div class="due-amount-left">
-                <div class="due-amount-label">${isFullyPaid ? 'Fee Status' : 'Outstanding Due Amount'}</div>
-                <div class="due-amount-sub">
-                  ${isFullyPaid
-                    ? useAllFeesSummary
-                      ? 'All assigned fee types are fully paid'
-                      : 'All dues cleared for this fee type'
-                    : useAllFeesSummary
-                      ? `Total outstanding across ${feeDues.length} assigned fee type${feeDues.length === 1 ? '' : 's'}`
-                      : `Remaining balance after this payment · ${feeName}`}
-                </div>
-              </div>
-              <div style="text-align:right;">
-                <div class="due-amount-value">${isFullyPaid ? '₹0.00' : `₹${fmtINR(displayOutstanding)}`}</div>
-                <span class="due-status-badge ${isFullyPaid ? 'clear' : 'pending'}">
-                  ${isFullyPaid ? 'Fully Paid' : 'Due Pending'}
-                </span>
-              </div>
-            </div>
-
-            <!-- Signature -->
-            <div class="signature-row">
-              <div class="stamp-block">
-                <div class="stamp-label">Official Stamp</div>
-                <div class="stamp-placeholder">School<br/>Stamp</div>
-              </div>
-              <div class="sig-block">
-                <div class="sig-line">Authorized Signatory</div>
-              </div>
-              <div class="sig-block">
-                <div class="sig-line">Receiver's Signature</div>
-              </div>
-            </div>
-
-            <!-- Footer -->
-            <div class="doc-footer">
-              <p>This is a computer-generated receipt and is valid without a physical signature.</p>
-              <p>
-                ${SCHOOL_CONFIG.contact ? `<strong>Phone:</strong> ${SCHOOL_CONFIG.contact}` : ''}
-                ${SCHOOL_CONFIG.website ? ` &nbsp;|&nbsp; <strong>Web:</strong> ${SCHOOL_CONFIG.website}` : ''}
-              </p>
-              <p style="margin-top:2px;">Generated on ${new Date().toLocaleString('en-IN')}</p>
-            </div>
-
-          </div>
+          ${receiptPageHtml}
         </body>
       </html>
     `;
 
     if (Platform.OS === 'web') {
-      const mounted = await mountReceiptHtmlForCapture(html);
+      // Both copies live in one captured .page, which prints as the top half of
+      // the A4 (contentHeight = 148.5mm) — no vertical stacking needed.
+      const mounted = await mountReceiptHtmlForCapture(wrapHtml());
       try {
         await printElementToWindow(mounted.element, 'RECEIPT', { title: 'Fee Receipt' });
       } finally {
@@ -1021,7 +1029,7 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
       }
       return;
     }
-    const { uri } = await Print.printToFileAsync({ html });
+    const { uri } = await Print.printToFileAsync({ html: wrapHtml() });
     await shareAsync(uri, { UTI: '.pdf', mimeType: 'application/pdf' });
   } catch (error) {
     throw error;

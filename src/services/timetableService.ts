@@ -135,9 +135,13 @@ export const TimetableService = {
         return api.get<TimetableSlot[]>('/timetable/my-timetable');
     },
 
-    // Teacher: Get my schedule across all sections.
-    getTeacherTimetable: async (academicYearId?: string): Promise<TimetableSlot[]> => {
-        return api.get<TimetableSlot[]>('/timetable/teacher-timetable', { academic_year_id: academicYearId });
+    // Teacher: Get my schedule across all sections. Pass staffId when an admin
+    // is viewing another staff member's portal.
+    getTeacherTimetable: async (academicYearId?: string, staffId?: string): Promise<TimetableSlot[]> => {
+        return api.get<TimetableSlot[]>('/timetable/teacher-timetable', {
+            academic_year_id: academicYearId,
+            staff_id: staffId,
+        });
     },
 
     getTeacherOptions: async (): Promise<TimetableTeacher[]> => {

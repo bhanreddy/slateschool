@@ -13,6 +13,8 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { ComplaintService, Complaint } from '../../src/services/commonServices';
 import { StudentService } from '../../src/services/studentService';
 import { StudentWithDetails } from '../../src/types/schema';
@@ -480,6 +482,7 @@ const ts = StyleSheet.create({
 // ─── Main Screen ───────────────────────────────────────────────────
 export default function StaffComplaints() {
   const { isDark } = useTheme();
+  const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
   const [activeTab, setActiveTab] = useState<'MY_REPORTS' | 'FILE_NEW'>('MY_REPORTS');
   const [loading, setLoading] = useState(false);
@@ -532,6 +535,10 @@ export default function StaffComplaints() {
   };
 
   const handleSubmit = async () => {
+    if (isViewingAsAdmin) {
+      alertCompat('Read-only', 'Complaints can\'t be filed while viewing another staff member\'s portal.');
+      return;
+    }
     if (!title || !desc || !selectedStudent) {
       alertCompat('Missing Fields', 'Please fill all fields and select a student.');
       return;
@@ -567,6 +574,7 @@ export default function StaffComplaints() {
       />
 
       <StaffHeader title="Complaints & Remarks" showBackButton />
+      {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
 
       <ScrollView
         showsVerticalScrollIndicator={false}

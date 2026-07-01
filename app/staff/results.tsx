@@ -6,6 +6,8 @@ import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown, FadeInRight } from 'react-native-reanimated';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { StudentService } from '../../src/services/studentService';
 import { ResultService, TeacherService, TeacherClassAssignment } from '@/src/services/commonServices';
 import { useAuth } from '@/src/hooks/useAuth';
@@ -105,6 +107,7 @@ function getUniqueClassSections(
 
 export default function UploadMarks() {
   const { theme, isDark } = useTheme();
+  const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
   // ── view state ──────────────────────────────────────────────────────────────
@@ -269,6 +272,10 @@ export default function UploadMarks() {
   };
 
   const handleSubmit = async () => {
+    if (isViewingAsAdmin) {
+      alertCompat('Read-only', 'Marks can\'t be uploaded while viewing another staff member\'s portal.');
+      return;
+    }
     if (!selectedCategory || !selectedAssignment) return;
     const filledMarks = Object.keys(marks).map((studentId) => ({
       student_id: studentId,
@@ -597,6 +604,7 @@ export default function UploadMarks() {
       <StaffHeader
         title={selectedCategory?.title ?? 'Upload Marks'}
         showBackButton={true} />
+      {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
 
       {selectedCategory &&
         <TouchableOpacity style={styles.backToDash} onPress={handleBackToDashboard}>

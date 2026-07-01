@@ -13,6 +13,8 @@ import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { StaffMyProfile, StaffService } from '../../src/services/staffService';
 import { SchoolProfile, SchoolService } from '../../src/services/schoolService';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -32,6 +34,7 @@ export default function PaySlip() {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const userId = user?.userId;
+  const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const [profile, setProfile] = useState<StaffMyProfile | null>(null);
   const [schoolProfile, setSchoolProfile] = useState<SchoolProfile | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -43,20 +46,20 @@ export default function PaySlip() {
     }
     setLoading(true);
     Promise.all([
-      StaffService.getMyPayslips(),
-      StaffService.getMyProfile().catch(() => null),
+      isViewingAsAdmin && staffId ? StaffService.getPayslips(staffId) : StaffService.getMyPayslips(),
+      (isViewingAsAdmin && staffId ? StaffService.getById(staffId) : StaffService.getMyProfile()).catch(() => null),
       SchoolService.getProfile().catch(() => null),
     ])
       .then(([data, profileData, schoolData]) => {
         setPayslips(Array.isArray(data) ? data : []);
-        setProfile(profileData);
+        setProfile(profileData as StaffMyProfile | null);
         if (schoolData) setSchoolProfile(schoolData);
       })
       .catch(() => {
         alertCompat('Error', 'Failed to load payslips');
       })
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, staffId, isViewingAsAdmin]);
 
   const ensureSchoolProfile = useCallback(async (): Promise<SchoolProfile | null> => {
     if (schoolProfile) return schoolProfile;
@@ -118,6 +121,7 @@ export default function PaySlip() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <StaffHeader title="My Pay Slips" showBackButton={true} />
+      {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.summaryCard}>
           <LinearGradient

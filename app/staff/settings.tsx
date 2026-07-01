@@ -4,9 +4,11 @@ import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useBiometric } from '../../src/hooks/useBiometric';
 import { ThemeColors } from '../../src/theme/themes';
@@ -139,10 +141,18 @@ export default function StaffSettings() {
     const styles = React.useMemo(() => getStyles(theme.colors), [theme]);
     const [updating, setUpdating] = useState(false);
     const { isBiometricAvailable, isBiometricEnabled, isLoading: biometricLoading, toggleBiometric } = useBiometric();
+    const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
     const soon = (item: string) => alertCompat(item, 'Coming in the next update.');
 
-    const handleLogout = () =>
+    const handleLogout = () => {
+        if (isViewingAsAdmin) {
+            // Signing out here would log the ADMIN out of their own session, not
+            // the viewed staff member — never allow it while viewing another
+            // staff member's portal.
+            alertCompat('Not available', 'You can\'t log out from another staff member\'s portal.');
+            return;
+        }
         alertCompat('Log Out', 'Are you sure you want to log out?', [
             { text: 'Cancel', style: 'cancel' },
             { text: 'Log Out', style: 'destructive', onPress: async () => {
@@ -152,6 +162,7 @@ export default function StaffSettings() {
                 router.replace('/welcome');
             } },
         ]);
+    };
 
     const chevron = <MaterialIcons name="chevron-right" size={18} color="#D1D5DB" />;
     const redChevron = <MaterialIcons name="chevron-right" size={18} color="#EF4444" />;
@@ -160,6 +171,7 @@ export default function StaffSettings() {
         <View style={styles.container}>
             <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
             <StaffHeader title="Settings" showBackButton />
+            {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
 
             <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
@@ -181,7 +193,7 @@ export default function StaffSettings() {
 
                         <View style={styles.profileMeta}>
                             <Text style={styles.profileName}>
-                                {user?.displayName || 'Staff Member'}
+                                {(isViewingAsAdmin ? viewAsName : user?.displayName) || 'Staff Member'}
                             </Text>
                             <View style={styles.roleRow}>
                                 <FontAwesome5 name="id-badge" size={10} color="#6366F1" />

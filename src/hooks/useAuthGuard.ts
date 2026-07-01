@@ -61,7 +61,13 @@ export function useAuthGuard() {
         return;
       }
 
-      if (inStaffGroup && !isStaffPortalRole(roleCode)) {
+      // `admin` is intentionally NOT a staff-portal role (their home is /admin),
+      // but admins ARE allowed into /staff/* to view a staff member's portal
+      // read-only ("view as" from Manage Staff). This mirrors the staff layout's
+      // own useRequireRole('staff','teacher','admin'). Note: we must not add
+      // admin to isStaffPortalRole() itself — that gate also drives the
+      // /no-profile redirect below, which would wrongly fire for admins.
+      if (inStaffGroup && !isStaffPortalRole(roleCode) && roleCode !== 'admin') {
         router.replace(homeRoute);
         return;
       }

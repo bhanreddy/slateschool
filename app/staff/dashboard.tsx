@@ -19,6 +19,8 @@ import { AttendanceService } from '@/src/services/attendanceService';
 import { LeaveService } from '@/src/services/commonServices';
 import { useTheme } from '@/src/hooks/useTheme';
 import StaffHeader from '@/src/components/StaffHeader';
+import ViewAsBanner from '@/src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '@/src/hooks/useEffectiveStaffId';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const MENU_GAP = 16;
@@ -786,6 +788,8 @@ export default function StaffDashboard() {
   const { user } = useAuth();
   const { isDark } = useTheme();
   const t = isDark ? D.dark : D.light;
+  const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
+  const viewAsParams = isViewingAsAdmin ? { staffId, viewAsName } : undefined;
 
   const [data, setData] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -794,10 +798,12 @@ export default function StaffDashboard() {
     if (!user) return;
     (async () => {
       try {
-        const pendingLeaves = await LeaveService.getAll({ status: 'pending' });
+        // Pending-leave approvals aren't scoped to an arbitrary staffId today —
+        // skip them in admin view-as mode rather than showing the admin's own count.
+        const pendingLeaves = isViewingAsAdmin ? [] : await LeaveService.getAll({ status: 'pending' });
         let studentCount = 0, presentCount = 0, absentCount = 0;
         let detectedClassId: string | undefined;
-        const myClass = await AttendanceService.getMyClass();
+        const myClass = await AttendanceService.getMyClass(undefined, staffId);
         if (myClass) {
           detectedClassId = myClass.class_section_id;
           studentCount = myClass.total_students;
@@ -808,12 +814,17 @@ export default function StaffDashboard() {
       } catch { }
       finally { setLoading(false); }
     })();
-  }, [user]);
+  }, [user, staffId, isViewingAsAdmin]);
 
   useFocusEffect(useCallback(() => {
+    // Only the teacher's own home screen should treat hardware back as "exit app".
+    // When an admin is viewing this as another staff member's portal, this screen
+    // sits on top of Manage Staff in the stack — hardware back must pop to it
+    // normally instead of quitting the app.
+    if (isViewingAsAdmin) return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { BackHandler.exitApp(); return true; });
     return () => sub.remove();
-  }, []));
+  }, [isViewingAsAdmin]));
 
   const menuItems = [
     { title: 'Diary', subtitle: 'Daily logs & notes', configKey: 'diary', route: '/staff/diary' },
@@ -831,25 +842,34 @@ export default function StaffDashboard() {
     onScroll: (e: any) => { scrollY.value = e.contentOffset.y; },
   });
 
-  const firstName = user?.displayName?.split(' ')[0] || 'Teacher';
+  const firstName = (isViewingAsAdmin ? viewAsName : user?.displayName)?.split(' ')[0] || 'Teacher';
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
       <BgOrbs isDark={isDark} />
-      <StaffHeader title="Staff Portal" subtitle={user?.displayName || 'Teacher'} scrollY={scrollY} />
+      <StaffHeader
+        title="Staff Portal"
+        subtitle={(isViewingAsAdmin ? viewAsName : user?.displayName) || 'Teacher'}
+        scrollY={scrollY}
+      />
       <Animated.ScrollView
         onScroll={onScroll}
         scrollEventThrottle={16}
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
+        {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
         <HeroBanner name={firstName} isDark={isDark} />
-        {!!data?.pendingLeaves && (
+        {!isViewingAsAdmin && !!data?.pendingLeaves && (
           <LeaveAlert count={data.pendingLeaves} onPress={() => router.push('/staff/leaves' as any)} isDark={isDark} />
         )}
         <SectionLabel label="TODAY'S CLASS" isDark={isDark} />
-        <AttendanceHero data={data} onPress={() => router.push('/staff/manage-students' as any)} isDark={isDark} />
+        <AttendanceHero
+          data={data}
+          onPress={() => router.push({ pathname: '/staff/manage-students', params: viewAsParams } as any)}
+          isDark={isDark}
+        />
         <SectionLabel label="QUICK ACTIONS" isDark={isDark} />
         <View style={styles.menuGrid}>
           {menuItems.map((item, index) => (
@@ -859,7 +879,7 @@ export default function StaffDashboard() {
               subtitle={item.subtitle}
               configKey={item.configKey}
               badge={(item as any).badge}
-              onPress={() => router.push(item.route as any)}
+              onPress={() => router.push({ pathname: item.route, params: viewAsParams } as any)}
               index={index}
               isDark={isDark}
             />

@@ -28,6 +28,7 @@ import Animated, {
   withRepeat,
   ZoomIn,
 } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
 import AdminHeader from '../../src/components/AdminHeader';
 import { StaffService } from '../../src/services/staffService';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -114,7 +115,7 @@ function PulsingDot({ color }: { color: string }) {
 
 // ─── Staff Card ───────────────────────────────────────────────────────────────
 function StaffCard({
-  item, index, isDark, cardBg, cardBorder, avatarBg, onCall, onDelete,
+  item, index, isDark, cardBg, cardBorder, avatarBg, onCall, onDelete, onOpenPortal,
 }: {
   item: StaffMember;
   index: number;
@@ -124,6 +125,7 @@ function StaffCard({
   avatarBg: string;
   onCall: () => void;
   onDelete: () => void;
+  onOpenPortal: () => void;
 }) {
   const pressScale = useSharedValue(1);
   const cfg = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.Absent;
@@ -140,9 +142,10 @@ function StaffCard({
       style={cardAnim}
     >
       <TouchableOpacity
-        activeOpacity={1}
+        activeOpacity={0.9}
         onPressIn={() => { pressScale.value = withSpring(0.975, { damping: 18 }); }}
         onPressOut={() => { pressScale.value = withSpring(1, { damping: 18 }); }}
+        onPress={onOpenPortal}
         style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}
       >
         {isDark && <View style={styles.cardShimmer} />}
@@ -258,6 +261,7 @@ function StatsBar({ staffList, isDark }: { staffList: StaffMember[]; isDark: boo
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function ManageStaff() {
   const { theme, isDark } = useTheme();
+  const router = useRouter();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -470,6 +474,12 @@ export default function ManageStaff() {
               avatarBg={avatarBg}
               onCall={() => handleCall(item.phone, item.display_name)}
               onDelete={() => handleDelete(item.id, item.display_name)}
+              onOpenPortal={() =>
+                router.push({
+                  pathname: '/staff/dashboard',
+                  params: { staffId: item.id, viewAsName: item.display_name },
+                } as any)
+              }
             />
           )}
           contentContainerStyle={styles.listContent}

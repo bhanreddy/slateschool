@@ -8,6 +8,8 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { api } from '../../src/services/apiClient';
 import { TeacherService, TeacherClassAssignment } from '../../src/services/commonServices';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -25,6 +27,7 @@ export default function StaffLMSUpload() {
   } = useTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const router = useRouter();
+  const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const [topic, setTopic] = useState(''); // Serves as Course Title (Subject/Topic)
   const [subTopic, setSubTopic] = useState(''); // Serves as Material Title
 
@@ -61,6 +64,10 @@ export default function StaffLMSUpload() {
     }
   }, [selectedAssignment]);
   const handleUpload = async () => {
+    if (isViewingAsAdmin) {
+      alertCompat('Read-only', 'Content can\'t be uploaded while viewing another staff member\'s portal.');
+      return;
+    }
     if (!selectedAssignment || !topic || !subTopic || !videoUrl) {
       alertCompat('Error', 'Please fill in all required fields');
       return;
@@ -107,6 +114,7 @@ export default function StaffLMSUpload() {
   return <View style={styles.container}>
     <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
     <StaffHeader title="Upload LMS Content" showBackButton={true} />
+    {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
 
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{
       flex: 1

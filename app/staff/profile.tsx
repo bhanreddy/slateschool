@@ -5,9 +5,12 @@ import Animated, { FadeInDown, FadeInUp } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from '@/src/utils/haptics';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { useTheme } from '../../src/hooks/useTheme';
 import { Theme } from '../../src/theme/themes';
+import { Staff, StaffService } from '../../src/services/staffService';
 
 /** Returns the first human-readable ID (not a UUID) from the user object */
 function getHumanId(user: any): string {
@@ -27,6 +30,23 @@ const StaffProfileScreen = () => {
   const {
     user
   } = useAuth();
+  const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
+  const [viewedStaff, setViewedStaff] = React.useState<Staff | null>(null);
+
+  React.useEffect(() => {
+    if (!isViewingAsAdmin || !staffId) { setViewedStaff(null); return; }
+    StaffService.getById(staffId).then(setViewedStaff).catch(() => setViewedStaff(null));
+  }, [isViewingAsAdmin, staffId]);
+
+  const displayName = isViewingAsAdmin ? (viewedStaff?.display_name || viewAsName) : user?.name;
+  const photoUrl = isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl;
+  const roleLabel = isViewingAsAdmin
+    ? (viewedStaff?.designation_name || viewedStaff?.designation || 'Staff')
+    : (user?.role ? user.role.name.charAt(0).toUpperCase() + user.role.name.slice(1) : 'Staff');
+  const humanId = isViewingAsAdmin ? (viewedStaff?.staff_code || 'N/A') : getHumanId(user);
+  const email = isViewingAsAdmin ? viewedStaff?.email : user?.email;
+  const phone = isViewingAsAdmin ? viewedStaff?.phone : user?.phone;
+
   const handleCall = (number: string) => {
     Haptics.selectionAsync();
     Linking.openURL(`tel:${number}`);
@@ -63,6 +83,7 @@ const StaffProfileScreen = () => {
     <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
     <StaffHeader title="My Profile" showBackButton={true} />
+    {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
 
     <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       {/* --- Header Profile Card --- */}
@@ -78,7 +99,7 @@ const StaffProfileScreen = () => {
         <View style={styles.profileContent}>
           <View style={styles.avatarContainer}>
             <Image source={{
-              uri: user?.photoUrl || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
+              uri: photoUrl || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'
             }} style={styles.avatar} />
             <View style={styles.statusBadge}>
               <View style={styles.statusDot} />
@@ -86,9 +107,9 @@ const StaffProfileScreen = () => {
             </View>
           </View>
 
-          <Text style={styles.name}>{user?.name || 'Staff Member'}</Text>
-          <Text style={styles.designation}>{user?.role ? user?.role.name.charAt(0).toUpperCase() + user?.role.name.slice(1) : 'Staff'}</Text>
-          <Text style={styles.staffId}>Staff ID: {getHumanId(user)}</Text>
+          <Text style={styles.name}>{displayName || 'Staff Member'}</Text>
+          <Text style={styles.designation}>{roleLabel}</Text>
+          <Text style={styles.staffId}>Staff ID: {humanId}</Text>
 
           <View style={styles.quickStatsRow}>
             <View style={styles.quickStat}>
@@ -113,9 +134,9 @@ const StaffProfileScreen = () => {
       <Animated.View entering={FadeInUp.delay(200).duration(600)} style={styles.sectionContainer}>
         <Text style={styles.sectionTitle}>Personal Information</Text>
         <View style={styles.infoCard}>
-          <InfoRow icon="mail-outline" label="Email Address" value={user?.email || 'N/A'} isLink onPress={() => user?.email && handleEmail(user.email)} />
+          <InfoRow icon="mail-outline" label="Email Address" value={email || 'N/A'} isLink onPress={() => email && handleEmail(email)} />
           <View style={styles.divider} />
-          <InfoRow icon="call-outline" label="Phone Number" value={user?.phone || 'N/A'} isLink onPress={() => user?.phone && handleCall(user.phone)} />
+          <InfoRow icon="call-outline" label="Phone Number" value={phone || 'N/A'} isLink onPress={() => phone && handleCall(phone)} />
           <View style={styles.divider} />
           <InfoRow icon="calendar-outline" label="Date of Birth" value="-" />
           <View style={styles.divider} />

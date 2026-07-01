@@ -7,6 +7,8 @@ import AppDatePicker, { parseYMD } from '@/src/components/AppDatePicker';
 import { format, parseISO } from 'date-fns';
 import * as Haptics from 'expo-haptics';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { DiaryService, DiaryEntry, TeacherService, TeacherClassAssignment } from '../../src/services/commonServices';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -32,6 +34,7 @@ export default function StaffDiary() {
     theme,
     isDark
   } = useTheme();
+  const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -190,6 +193,10 @@ export default function StaffDiary() {
     }
   };
   const handlePost = async () => {
+    if (isViewingAsAdmin) {
+      alertCompat('Read-only', 'Diary entries can\'t be posted while viewing another staff member\'s portal.');
+      return;
+    }
     try {
       await api.post('/log', {
         msg: 'StaffDiary: handlePost initiated',
@@ -276,6 +283,7 @@ export default function StaffDiary() {
   }]}>
     <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
     <StaffHeader title="Diary & Homework" showBackButton={true} />
+    {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
     <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <Animated.View entering={FadeInDown.delay(80).duration(500)} style={styles.tabWrap}>
         <DiaryHistoryTabSwitcher

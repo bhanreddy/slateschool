@@ -22,6 +22,8 @@ import { AttendanceStatus } from '../../src/types/schema';
 import { useTheme } from '../../src/hooks/useTheme';
 import type { SchoolTheme } from '../../src/theme/types';
 import LogoLoader from '../../src/components/LogoLoader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 
 interface StudentUI {
   id: string;
@@ -150,6 +152,7 @@ export default function ManageStudents() {
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
   const { user } = useAuth();
+  const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
   const [students, setStudents] = useState<StudentUI[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,7 +169,7 @@ export default function ManageStudents() {
   const loadStudents = useCallback(async () => {
     if (!user) return;
     try {
-      const myClass = await AttendanceService.getMyClass();
+      const myClass = await AttendanceService.getMyClass(undefined, staffId);
       if (!myClass) {
         setStudents([]);
         setDetectedClassId(null);
@@ -187,7 +190,7 @@ export default function ManageStudents() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, staffId]);
 
   // Reload every time the Attendance tab regains focus so that class-teacher /
   // timetable edits made in the admin timetable manager are reflected here without
@@ -316,6 +319,7 @@ export default function ManageStudents() {
           showBackButton
           showMenuButton={false}
         />
+        {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
 
         {loading ? (
           <View style={styles.loadingState}>

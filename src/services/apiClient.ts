@@ -264,9 +264,17 @@ export async function apiRequest<T>(
   const promise = apiRequestInner<T>(endpoint, options);
   if (dedupeKey) {
     inflightGets.set(dedupeKey, promise);
-    promise.finally(() => {
-      if (inflightGets.get(dedupeKey) === promise) inflightGets.delete(dedupeKey);
-    });
+    // The cleanup runs off a SEPARATE chain from the `promise` we return. If the
+    // request rejects (e.g. an expected 404 like "no class assigned"), this
+    // branch would otherwise surface as an *unhandled* rejection — a dev-only
+    // redbox — even when the real caller catches the error on the returned
+    // `promise`. The trailing .catch() neutralises only this internal branch;
+    // the returned `promise` still rejects normally for callers to handle.
+    promise
+      .finally(() => {
+        if (inflightGets.get(dedupeKey) === promise) inflightGets.delete(dedupeKey);
+      })
+      .catch(() => {});
   }
   return promise;
 }

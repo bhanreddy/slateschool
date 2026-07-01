@@ -7,8 +7,10 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../../src/hooks/useTheme';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
 import LogoLoader from '../../src/components/LogoLoader';
 import { api } from '../../src/services/apiClient';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -77,6 +79,7 @@ export default function StaffMyAttendanceScreen() {
     const { theme, isDark } = useTheme();
     const { t } = useTranslation();
     const router = useRouter();
+    const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -145,6 +148,7 @@ export default function StaffMyAttendanceScreen() {
             <View style={[styles.orb2, { backgroundColor: orb2Color }]} />
 
             <StaffHeader title="My Attendance" subtitle={currentMonthStr} scrollY={scrollY} onBack={() => router.back()} />
+            {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
 
             {loading && !refreshing ? (
                 <View style={styles.loaderContainer}>

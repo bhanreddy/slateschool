@@ -12,7 +12,9 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import StaffHeader from '../../src/components/StaffHeader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { LeaveService, LeaveApplication } from '../../src/services/commonServices';
 import { useTheme } from '../../src/hooks/useTheme';
 
@@ -427,6 +429,7 @@ const sbStyles = StyleSheet.create({
 export default function ApplyLeave() {
   const { isDark } = useTheme();
   const { user } = useAuth();
+  const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
   const [leaveType, setLeaveType] = useState('Sick Leave');
   const [reason, setReason] = useState('');
@@ -468,6 +471,10 @@ export default function ApplyLeave() {
   };
 
   const handleApply = async () => {
+    if (isViewingAsAdmin) {
+      alertCompat('Read-only', 'Leave applications can\'t be submitted while viewing another staff member\'s portal.');
+      return;
+    }
     if (!fromDate || !toDate || !reason) {
       alertCompat('Missing Fields', 'Please fill in all fields before submitting.');
       return;
@@ -503,6 +510,7 @@ export default function ApplyLeave() {
         start={{ x: 0, y: 0 }} end={{ x: 0.5, y: 1 }} />
 
       <StaffHeader title="Apply Leave" showBackButton={true} />
+      {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
 
       <ScrollView
         contentContainerStyle={mainStyles.scroll}

@@ -80,9 +80,10 @@ export const AttendanceService = {
     },
 
     /**
-     * Get the teacher's auto-detected class with student list and today's attendance
+     * Get the teacher's auto-detected class with student list and today's attendance.
+     * Pass staffId when an admin is viewing another staff member's portal.
      */
-    getMyClass: async (date?: string): Promise<{
+    getMyClass: async (date?: string, staffId?: string): Promise<{
         date: string;
         class_section_id: string;
         class_name: string;
@@ -101,10 +102,15 @@ export const AttendanceService = {
         }>;
     } | null> => {
         try {
-            const params = date ? { date } : {};
-            return await api.get('/attendance/my-class', params);
+            const params: Record<string, string> = {};
+            if (date) params.date = date;
+            if (staffId) params.staff_id = staffId;
+            // "No class assigned" is an expected, common 404 (most staff aren't
+            // a homeroom/class teacher) — silent so it doesn't pop the generic
+            // error alert, and caught below to resolve to null instead of throwing.
+            return await api.get('/attendance/my-class', params, { silent: true });
         } catch (error: any) {
-            if (error?.response?.status === 404) return null;
+            if (error?.status === 404 || error?.statusCode === 404) return null;
             throw error;
         }
     },

@@ -19,6 +19,8 @@ import { useTheme } from '../../src/hooks/useTheme';
 import { format } from 'date-fns';
 import { Svg, Path, Circle, Rect, Line, Ellipse } from 'react-native-svg';
 import LogoLoader from '../../src/components/LogoLoader';
+import ViewAsBanner from '../../src/components/ViewAsBanner';
+import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 
 const { width, height } = Dimensions.get('window');
 const FONT_FAMILY = Platform.OS === 'ios' ? 'SF Pro Display' : 'sans-serif';
@@ -688,6 +690,7 @@ const capsuleStyles = StyleSheet.create({
 // ─── Main Screen ───────────────────────────────────────────────────
 const TimeTableScreen = () => {
   const { isDark } = useTheme();
+  const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const [loading, setLoading] = useState(true);
   const [slots, setSlots] = useState<TimetableSlot[]>([]);
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -717,11 +720,11 @@ const TimeTableScreen = () => {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {loadTimetable();}, []);
+  useEffect(() => {loadTimetable();}, [staffId]);
 
   const loadTimetable = async () => {
     try {
-      const data = await TimetableService.getTeacherTimetable();
+      const data = await TimetableService.getTeacherTimetable(undefined, staffId);
       setSlots(data.sort((a, b) => a.period_number - b.period_number));
     } catch (error) {
 
@@ -821,6 +824,8 @@ const TimeTableScreen = () => {
             </Animated.View>
           }
         </Animated.View>
+
+        {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
 
         {/* ── Day selector (per-day schools only) ── */}
         {isPerDay && !loading && (
