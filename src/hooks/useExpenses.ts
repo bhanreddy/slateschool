@@ -1,33 +1,45 @@
 import { useState, useCallback, useRef } from 'react';
-// User asked to use Supabase JS SDK. Let's use supabaseConfig.
 import { api } from '../services/apiClient';
 import { supabase } from '../services/supabaseConfig';
 import { Expense, CreateExpenseRequest, ExpenseStatus } from '../types/expenses';
 import { alertCompat } from '../utils/crossPlatformAlert';
 
+export type FetchExpensesOptions = {
+  accountsScope?: boolean;
+  fromDate?: string;
+  toDate?: string;
+};
+
+export type BulkCreateResult = {
+  ok: boolean;
+  count?: number;
+  errors?: { row: number; error: string }[];
+};
+
 export function useExpenses() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const lastFetchOptions = useRef<{ accountsScope?: boolean }>({});
+  const lastFetchParams = useRef<{ search: string; options?: FetchExpensesOptions }>({ search: '' });
 
   const fetchExpenses = useCallback(async (
     searchQuery: string = '',
-    options?: { accountsScope?: boolean }
+    options?: FetchExpensesOptions
   ) => {
-    lastFetchOptions.current = options ?? {};
+    lastFetchParams.current = { search: searchQuery, options };
     setLoading(true);
     setError(null);
     try {
       if (options?.accountsScope) {
         const params: Record<string, string> = { scope: 'accounts' };
         if (searchQuery.trim()) params.search = searchQuery.trim();
+        if (options.fromDate) params.from_date = options.fromDate;
+        if (options.toDate) params.to_date = options.toDate;
         const data = await api.get<Expense[] | { data: Expense[] }>('/expenses', params);
         setExpenses(Array.isArray(data) ? data : (data?.data ?? []));
         return;
       }
 
-      // Admin / general list — RLS handles visibility via Supabase
       let query = supabase
         .from('expenses')
         .select('*')
@@ -36,6 +48,12 @@ export function useExpenses() {
       if (searchQuery) {
         query = query.or(`title.ilike.%${searchQuery}%,category.ilike.%${searchQuery}%`);
       }
+      if (options?.fromDate) {
+        query = query.gte('expense_date', options.fromDate);
+      }
+      if (options?.toDate) {
+        query = query.lte('expense_date', options.toDate);
+      }
 
       const { data, error: supabaseError } = await query;
 
@@ -43,7 +61,6 @@ export function useExpenses() {
 
       setExpenses(data as Expense[]);
     } catch (err: any) {
-
       setError(err.message || 'Failed to fetch expenses');
       alertCompat('Error', 'Failed to load expenses');
     } finally {
@@ -51,26 +68,44 @@ export function useExpenses() {
     }
   }, []);
 
+  const refreshExpenses = useCallback(async () => {
+    const { search, options } = lastFetchParams.current;
+    await fetchExpenses(search, options);
+  }, [fetchExpenses]);
+
   const createExpense = async (expenseData: CreateExpenseRequest) => {
     try {
       await api.post('/expenses', expenseData);
-
-      // Refresh
-      await fetchExpenses('', lastFetchOptions.current);
+      await refreshExpenses();
       return true;
-    } catch (err: any) {
+    } catch {
       return false;
+    }
+  };
+
+  const createBulkExpenses = async (items: CreateExpenseRequest[]): Promise<BulkCreateResult> => {
+    try {
+      const res = await api.post<{ count?: number; errors?: { row: number; error: string }[] }>(
+        '/expenses/bulk',
+        { expenses: items }
+      );
+      await refreshExpenses();
+      return {
+        ok: true,
+        count: res?.count ?? items.length,
+        errors: res?.errors,
+      };
+    } catch {
+      return { ok: false };
     }
   };
 
   const updateStatus = async (id: string, newStatus: ExpenseStatus) => {
     try {
       await api.put(`/expenses/${id}/status`, { status: newStatus });
-
-      // Optimistic update
       setExpenses((prev) => prev.map((e) => e.id === id ? { ...e, status: newStatus } : e));
       return true;
-    } catch (err: any) {
+    } catch {
       return false;
     }
   };
@@ -81,6 +116,7 @@ export function useExpenses() {
     error,
     fetchExpenses,
     createExpense,
-    updateStatus
+    createBulkExpenses,
+    updateStatus,
   };
 }

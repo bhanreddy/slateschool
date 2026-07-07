@@ -15,8 +15,9 @@ import Animated, {
 import StaffHeader from '../../src/components/StaffHeader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
-import { ComplaintService, Complaint } from '../../src/services/commonServices';
+import { ComplaintService, Complaint, TeacherService, TeacherClassAssignment } from '../../src/services/commonServices';
 import { StudentService } from '../../src/services/studentService';
+import { AttendanceService } from '../../src/services/attendanceService';
 import { StudentWithDetails } from '../../src/types/schema';
 import { useTheme } from '../../src/hooks/useTheme';
 import LogoLoader from '../../src/components/LogoLoader';
@@ -31,6 +32,40 @@ interface UIComplaint extends Complaint {
 }
 interface Student {
   id: string; display_name: string; admission_no: string;
+}
+
+interface ClassSectionOption {
+  class_section_id: string;
+  class_id: string;
+  section_id: string;
+  label: string;
+}
+
+function getUniqueClassSections(assignments: TeacherClassAssignment[]): ClassSectionOption[] {
+  const seen = new Set<string>();
+  const result: ClassSectionOption[] = [];
+  for (const assignment of assignments) {
+    if (!seen.has(assignment.class_section_id)) {
+      seen.add(assignment.class_section_id);
+      result.push({
+        class_section_id: assignment.class_section_id,
+        class_id: assignment.class_id,
+        section_id: assignment.section_id,
+        label: `${assignment.class_name}-${assignment.section_name}`,
+      });
+    }
+  }
+  return result;
+}
+
+function mapStudentRows(
+  rows: Array<{ student_id?: string; id?: string; student_name?: string; display_name?: string; admission_no: string }>
+): Student[] {
+  return rows.map((row) => ({
+    id: row.student_id || row.id || '',
+    display_name: row.student_name || row.display_name || 'Unknown',
+    admission_no: row.admission_no,
+  }));
 }
 
 // ─── Config ────────────────────────────────────────────────────────
@@ -482,7 +517,7 @@ const ts = StyleSheet.create({
 // ─── Main Screen ───────────────────────────────────────────────────
 export default function StaffComplaints() {
   const { isDark } = useTheme();
-  const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
+  const { isViewingAsAdmin, viewAsName, staffId } = useEffectiveStaffId();
 
   const [activeTab, setActiveTab] = useState<'MY_REPORTS' | 'FILE_NEW'>('MY_REPORTS');
   const [loading, setLoading] = useState(false);
@@ -490,9 +525,15 @@ export default function StaffComplaints() {
   const [filterType, setFilterType] = useState<'ALL' | 'DISCIPLINARY' | 'FACILITY'>('ALL');
 
   // Form
+  const [studentMode, setStudentMode] = useState<'single' | 'multiple'>('single');
   const [studentSearch, setStudentSearch] = useState('');
   const [studentsList, setStudentsList] = useState<Student[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [classSections, setClassSections] = useState<ClassSectionOption[]>([]);
+  const [selectedClassSectionId, setSelectedClassSectionId] = useState<string | null>(null);
+  const [classStudents, setClassStudents] = useState<Student[]>([]);
+  const [loadingClass, setLoadingClass] = useState(false);
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
   const [severity, setSeverity] = useState<'Low' | 'Medium' | 'High'>('Low');
@@ -503,11 +544,125 @@ export default function StaffComplaints() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'FILE_NEW' && studentSearch.length > 2) {
+    if (activeTab === 'FILE_NEW' && studentMode === 'single' && studentSearch.length > 2) {
       const t = setTimeout(searchStudents, 500);
       return () => clearTimeout(t);
-    } else setStudentsList([]);
-  }, [studentSearch, activeTab]);
+    } else if (studentMode === 'single') setStudentsList([]);
+  }, [studentSearch, activeTab, studentMode]);
+
+  useEffect(() => {
+    if (activeTab !== 'FILE_NEW' || studentMode !== 'multiple') return;
+    loadTeacherClasses();
+  }, [activeTab, studentMode, staffId]);
+
+  useEffect(() => {
+    if (activeTab !== 'FILE_NEW' || studentMode !== 'multiple' || !selectedClassSectionId) return;
+    loadClassStudents(selectedClassSectionId);
+  }, [activeTab, studentMode, selectedClassSectionId, classSections]);
+
+  const loadTeacherClasses = async () => {
+    setLoadingClass(true);
+    let loadedSections: ClassSectionOption[] = [];
+    try {
+      const assignments = await TeacherService.getMyClasses();
+      let sections = getUniqueClassSections(assignments);
+
+      const homeroom = await AttendanceService.getMyClass(undefined, staffId);
+      if (
+        homeroom?.class_section_id &&
+        !sections.some((section) => section.class_section_id === homeroom.class_section_id)
+      ) {
+        sections = [
+          ...sections,
+          {
+            class_section_id: homeroom.class_section_id,
+            class_id: '',
+            section_id: '',
+            label: `${homeroom.class_name || 'Class'} ${homeroom.section_name || ''}`.trim(),
+          },
+        ];
+      }
+
+      loadedSections = sections;
+      setClassSections(sections);
+      setSelectedClassSectionId((prev) =>
+        prev && sections.some((section) => section.class_section_id === prev)
+          ? prev
+          : sections[0]?.class_section_id ?? null
+      );
+
+      if (sections.length === 0) {
+        setClassStudents([]);
+      }
+    } catch {
+      loadedSections = [];
+      setClassSections([]);
+      setSelectedClassSectionId(null);
+      setClassStudents([]);
+    } finally {
+      if (loadedSections.length === 0) {
+        setLoadingClass(false);
+      }
+    }
+  };
+
+  const loadClassStudents = async (classSectionId: string) => {
+    setLoadingClass(true);
+    setSelectedStudentIds([]);
+    try {
+      const section = classSections.find((item) => item.class_section_id === classSectionId);
+      if (section?.class_id && section?.section_id) {
+        const response = await StudentService.getAll<StudentWithDetails>({
+          class_id: section.class_id,
+          section_id: section.section_id,
+          limit: 200,
+        });
+        setClassStudents(response.data.map((student) => ({
+          id: student.id,
+          display_name: student.person.display_name || `${student.person.first_name} ${student.person.last_name}`,
+          admission_no: student.admission_no,
+        })));
+        return;
+      }
+
+      const homeroom = await AttendanceService.getMyClass(undefined, staffId);
+      if (homeroom?.class_section_id === classSectionId && homeroom.students?.length) {
+        setClassStudents(mapStudentRows(homeroom.students));
+        return;
+      }
+
+      setClassStudents([]);
+    } catch {
+      setClassStudents([]);
+    } finally {
+      setLoadingClass(false);
+    }
+  };
+
+  const toggleStudentSelection = (student: Student) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(student.id) ? prev.filter((id) => id !== student.id) : [...prev, student.id]
+    );
+  };
+
+  const selectAllClassStudents = () => {
+    setSelectedStudentIds(classStudents.map((s) => s.id));
+  };
+
+  const clearClassSelection = () => {
+    setSelectedStudentIds([]);
+  };
+
+  const switchStudentMode = (mode: 'single' | 'multiple') => {
+    setStudentMode(mode);
+    setSelectedStudent(null);
+    setSelectedStudentIds([]);
+    setStudentSearch('');
+    setStudentsList([]);
+    setClassSections([]);
+    setSelectedClassSectionId(null);
+    setClassStudents([]);
+  };
 
   const fetchComplaints = async () => {
     try {
@@ -539,20 +694,38 @@ export default function StaffComplaints() {
       alertCompat('Read-only', 'Complaints can\'t be filed while viewing another staff member\'s portal.');
       return;
     }
-    if (!title || !desc || !selectedStudent) {
-      alertCompat('Missing Fields', 'Please fill all fields and select a student.');
+    if (!title || !desc) {
+      alertCompat('Missing Fields', 'Please fill in the title and description.');
+      return;
+    }
+    if (studentMode === 'single' && !selectedStudent) {
+      alertCompat('Missing Student', 'Please select a student.');
+      return;
+    }
+    if (studentMode === 'multiple' && selectedStudentIds.length === 0) {
+      alertCompat('Missing Students', 'Please select at least one student from your class.');
       return;
     }
     try {
       setLoading(true);
-      await ComplaintService.create({
-        title, description: desc, category: 'disciplinary',
-        priority: severity.toLowerCase(),
-        raised_for_student_id: selectedStudent.id,
-      });
-      alertCompat('Submitted', 'Report submitted successfully.');
+      if (studentMode === 'single') {
+        await ComplaintService.create({
+          title, description: desc, category: 'disciplinary',
+          priority: severity.toLowerCase(),
+          raised_for_student_id: selectedStudent!.id,
+        });
+        alertCompat('Submitted', 'Report submitted successfully.');
+      } else {
+        const result = await ComplaintService.createBulk({
+          title, description: desc, category: 'disciplinary',
+          priority: severity.toLowerCase(),
+          raised_for_student_ids: selectedStudentIds,
+        });
+        alertCompat('Submitted', `Report sent to ${result.count} student(s).`);
+      }
       setTitle(''); setDesc(''); setStudentSearch('');
-      setSelectedStudent(null); setSeverity('Low');
+      setSelectedStudent(null); setSelectedStudentIds([]);
+      setSeverity('Low'); setStudentMode('single');
       setActiveTab('MY_REPORTS');
     } catch { alertCompat('Error', 'Failed to submit report.'); }
     finally { setLoading(false); }
@@ -683,8 +856,42 @@ export default function StaffComplaints() {
 
                 {/* Student picker */}
                 <View style={{ marginBottom: 18 }}>
-                  <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>Student</Text>
-                  {selectedStudent ? (
+                  <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>Students</Text>
+
+                  <View style={ms.modeRow}>
+                    {([
+                      { key: 'single' as const, label: 'One Student', icon: 'person-outline' },
+                      { key: 'multiple' as const, label: 'Multiple from Class', icon: 'people-outline' },
+                    ]).map((mode) => {
+                      const active = studentMode === mode.key;
+                      return (
+                        <PressChip key={mode.key} onPress={() => switchStudentMode(mode.key)} style={{ flex: 1 }}>
+                          <View style={[ms.modeChip, {
+                            backgroundColor: active
+                              ? (isDark ? 'rgba(16,185,129,0.18)' : 'rgba(5,150,105,0.10)')
+                              : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
+                            borderColor: active
+                              ? (isDark ? 'rgba(16,185,129,0.40)' : 'rgba(5,150,105,0.30)')
+                              : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
+                          }]}>
+                            <Ionicons
+                              name={mode.icon as any}
+                              size={14}
+                              color={active ? (isDark ? '#34D399' : '#059669') : (isDark ? '#475569' : '#94A3B8')}
+                            />
+                            <Text style={[ms.modeChipText, {
+                              color: active ? (isDark ? '#34D399' : '#059669') : (isDark ? '#475569' : '#94A3B8'),
+                              fontFamily: FONT,
+                              fontWeight: active ? '700' : '500',
+                            }]}>{mode.label}</Text>
+                          </View>
+                        </PressChip>
+                      );
+                    })}
+                  </View>
+
+                  {studentMode === 'single' ? (
+                  selectedStudent ? (
                     <View style={[ms.selectedChip, {
                       backgroundColor: 'rgba(16,185,129,0.12)',
                       borderColor: 'rgba(16,185,129,0.30)',
@@ -748,6 +955,149 @@ export default function StaffComplaints() {
                         </BlurView>
                       )}
                     </View>
+                  )
+                  ) : (
+                    <View>
+                      {classSections.length > 0 ? (
+                        <>
+                          <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT, marginBottom: 8, marginTop: 4 }]}>
+                            Class
+                          </Text>
+                          <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={ms.classChipRow}
+                          >
+                            {classSections.map((section) => {
+                              const active = selectedClassSectionId === section.class_section_id;
+                              return (
+                                <TouchableOpacity
+                                  key={section.class_section_id}
+                                  style={[ms.classChip, {
+                                    backgroundColor: active
+                                      ? (isDark ? 'rgba(16,185,129,0.18)' : 'rgba(5,150,105,0.10)')
+                                      : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
+                                    borderColor: active
+                                      ? (isDark ? 'rgba(16,185,129,0.40)' : 'rgba(5,150,105,0.30)')
+                                      : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
+                                  }]}
+                                  onPress={() => setSelectedClassSectionId(section.class_section_id)}
+                                  activeOpacity={0.7}
+                                >
+                                  <Text style={[ms.classChipText, {
+                                    color: active ? (isDark ? '#34D399' : '#059669') : (isDark ? '#94A3B8' : '#64748B'),
+                                    fontFamily: FONT,
+                                    fontWeight: active ? '700' : '600',
+                                  }]}>
+                                    {section.label.replace('-', ' ')}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </ScrollView>
+                          <View style={ms.classHeaderRow}>
+                            <Text style={[ms.classLabel, { color: isDark ? '#CBD5E1' : '#475569', fontFamily: FONT }]}>
+                              {classStudents.length} student{classStudents.length === 1 ? '' : 's'}
+                            </Text>
+                            <View style={ms.classActions}>
+                              <TouchableOpacity onPress={selectAllClassStudents} style={ms.classActionBtn}>
+                                <Text style={[ms.classActionText, { color: isDark ? '#34D399' : '#059669', fontFamily: FONT }]}>Select all</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity onPress={clearClassSelection} style={ms.classActionBtn}>
+                                <Text style={[ms.classActionText, { color: isDark ? '#94A3B8' : '#64748B', fontFamily: FONT }]}>Clear</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </>
+                      ) : null}
+
+                      {loadingClass ? (
+                        <View style={ms.classLoading}>
+                          <LogoLoader size={36} color={isDark ? '#34D399' : '#059669'} />
+                          <Text style={[ms.classLoadingText, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>
+                            {classSections.length === 0 ? 'Loading your classes…' : 'Loading students…'}
+                          </Text>
+                        </View>
+                      ) : classSections.length === 0 ? (
+                        <View style={ms.classEmpty}>
+                          <Ionicons name="school-outline" size={28} color={isDark ? '#334155' : '#CBD5E1'} />
+                          <Text style={[ms.classEmptyText, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>
+                            No classes assigned. Use single-student search instead.
+                          </Text>
+                        </View>
+                      ) : classStudents.length === 0 ? (
+                        <View style={ms.classEmpty}>
+                          <Ionicons name="people-outline" size={28} color={isDark ? '#334155' : '#CBD5E1'} />
+                          <Text style={[ms.classEmptyText, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>
+                            No students found in this class.
+                          </Text>
+                        </View>
+                      ) : (
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          nestedScrollEnabled
+                          contentContainerStyle={ms.studentCardRow}
+                          style={ms.studentCardScroll}
+                        >
+                          {classStudents.map((s) => {
+                            const checked = selectedStudentIds.includes(s.id);
+                            const initial = (s.display_name?.[0] ?? '?').toUpperCase();
+                            return (
+                              <TouchableOpacity
+                                key={s.id}
+                                style={[
+                                  ms.studentCard,
+                                  {
+                                    backgroundColor: checked
+                                      ? (isDark ? 'rgba(16,185,129,0.14)' : '#ECFDF5')
+                                      : (isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF'),
+                                    borderColor: checked
+                                      ? (isDark ? '#34D399' : '#059669')
+                                      : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'),
+                                  },
+                                  checked && ms.studentCardSelected,
+                                ]}
+                                onPress={() => toggleStudentSelection(s)}
+                                activeOpacity={0.82}
+                              >
+                                {checked ? (
+                                  <View style={[ms.studentCardBadge, { backgroundColor: isDark ? '#34D399' : '#059669' }]}>
+                                    <Ionicons name="checkmark" size={11} color="#fff" />
+                                  </View>
+                                ) : null}
+                                <View style={[ms.studentCardAvatar, {
+                                  backgroundColor: checked
+                                    ? (isDark ? 'rgba(16,185,129,0.24)' : 'rgba(5,150,105,0.12)')
+                                    : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(99,102,241,0.10)'),
+                                }]}>
+                                  <Text style={[ms.studentCardInitial, {
+                                    color: checked ? (isDark ? '#34D399' : '#059669') : (isDark ? '#CBD5E1' : '#6366F1'),
+                                  }]}>
+                                    {initial}
+                                  </Text>
+                                </View>
+                                <Text
+                                  style={[ms.studentCardName, { color: isDark ? '#EEF2FF' : '#0F172A', fontFamily: FONT }]}
+                                  numberOfLines={2}
+                                >
+                                  {s.display_name}
+                                </Text>
+                                <Text style={[ms.studentCardAdm, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>
+                                  #{s.admission_no}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </ScrollView>
+                      )}
+
+                      {selectedStudentIds.length > 0 && (
+                        <Text style={[ms.selectedCount, { color: isDark ? '#34D399' : '#059669', fontFamily: FONT }]}>
+                          {selectedStudentIds.length} student{selectedStudentIds.length === 1 ? '' : 's'} selected
+                        </Text>
+                      )}
+                    </View>
                   )}
                 </View>
 
@@ -802,7 +1152,11 @@ export default function StaffComplaints() {
                       ? <LogoLoader color="#fff" />
                       : <>
                         <Ionicons name="send" size={15} color="#fff" />
-                        <Text style={[ms.submitText, { fontFamily: FONT }]}>Submit Report</Text>
+                        <Text style={[ms.submitText, { fontFamily: FONT }]}>
+                          {studentMode === 'multiple' && selectedStudentIds.length > 1
+                            ? `Submit to ${selectedStudentIds.length} Students`
+                            : 'Submit Report'}
+                        </Text>
                       </>
                     }
                   </LinearGradient>
@@ -847,6 +1201,83 @@ const ms = StyleSheet.create({
   formTitleIcon: { width: 38, height: 38, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   formTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.4 },
   formSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
+
+  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  modeChipText: { fontSize: 12, letterSpacing: -0.1 },
+
+  classHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 10 },
+  classChipRow: { flexDirection: 'row', gap: 8, paddingRight: 4 },
+  classChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  classChipText: { fontSize: 13 },
+  classLabel: { fontSize: 13, fontWeight: '700' },
+  classActions: { flexDirection: 'row', gap: 10 },
+  classActionBtn: { paddingVertical: 4, paddingHorizontal: 2 },
+  classActionText: { fontSize: 12, fontWeight: '700' },
+  classLoading: { alignItems: 'center', paddingVertical: 24, gap: 10 },
+  classLoadingText: { fontSize: 13, fontWeight: '500' },
+  classEmpty: { alignItems: 'center', paddingVertical: 24, gap: 10 },
+  classEmptyText: { fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 19 },
+  studentCardScroll: { marginTop: 2, marginHorizontal: -2 },
+  studentCardRow: { gap: 12, paddingHorizontal: 2, paddingVertical: 10, paddingRight: 8 },
+  studentCard: {
+    width: 128,
+    minHeight: 148,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+      default: {
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
+      },
+    }),
+  },
+  studentCardSelected: {
+    ...Platform.select({
+      ios: { shadowOpacity: 0.14, shadowRadius: 12 },
+      android: { elevation: 5 },
+      default: {
+        boxShadow: '0 10px 28px rgba(5, 150, 105, 0.18)',
+      },
+    }),
+  },
+  studentCardBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  studentCardAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  studentCardInitial: { fontSize: 18, fontWeight: '800' },
+  studentCardName: { fontSize: 12, fontWeight: '700', textAlign: 'center', lineHeight: 16, minHeight: 32 },
+  studentCardAdm: { fontSize: 11, fontWeight: '600', marginTop: 4 },
+  selectedCount: { marginTop: 8, fontSize: 12, fontWeight: '700' },
 
   // Student chip
   selectedChip: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, borderRadius: 14, borderWidth: 1 },

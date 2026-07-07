@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import StaffHeader from '../../src/components/StaffHeader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
+import { useStaffPortalConfig } from '../../src/hooks/useStaffPortalConfig';
 import { StaffMyProfile, StaffService } from '../../src/services/staffService';
 import { SchoolProfile, SchoolService } from '../../src/services/schoolService';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -35,12 +36,13 @@ export default function PaySlip() {
   const { user } = useAuth();
   const userId = user?.userId;
   const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
+  const { payslipsEnabled, loading: configLoading } = useStaffPortalConfig();
   const [profile, setProfile] = useState<StaffMyProfile | null>(null);
   const [schoolProfile, setSchoolProfile] = useState<SchoolProfile | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!userId) {
+    if (!userId || configLoading || !payslipsEnabled) {
       setLoading(false);
       return;
     }
@@ -59,7 +61,7 @@ export default function PaySlip() {
         alertCompat('Error', 'Failed to load payslips');
       })
       .finally(() => setLoading(false));
-  }, [userId, staffId, isViewingAsAdmin]);
+  }, [userId, staffId, isViewingAsAdmin, payslipsEnabled, configLoading]);
 
   const ensureSchoolProfile = useCallback(async (): Promise<SchoolProfile | null> => {
     if (schoolProfile) return schoolProfile;
@@ -123,6 +125,16 @@ export default function PaySlip() {
       <StaffHeader title="My Pay Slips" showBackButton={true} />
       {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!configLoading && !payslipsEnabled ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="eye-off-outline" size={40} color="#94A3B8" />
+            <Text style={[styles.emptyText, { marginTop: 12, fontWeight: '700' }]}>Payslips are unavailable</Text>
+            <Text style={[styles.emptyText, { marginTop: 6, fontSize: 13 }]}>
+              Your school admin has disabled payslip access in the staff portal.
+            </Text>
+          </View>
+        ) : (
+        <>
         <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.summaryCard}>
           <LinearGradient
             colors={['#EC4899', '#BE185D']}
@@ -198,6 +210,8 @@ export default function PaySlip() {
               );
             })}
           </View>
+        )}
+        </>
         )}
       </ScrollView>
     </View>

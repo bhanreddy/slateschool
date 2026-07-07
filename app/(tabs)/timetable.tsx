@@ -18,6 +18,7 @@ import StudentHeader from '../../src/components/StudentHeader';
 import { useTheme, type SchoolTheme } from '../../src/hooks/useTheme';
 import LogoLoader from '../../src/components/LogoLoader';
 import { t_field } from '../../src/utils/lang';
+import { useFeatureGuard } from '../../src/hooks/useFeatures';
 
 const { width } = Dimensions.get('window');
 
@@ -75,6 +76,7 @@ interface ProcessedItem {
 }
 
 const TimeTableScreen = () => {
+  useFeatureGuard('nav.time_table'); // deep-link guard
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const { t, i18n } = useTranslation();

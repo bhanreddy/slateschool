@@ -50,32 +50,32 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
       secondary: '#F5921B',
       // Accent color – Golden amber (logo sun rays)
       accent: '#F9A825',
-      // Backgrounds – warm purple-tinted neutrals
-      background: '#FAF5FF',
+      // Backgrounds – pure white canvas
+      background: '#FFFFFF',
       surface: '#FFFFFF',
       card: '#FFFFFF',
-      // Text colors – deep purple palette
-      textPrimary: '#4A1A75',
-      textStrong: '#2D0A4E',
-      textSecondary: '#475569',
-      textMuted: '#64748B',
-      text: '#4A1A75',
-      textTertiary: '#64748B',
-      // Borders – purple-tinted
-      border: '#EDE4F5',
-      borderLight: '#F5EEFA',
+      // Text colors – neutral on white
+      textPrimary: '#171717',
+      textStrong: '#000000',
+      textSecondary: '#525252',
+      textMuted: '#737373',
+      text: '#171717',
+      textTertiary: '#737373',
+      // Borders – neutral gray
+      border: '#E5E7EB',
+      borderLight: '#F3F4F6',
       // Semantic colors
       danger: '#D32F2F',
       success: '#10B981',
       warning: '#F59E0B',
       info: '#6B2FA0',
       notification: '#F5921B',
-      // Navigation – purple pill tints
-      navPill: '#F3E5F5',
+      // Navigation – neutral pills
+      navPill: '#F5F5F5',
       navIconActive: '#6B2FA0',
-      navIconInactive: '#64748B',
+      navIconInactive: '#737373',
       // Header/Footer backgrounds (with transparency for glass effect)
-      headerBg: 'rgba(250,245,255, 0.88)',
+      headerBg: 'rgba(255,255,255, 0.88)',
       footerBg: 'rgba(255,255,255, 0.92)',
       // Alert colors
       alertBg: '#F3E5F5',
@@ -161,33 +161,33 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
       secondary: '#FFB74D',
       // Accent – golden amber for dark backgrounds
       accent: '#FFD54F',
-      // Dark backgrounds – deep purple-ink tones
-      background: '#1A0A2E',
-      surface: '#2D1B4E',
-      card: '#2D1B4E',
-      // Light text for dark backgrounds
-      textPrimary: '#F3E5F5',
+      // Dark backgrounds – pure black canvas
+      background: '#000000',
+      surface: '#000000',
+      card: '#000000',
+      // Light neutral text on black
+      textPrimary: '#FFFFFF',
       textStrong: '#FFFFFF',
-      textSecondary: '#D1C4E9',
-      textMuted: '#9575CD',
-      text: '#F3E5F5',
-      textTertiary: '#9575CD',
-      // Darker borders – purple-ink
-      border: '#3D2060',
-      borderLight: '#4A2878',
+      textSecondary: '#A3A3A3',
+      textMuted: '#737373',
+      text: '#FFFFFF',
+      textTertiary: '#737373',
+      // Neutral dark borders
+      border: '#262626',
+      borderLight: '#1A1A1A',
       // Lighter semantic colors for dark mode
       danger: '#F87171',
       success: '#34D399',
       warning: '#FBBF24',
       info: '#B57EDC',
       notification: '#FFB74D',
-      // Navigation – purple tint
-      navPill: 'rgba(107,47,160, 0.2)',
+      // Navigation – neutral dark pills
+      navPill: 'rgba(255,255,255, 0.08)',
       navIconActive: '#CE93D8',
-      navIconInactive: '#7E57C2',
-      // Header/Footer with dark purple glass effect
-      headerBg: 'rgba(26,10,46, 0.88)',
-      footerBg: 'rgba(45,27,78, 0.92)',
+      navIconInactive: '#737373',
+      // Header/Footer with dark glass effect
+      headerBg: 'rgba(0,0,0, 0.88)',
+      footerBg: 'rgba(0,0,0, 0.92)',
       // Alert colors (dark mode)
       alertBg: 'rgba(107,47,160, 0.12)',
       alertBorder: 'rgba(107,47,160, 0.25)',
@@ -321,3 +321,5 @@ export const SCHOOL_CONFIG = {
     statusBarOnRibbon: 'light' as 'light' | 'dark',
   },
 };
+
+export const SCHOOL_RECOGNITION_LINE = '';

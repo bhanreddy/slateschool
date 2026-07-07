@@ -19,9 +19,11 @@ import { AttendanceService } from '@/src/services/attendanceService';
 import { LeaveService } from '@/src/services/commonServices';
 import { useTheme } from '@/src/hooks/useTheme';
 import StaffHeader from '@/src/components/StaffHeader';
+import DashboardHero from '@/src/components/DashboardHero';
 import ViewAsBanner from '@/src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '@/src/hooks/useEffectiveStaffId';
 import { usePersistedSWR } from '@/src/hooks/usePersistedSWR';
+import { useStaffPortalConfig } from '@/src/hooks/useStaffPortalConfig';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const MENU_GAP = 16;
@@ -246,23 +248,16 @@ function AttendanceHero({ data, onPress, isDark }: { data: DashboardMetrics | nu
 }
 
 // ─── Hero Banner ──────────────────────────────────────────────────────────────
-function HeroBanner({ name, isDark }: { name: string; isDark: boolean }) {
-  const t = isDark ? D.dark : D.light;
+function HeroBanner({ name }: { name: string; isDark: boolean }) {
   return (
-    <Animated.View entering={FadeInDown.duration(480).springify()} style={styles.heroBanner}>
-      <View style={styles.heroBannerLeft}>
-        <View style={[styles.dateBadge, { backgroundColor: isDark ? 'rgba(108,99,255,0.16)' : 'rgba(108,99,255,0.10)' }]}>
-          <Text style={[styles.dateBadgeText, { color: ACCENT.violetMid }]}>
-            {getGreetingEmoji()}  {getTodayDate()}
-          </Text>
-        </View>
-        <Text style={[styles.greetLine, { color: t.text2 }]}>{getGreeting()},</Text>
-        <Text style={[styles.nameLine, { color: t.text1 }]} numberOfLines={1}>{name}</Text>
-      </View>
-      <LinearGradient colors={[ACCENT.violet, ACCENT.emerald]} style={styles.avatarBubble} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
-        <Text style={styles.avatarInitial}>{name.charAt(0).toUpperCase()}</Text>
-      </LinearGradient>
-    </Animated.View>
+    <View style={{ marginTop: 4, marginBottom: 20 }}>
+      <DashboardHero
+        eyebrow={`${getGreetingEmoji()}  ${getTodayDate()}`.toUpperCase()}
+        greeting={getGreeting()}
+        name={name}
+        stacks
+      />
+    </View>
   );
 }
 
@@ -791,6 +786,7 @@ export default function StaffDashboard() {
   const t = isDark ? D.dark : D.light;
   const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const viewAsParams = isViewingAsAdmin ? { staffId, viewAsName } : undefined;
+  const { payslipsEnabled } = useStaffPortalConfig();
 
   const { data, loading: metricsLoading } = usePersistedSWR<DashboardMetrics>({
     cacheKey: `staff-dashboard-${staffId ?? 'self'}`,
@@ -838,7 +834,7 @@ export default function StaffDashboard() {
     { title: 'Results', subtitle: 'Enter & view marks', configKey: 'results', route: '/staff/results' },
     { title: 'Complaints', subtitle: 'Student issues', configKey: 'complaints', route: '/staff/complaints' },
     { title: 'LMS', subtitle: 'Upload resources', configKey: 'lms', route: '/staff/lms-upload' },
-    { title: 'Payslips', subtitle: 'Salary & docs', configKey: 'payslips', route: '/staff/payslip' },
+    ...(payslipsEnabled ? [{ title: 'Payslips', subtitle: 'Salary & docs', configKey: 'payslips', route: '/staff/payslip' }] : []),
   ];
 
   const scrollY = useSharedValue(0);

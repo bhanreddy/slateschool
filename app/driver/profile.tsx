@@ -10,7 +10,13 @@ import StudentHeader from '../../src/components/StudentHeader';
 import AvatarUploader from '../../src/components/AvatarUploader';
 import { useAuth } from '../../src/hooks/useAuth';
 import { StaffService, StaffMyProfile } from '../../src/services/staffService';
+import { useStaffPortalConfig } from '../../src/hooks/useStaffPortalConfig';
 import LogoLoader from '../../src/components/LogoLoader';
+import {
+  SWITCH_ACCOUNT_SETTINGS,
+  SettingsAccountSwitcherSheet,
+  useSettingsAccountSwitcher,
+} from '../../src/components/SettingsAccountSwitcher';
 
 const DRIVER_PINK = '#EC4899';
 const DRIVER_GRADIENT: [string, string] = ['#EC4899', '#BE185D'];
@@ -121,6 +127,8 @@ export default function DriverProfile() {
   const [loadingProfile, setLoadingProfile] = useState(true);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [loadingPayslips, setLoadingPayslips] = useState(true);
+  const { payslipsEnabled } = useStaffPortalConfig();
+  const { switcherOpen, openSwitcher, closeSwitcher } = useSettingsAccountSwitcher();
 
   const displayName = profile?.display_name || user?.displayName || (user as any)?.first_name || 'Driver';
   const email = displayOrEmpty(profile?.email || (user as any)?.email);
@@ -146,7 +154,7 @@ export default function DriverProfile() {
   }, [user?.userId]);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || !payslipsEnabled) {
       setLoadingPayslips(false);
       return;
     }
@@ -155,7 +163,7 @@ export default function DriverProfile() {
       .then((data) => setPayslips(Array.isArray(data) ? data : []))
       .catch(() => { })
       .finally(() => setLoadingPayslips(false));
-  }, [user?.userId]);
+  }, [user?.userId, payslipsEnabled]);
 
   const totalEarnings = React.useMemo(() => {
     if (!payslips.length) return '₹0';
@@ -296,6 +304,7 @@ export default function DriverProfile() {
           </View>
         </Animated.View>
         {/* ═══════ Payslips Section ═══════ */}
+        {payslipsEnabled && (
         <Animated.View entering={FadeInUp.delay(400).duration(600)} style={styles.section}>
           <View style={styles.sectionHeader}>
             <View style={[styles.sectionIconBox, { backgroundColor: '#ECFDF5' }]}>
@@ -342,6 +351,17 @@ export default function DriverProfile() {
               </View>
           }
         </Animated.View>
+        )}
+        {/* ═══════ Switch account ═══════ */}
+        <Animated.View entering={FadeInUp.delay(450).duration(600)} style={styles.section}>
+          <TouchableOpacity style={styles.switchAccountButton} onPress={openSwitcher} activeOpacity={0.7}>
+            <View style={[styles.logoutIconBox, styles.switchAccountIconBox]}>
+              <Ionicons name={SWITCH_ACCOUNT_SETTINGS.icon} size={20} color={SWITCH_ACCOUNT_SETTINGS.iconColor} />
+            </View>
+            <Text style={styles.switchAccountText}>{SWITCH_ACCOUNT_SETTINGS.label}</Text>
+            <Ionicons name="chevron-forward" size={18} color="#94A3B8" />
+          </TouchableOpacity>
+        </Animated.View>
         {/* ═══════ Logout Button ═══════ */}
         <Animated.View entering={FadeInUp.delay(500).duration(600)} style={styles.section}>
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7}>
@@ -356,6 +376,8 @@ export default function DriverProfile() {
           </>
         }
       </ScrollView>
+
+      <SettingsAccountSwitcherSheet visible={switcherOpen} onClose={closeSwitcher} />
     </View>);
 
 }
@@ -515,6 +537,14 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: '#64748B', marginBottom: 4 },
   emptySubtitle: { fontSize: 13, color: '#94A3B8', textAlign: 'center' },
+
+  /* ── Switch account ── */
+  switchAccountButton: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#EFF6FF', borderRadius: 16, padding: 14, gap: 12,
+  },
+  switchAccountIconBox: { backgroundColor: '#DBEAFE' },
+  switchAccountText: { flex: 1, fontSize: 15, fontWeight: '600', color: '#1D4ED8', letterSpacing: 0.1 },
 
   /* ── Logout ── */
   logoutButton: {

@@ -4,7 +4,7 @@ import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { Invoice } from '../types/invoices';
-import { FeeTransaction, StudentFeeDueLine } from '../types/models';
+import { FeeTransaction, Parent, StudentFeeDueLine } from '../types/models';
 import { SCHOOL_CONFIG, SCHOOL_RECOGNITION_LINE } from '../constants/schoolConfig';
 import { printElementToWindow } from './exportCertificate';
 
@@ -794,21 +794,97 @@ function normalizeFeeDueLine(raw: Record<string, unknown>): StudentFeeDueLine {
   };
 }
 
-async function resolveStudentFeeDues(transaction: FeeTransaction): Promise<StudentFeeDueLine[]> {
-  const embedded = (transaction as FeeTransaction & { fee_dues?: unknown[] }).fee_dues;
-  if (Array.isArray(embedded) && embedded.length > 0) {
-    return embedded.map((row) =>
-      normalizeFeeDueLine(row as unknown as Record<string, unknown>),
-    );
+function fatherFromTransaction(transaction: FeeTransaction): { fatherName: string; fatherMobile: string } {
+  return {
+    fatherName: (transaction.father_name || '').trim(),
+    fatherMobile: (
+      transaction.father_mobile ||
+      (transaction as { father_phone?: string; parent_phone?: string }).father_phone ||
+      (transaction as { father_phone?: string; parent_phone?: string }).parent_phone ||
+      ''
+    ).trim(),
+  };
+}
+
+function isSerialReceiptNo(value: string): boolean {
+  return /^RCT-/i.test(value) || /^SCH\d+-RCT-/i.test(value);
+}
+
+async function resolveReceiptNo(transaction: FeeTransaction): Promise<string> {
+  const direct = (transaction.receipt_no || (transaction as { receiptNo?: string }).receiptNo || '').trim();
+  if (direct && isSerialReceiptNo(direct)) return direct;
+
+  const txId = transaction.id;
+  if (txId) {
+    try {
+      const { FeeService } = await import('../services/feeService');
+      const looked = await FeeService.lookupReceiptNo(txId);
+      if (looked) return looked;
+    } catch {
+      /* optional lookup */
+    }
   }
+
+  return txId ? `RCP-${txId.slice(0, 8).toUpperCase()}` : 'N/A';
+}
+
+function fatherFromParents(parents: Parent[] | undefined): { fatherName: string; fatherMobile: string } {
+  if (!parents?.length) return { fatherName: '', fatherMobile: '' };
+  const father =
+    parents.find((p) => p.relation === 'Father') ||
+    parents.find((p) => p.is_primary) ||
+    parents[0];
+  if (!father) return { fatherName: '', fatherMobile: '' };
+  const fatherName = [father.first_name, father.last_name].filter(Boolean).join(' ').trim();
+  return { fatherName, fatherMobile: (father.phone || '').trim() };
+}
+
+async function resolveReceiptContext(transaction: FeeTransaction): Promise<{
+  feeDues: StudentFeeDueLine[];
+  fatherName: string;
+  fatherMobile: string;
+  receiptNo: string;
+}> {
   const studentId =
     transaction.student_id ||
     (transaction as { studentId?: string }).studentId;
-  if (!studentId) return [];
+  const fromTx = fatherFromTransaction(transaction);
+  let fatherName = fromTx.fatherName;
+  let fatherMobile = fromTx.fatherMobile;
+
+  const embedded = (transaction as FeeTransaction & { fee_dues?: unknown[] }).fee_dues;
+  if (Array.isArray(embedded) && embedded.length > 0) {
+    const feeDues = embedded.map((row) =>
+      normalizeFeeDueLine(row as unknown as Record<string, unknown>),
+    );
+    if ((!fatherName || !fatherMobile) && studentId) {
+      try {
+        const { FeeService } = await import('../services/feeService');
+        const data = await FeeService.getStudentFees(studentId);
+        fatherName = fatherName || (data.student?.father_name || '').trim();
+        fatherMobile = fatherMobile || (data.student?.father_mobile || '').trim();
+        if (!fatherName || !fatherMobile) {
+          const picked = fatherFromParents(data.student?.parents);
+          fatherName = fatherName || picked.fatherName;
+          fatherMobile = fatherMobile || picked.fatherMobile;
+        }
+      } catch {
+        /* keep transaction values */
+      }
+    }
+    const receiptNo = await resolveReceiptNo(transaction);
+    return { feeDues, fatherName, fatherMobile, receiptNo };
+  }
+
+  if (!studentId) {
+    const receiptNo = await resolveReceiptNo(transaction);
+    return { feeDues: [], fatherName, fatherMobile, receiptNo };
+  }
+
   try {
     const { FeeService } = await import('../services/feeService');
     const data = await FeeService.getStudentFees(studentId);
-    return (data.fees || []).map((f) =>
+    const feeDues = (data.fees || []).map((f) =>
       normalizeFeeDueLine({
         student_fee_id: f.id,
         fee_type: f.fee_type,
@@ -819,8 +895,29 @@ async function resolveStudentFeeDues(transaction: FeeTransaction): Promise<Stude
         status: f.status,
       }),
     );
+    fatherName = fatherName || (data.student?.father_name || '').trim();
+    fatherMobile = fatherMobile || (data.student?.father_mobile || '').trim();
+    if (!fatherName || !fatherMobile) {
+      const picked = fatherFromParents(data.student?.parents);
+      fatherName = fatherName || picked.fatherName;
+      fatherMobile = fatherMobile || picked.fatherMobile;
+    }
+    if (!fatherName || !fatherMobile) {
+      try {
+        const { StudentService } = await import('../services/studentService');
+        const parents = await StudentService.getParents(studentId, { silent: true });
+        const picked = fatherFromParents(parents);
+        fatherName = fatherName || picked.fatherName;
+        fatherMobile = fatherMobile || picked.fatherMobile;
+      } catch {
+        /* optional fallback */
+      }
+    }
+    const receiptNo = await resolveReceiptNo(transaction);
+    return { feeDues, fatherName, fatherMobile, receiptNo };
   } catch {
-    return [];
+    const receiptNo = await resolveReceiptNo(transaction);
+    return { feeDues: [], fatherName, fatherMobile, receiptNo };
   }
 }
 
@@ -847,7 +944,7 @@ function formatClassSection(transaction: FeeTransaction): string | null {
 
 export const generateReceiptPDF = async (transaction: FeeTransaction) => {
   try {
-    const feeDues = await resolveStudentFeeDues(transaction);
+    const { feeDues, fatherName, fatherMobile, receiptNo } = await resolveReceiptContext(transaction);
     const studentName = transaction.student_name || 'Student';
     const admissionNo = transaction.admission_no || 'N/A';
     const classSectionText = formatClassSection(transaction);
@@ -859,7 +956,6 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     const amountNum = Number(transaction.amount || 0);
     const amountFmt = amountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const paymentMethod = (transaction.payment_method || 'Cash').toUpperCase();
-    const receiptNo = transaction.transaction_ref || (transaction.id ? `RCP-${transaction.id.slice(0, 8).toUpperCase()}` : 'N/A');
     const academicYearText =
       transaction.academic_year ||
       (transaction as any).academicYear ||
@@ -885,6 +981,8 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     const totalPaidFmt = fmtINR(totalPaidOnFee);
     const balanceDueFmt = fmtINR(balanceDue);
     const totalOutstandingAll = feeDues.reduce((sum, line) => sum + line.balance_due, 0);
+    const totalGrossDue = feeDues.reduce((sum, line) => sum + Math.max(0, line.amount_due), 0);
+    const totalDiscountAll = feeDues.reduce((sum, line) => sum + Math.max(0, line.discount ?? 0), 0);
     const totalAssignedDue = feeDues.reduce(
       (sum, line) => sum + Math.max(0, line.amount_due - (line.discount ?? 0)),
       0,
@@ -893,13 +991,13 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     const useAllFeesSummary = feeDues.length > 0;
     const displayOutstanding = useAllFeesSummary ? totalOutstandingAll : balanceDue;
     const isFullyPaid = displayOutstanding <= 0;
+    const showDiscountColumn = totalDiscountAll > 0 || (transaction.discount ?? 0) > 0;
 
     const logoBase64 = await loadLogoAsBase64(SCHOOL_CONFIG.logo);
     const cardLogoHtml = logoBase64
       ? `<img src="${logoBase64}" class="rc-logo" alt="" />`
       : `<div class="rc-logo-fallback">${SCHOOL_CONFIG.name.slice(0, 2).toUpperCase()}</div>`;
 
-    const fatherName = transaction.father_name || '';
     const clerkName = transaction.received_by || '';
     const dueLabel = isFullyPaid ? 'Total Outstanding' : 'Outstanding Balance';
     const dueValue = isFullyPaid ? '₹0.00' : `₹${fmtINR(displayOutstanding)}`;
@@ -923,20 +1021,27 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
           const cls = [isThisPayment ? 'this-pay' : '', isPaid ? 'paid' : '']
             .filter(Boolean)
             .join(' ');
-          return `<tr class="${cls}"><td class="fee">${escapeHtml(line.fee_type)}</td><td>₹${fmtINR(netDue)}</td><td>₹${fmtINR(line.amount_paid)}</td><td>₹${fmtINR(line.balance_due)}</td></tr>`;
+          const discountCell = showDiscountColumn ? `<td>₹${fmtINR(line.discount ?? 0)}</td>` : '';
+          return `<tr class="${cls}"><td class="fee">${escapeHtml(line.fee_type)}</td><td>₹${fmtINR(showDiscountColumn ? line.amount_due : netDue)}</td>${discountCell}<td>₹${fmtINR(line.amount_paid)}</td><td>₹${fmtINR(line.balance_due)}</td></tr>`;
         })
         .join('') +
       (hiddenDuesCount > 0
-        ? `<tr><td class="fee" colspan="4" style="text-align:center;color:#6B7280;font-weight:500;">+ ${hiddenDuesCount} more fee type${hiddenDuesCount === 1 ? '' : 's'}</td></tr>`
+        ? `<tr><td class="fee" colspan="${showDiscountColumn ? 5 : 4}" style="text-align:center;color:#6B7280;font-weight:500;">+ ${hiddenDuesCount} more fee type${hiddenDuesCount === 1 ? '' : 's'}</td></tr>`
         : '');
+    const duesHeaderHtml = showDiscountColumn
+      ? '<thead><tr><th style="width:34%;">Fee Type</th><th>Total</th><th>Discount</th><th>Paid</th><th>Balance</th></tr></thead>'
+      : '<thead><tr><th style="width:40%;">Fee Type</th><th>Total</th><th>Paid</th><th>Balance</th></tr></thead>';
+    const duesFooterHtml = showDiscountColumn
+      ? `<tfoot><tr><td class="fee">Total</td><td>₹${fmtINR(totalGrossDue)}</td><td>₹${fmtINR(totalDiscountAll)}</td><td>₹${fmtINR(totalPaidAll)}</td><td>₹${fmtINR(totalOutstandingAll)}</td></tr></tfoot>`
+      : `<tfoot><tr><td class="fee">Total</td><td>₹${fmtINR(totalAssignedDue)}</td><td>₹${fmtINR(totalPaidAll)}</td><td>₹${fmtINR(totalOutstandingAll)}</td></tr></tfoot>`;
     const duesSectionHtml =
       feeDues.length > 0
         ? `<div class="rc-dues">
             <div class="rc-dues-title">All Assigned Fee Dues<span>${feeDues.length} fee type${feeDues.length === 1 ? '' : 's'}</span></div>
             <table class="rc-dues-table">
-              <thead><tr><th style="width:40%;">Fee Type</th><th>Total</th><th>Paid</th><th>Balance</th></tr></thead>
+              ${duesHeaderHtml}
               <tbody>${duesRowsHtml}</tbody>
-              <tfoot><tr><td class="fee">Total</td><td>₹${fmtINR(totalAssignedDue)}</td><td>₹${fmtINR(totalPaidAll)}</td><td>₹${fmtINR(totalOutstandingAll)}</td></tr></tfoot>
+              ${duesFooterHtml}
             </table>
           </div>`
         : '';
@@ -957,7 +1062,8 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
         </div>
         <div class="rc-info">
           <div class="full"><span class="lbl">Student Name</span><span class="val big">${escapeHtml(studentName)}</span></div>
-          ${fatherName ? `<div class="full"><span class="lbl">Father's Name</span><span class="val">${escapeHtml(fatherName)}</span></div>` : ''}
+          <div><span class="lbl">Father's Name</span><span class="val">${escapeHtml(fatherName || '—')}</span></div>
+          <div><span class="lbl">Father Mobile</span><span class="val">${escapeHtml(fatherMobile || '—')}</span></div>
           <div><span class="lbl">Admission No</span><span class="val">${escapeHtml(admissionNo)}</span></div>
           <div><span class="lbl">Class &amp; Section</span><span class="val big">${escapeHtml(classSectionText || '—')}</span></div>
         </div>

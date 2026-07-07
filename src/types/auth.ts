@@ -12,6 +12,10 @@ export interface ValidatedUser {
   name?: string;
   photoUrl: string | null;
   role: { code: string; name: string };
+  /** All role codes for this user (from JWT → DB). */
+  roles?: string[];
+  /** Permission codes granted via role_permissions (from JWT → DB). */
+  permissions?: string[];
   accountStatus: string;
   /** staff.id when this login is linked to a staff record (payslips, attendance, etc.) */
   staffId?: string | null;
@@ -37,6 +41,8 @@ export interface ValidatedUser {
   id?: string | null;
   /** Student admission number */
   admission_no?: string | null;
+  /** Portal switcher contexts (Phase 0+) */
+  portalContexts?: import('./context').PortalContextsPayload | null;
 }
 
 export interface AuthSession {

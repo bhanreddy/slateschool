@@ -17,7 +17,9 @@ export interface TrendPoint {
 
 // ── Financials ──────────────────────────────────────────────────────────────
 export interface FeeCollectionSummary {
-  total_collected: number;        // ₹ amount
+  total_collected: number;        // ₹ amount (selected range)
+  today_collection: number;       // ₹ collected today
+  lifetime_collected: number;     // ₹ collected all-time
   outstanding_dues: number;       // ₹ amount
   collection_efficiency: number;  // 0-100 %
   total_invoiced: number;         // total billed
@@ -45,12 +47,21 @@ export interface PendingStudent {
 }
 
 // ── Attendance ──────────────────────────────────────────────────────────────
+export interface AttendancePeriod {
+  from: string;   // ISO date (inclusive) — window start
+  to: string;     // ISO date (inclusive) — window end (today)
+  label: string;  // e.g. "2026-27" (academic year code) or "Jul 2026"
+}
+
 export interface AttendanceSummary {
-  avg_attendance: number;          // 0-100 %
-  chronic_absentees: number;       // count of students < threshold
+  period: AttendancePeriod;        // window the cards describe
+  // number | null — null means NO attendance data exists for the window.
+  // Render "—" / "No data", NEVER "0%". 0 is only for a genuine zero.
+  avg_attendance: number | null;   // 0-100 %
+  chronic_absentees: number;       // count of active students < 75% YTD (0 is real)
   total_present_days: number;      // aggregate student-days present
-  total_working_days: number;      // school working days in range
-  staff_attendance: number;        // 0-100 % for staff
+  total_working_days: number | null; // school working days in range (null = no data)
+  staff_attendance: number | null; // 0-100 % for staff (null = not tracked / no data)
   trend: TrendPoint[];             // daily/weekly %
   by_class: ClassAttendanceRow[];  // per class breakdown
   low_attendance_students: LowAttendanceStudent[];
@@ -131,7 +142,9 @@ export const AnalyticsService = {
    * GET /admin/analytics?range=month|quarter|year
    */
   async getAnalytics(range: TimeRange): Promise<AnalyticsData> {
-    const data = await apiClient.get<AnalyticsData>('/admin/analytics', { range });
+    // Silent: useAnalytics/reports screens surface errors inline (retry cards),
+    // not via the global apiClient "Network Error" modal.
+    const data = await apiClient.get<AnalyticsData>('/admin/analytics', { range }, { silent: true });
     return data;
   },
 

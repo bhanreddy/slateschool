@@ -33,6 +33,7 @@ import AdminHeader from '../../src/components/AdminHeader';
 import { StaffService } from '../../src/services/staffService';
 import { useTheme } from '../../src/hooks/useTheme';
 import LogoLoader from '../../src/components/LogoLoader';
+import { usePermissions } from '../../src/hooks/usePermissions';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -115,7 +116,7 @@ function PulsingDot({ color }: { color: string }) {
 
 // ─── Staff Card ───────────────────────────────────────────────────────────────
 function StaffCard({
-  item, index, isDark, cardBg, cardBorder, avatarBg, onCall, onDelete, onOpenPortal,
+  item, index, isDark, cardBg, cardBorder, avatarBg, onCall, onDelete, onOpenPortal, onEdit, canEdit,
 }: {
   item: StaffMember;
   index: number;
@@ -126,6 +127,8 @@ function StaffCard({
   onCall: () => void;
   onDelete: () => void;
   onOpenPortal: () => void;
+  onEdit?: () => void;
+  canEdit?: boolean;
 }) {
   const pressScale = useSharedValue(1);
   const cfg = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.Absent;
@@ -193,6 +196,19 @@ function StaffCard({
 
         {/* Action buttons */}
         <View style={styles.actions}>
+          {canEdit && onEdit ? (
+            <TouchableOpacity onPress={onEdit} style={styles.actionBtn} activeOpacity={0.8}>
+              <LinearGradient
+                colors={['#3B82F6', '#1D4ED8']}
+                style={styles.actionGrad}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <Ionicons name="pencil" size={15} color="#fff" />
+              </LinearGradient>
+            </TouchableOpacity>
+          ) : null}
+
           <TouchableOpacity onPress={onCall} style={styles.actionBtn} activeOpacity={0.8}>
             <LinearGradient
               colors={['#7C6FFF', '#5A4FE0']}
@@ -262,6 +278,8 @@ function StatsBar({ staffList, isDark }: { staffList: StaffMember[]; isDark: boo
 export default function ManageStaff() {
   const { theme, isDark } = useTheme();
   const router = useRouter();
+  const { hasPermission } = usePermissions();
+  const canManageStaff = hasPermission('staff.create') || hasPermission('staff.edit');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [staffList, setStaffList] = useState<StaffMember[]>([]);
@@ -392,6 +410,26 @@ export default function ManageStaff() {
       {/* Header — AdminHeader uses its own theme context internally */}
       <AdminHeader title="Manage Staff" showBackButton />
 
+      {canManageStaff && (
+        <Animated.View entering={FadeInDown.duration(350)} style={styles.addRow}>
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={() => router.push('/admin/addStaff' as any)}
+            style={styles.addBtnWrap}
+          >
+            <LinearGradient
+              colors={['#7C6FFF', '#5A4FE0']}
+              style={styles.addBtn}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+            >
+              <Ionicons name="person-add" size={18} color="#fff" />
+              <Text style={styles.addBtnText}>Add Staff Member</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
       {/* Section label + stats */}
       <Animated.View entering={FadeInDown.duration(400)}>
         <View style={styles.sectionLabelRow}>
@@ -480,6 +518,8 @@ export default function ManageStaff() {
                   params: { staffId: item.id, viewAsName: item.display_name },
                 } as any)
               }
+              canEdit={hasPermission('staff.edit')}
+              onEdit={() => router.push({ pathname: '/admin/addStaff', params: { id: item.id } } as any)}
             />
           )}
           contentContainerStyle={styles.listContent}
@@ -511,6 +551,14 @@ export default function ManageStaff() {
 // ─── Static Styles (colours are injected inline / via props — none hardcoded here) ──
 const styles = StyleSheet.create({
   container: { flex: 1 },
+
+  addRow: { paddingHorizontal: 20, marginBottom: 8 },
+  addBtnWrap: { borderRadius: 14, overflow: 'hidden' },
+  addBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 14, borderRadius: 14,
+  },
+  addBtnText: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 
   orb1: { position: 'absolute', width: 280, height: 280, borderRadius: 140, top: -70, right: -90 },
   orb2: { position: 'absolute', width: 180, height: 180, borderRadius: 90, bottom: 120, left: -60 },

@@ -300,6 +300,7 @@ export default function SmartInsights() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<{ id: string; name: string; admissionNo: string } | null>(null);
   const [generatedPoints, setGeneratedPoints] = useState<string[] | null>(null);
+  const [insightSource, setInsightSource] = useState<'ai' | 'fallback' | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -370,8 +371,10 @@ export default function SmartInsights() {
     if (queryLabel !== undefined) setSearchQuery(queryLabel);
     setSearchResults([]);
     setGeneratedPoints(null);
-    const points = await AdminService.generateTalkingPoints(student.id);
-    setGeneratedPoints(points);
+    setInsightSource(null);
+    const result = await AdminService.generateTalkingPoints(student.id);
+    setGeneratedPoints(result.points);
+    setInsightSource(result.source);
   };
 
   const selectStudentAndGenerate = async (student: Student) => {
@@ -385,6 +388,7 @@ export default function SmartInsights() {
     } catch {
       alertCompat('Error', 'Failed to generate talking points.');
       setGeneratedPoints(null);
+      setInsightSource(null);
       setSelectedStudent(null);
     } finally {
       setGenerating(false);
@@ -410,6 +414,7 @@ export default function SmartInsights() {
     setSearchQuery(text);
     if (generatedPoints || selectedStudent) {
       setGeneratedPoints(null);
+      setInsightSource(null);
       setSelectedStudent(null);
     }
   };
@@ -445,11 +450,13 @@ export default function SmartInsights() {
       }
       alertCompat('Not Found', 'No student matched that name, ID, or admission number.');
       setGeneratedPoints(null);
+      setInsightSource(null);
       setSelectedStudent(null);
       setSearchResults([]);
     } catch {
       alertCompat('Not Found', 'Student not found or analysis failed.');
       setGeneratedPoints(null);
+      setInsightSource(null);
       setSelectedStudent(null);
     } finally {
       setGenerating(false);
@@ -457,7 +464,7 @@ export default function SmartInsights() {
   };
 
   const getInsightsTitle = () =>
-    generatedPoints?.[0]?.startsWith('[Rule-based') ? 'Basic Summary' : 'AI Performance Insights';
+    insightSource === 'fallback' ? 'Basic Summary' : 'AI Performance Insights';
 
   const getInsightsStudentLabel = () =>
     selectedStudent
@@ -481,7 +488,7 @@ export default function SmartInsights() {
     <meta charset="utf-8" />
     <title>${escapeHtml(getInsightsTitle())}</title>
     <style>
-      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; color: #0f172a; }
+      body { font-family: 'Noto Sans Telugu', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 40px; color: #0f172a; }
       h1 { font-size: 22px; margin: 0 0 4px; }
       .sub { color: #64748b; margin-bottom: 24px; }
       ol { padding-left: 20px; }
@@ -620,7 +627,7 @@ export default function SmartInsights() {
         />
         <Feather name="info" size={16} color={COLORS.primary} style={{ marginTop: 1 }} />
         <Text style={tpStyles.tipText}>
-          Generate AI-powered talking points for parent meetings in seconds.
+          Generate AI-powered talking points for parent meetings in seconds. Results are shown in Telugu.
         </Text>
       </View>
 
@@ -702,15 +709,15 @@ export default function SmartInsights() {
               <MaterialCommunityIcons name="magic-staff" size={18} color={COLORS.primary} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={tpStyles.resultTitle}>{generatedPoints?.[0]?.startsWith('[Rule-based') ? 'Basic Summary' : 'AI Performance Insights'}</Text>
+              <Text style={tpStyles.resultTitle}>{insightSource === 'fallback' ? 'Basic Summary' : 'AI Performance Insights'}</Text>
               <Text style={tpStyles.resultSub}>
                 {selectedStudent
                   ? `${selectedStudent.name}${selectedStudent.admissionNo ? ` · #${selectedStudent.admissionNo}` : ''}`
                   : searchQuery}
               </Text>
             </View>
-            <View style={[tpStyles.aiBadge, generatedPoints?.[0]?.startsWith('[Rule-based') && { backgroundColor: COLORS.textMuted }]}>
-              <Text style={tpStyles.aiBadgeText}>{generatedPoints?.[0]?.startsWith('[Rule-based') ? 'STATS' : '✦ AI'}</Text>
+            <View style={[tpStyles.aiBadge, insightSource === 'fallback' && { backgroundColor: COLORS.textMuted }]}>
+              <Text style={tpStyles.aiBadgeText}>{insightSource === 'fallback' ? 'STATS' : '✦ AI'}</Text>
             </View>
           </View>
 
@@ -973,7 +980,7 @@ const tpStyles = StyleSheet.create({
   pointRow: { flexDirection: 'row', gap: 12, marginBottom: 14, alignItems: 'flex-start' },
   pointNum: { width: 24, height: 24, borderRadius: 8, backgroundColor: `${COLORS.primary}15`, justifyContent: 'center', alignItems: 'center', marginTop: 1 },
   pointNumText: { fontSize: 11, fontWeight: '800', color: COLORS.primary },
-  pointText: { flex: 1, fontSize: 14, color: '#334155', lineHeight: 22, fontWeight: '500' },
+  pointText: { flex: 1, fontSize: 14, color: '#334155', lineHeight: 22, fontWeight: '500', fontFamily: Platform.OS === 'web' ? 'Noto Sans Telugu, sans-serif' : undefined },
   actionRow: { flexDirection: 'row', marginTop: 16, paddingTop: 16, borderTopWidth: 1, borderTopColor: COLORS.border, alignItems: 'center', justifyContent: 'center', gap: 8 },
   actionDivider: { width: 1, height: 18, backgroundColor: COLORS.border },
   actionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 6 },

@@ -191,7 +191,7 @@ export default function Settings() {
                     <SettingRow
                         icon="people-circle"
                         iconColor="#2563EB" iconBg="#EFF6FF"
-                        label={t('settings.switch_account', 'Switch / Manage accounts')}
+                        label={t('settings.switch_account', 'Switch account')}
                         isLast
                         onPress={() => setSwitcherOpen(true)}
                         rightElement={chevron}

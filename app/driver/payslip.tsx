@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import StudentHeader from '../../src/components/StudentHeader';
 import { StaffService } from '../../src/services/staffService';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useStaffPortalConfig } from '../../src/hooks/useStaffPortalConfig';
 import LogoLoader from '../../src/components/LogoLoader';
 
 const DRIVER_PINK = '#EC4899';
@@ -23,11 +24,12 @@ interface Payslip {
 
 export default function DriverPayslip() {
   const { user } = useAuth();
+  const { payslipsEnabled, loading: configLoading } = useStaffPortalConfig();
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!user) {
+    if (!user || configLoading || !payslipsEnabled) {
       setLoading(false);
       return;
     }
@@ -36,7 +38,7 @@ export default function DriverPayslip() {
       .then((data) => setPayslips(Array.isArray(data) ? data : []))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [user?.userId]);
+  }, [user?.userId, payslipsEnabled, configLoading]);
 
   const totalEarnings = React.useMemo(() => {
     if (!payslips.length) return '₹0';
@@ -65,6 +67,14 @@ export default function DriverPayslip() {
       <StatusBar barStyle="light-content" backgroundColor="#0F0F1A" />
       <StudentHeader title="My Payslips" menuUserType="driver" />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {!configLoading && !payslipsEnabled ? (
+          <View style={styles.emptyBox}>
+            <Ionicons name="eye-off-outline" size={36} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>Payslips are unavailable</Text>
+            <Text style={styles.emptySubtitle}>Your school admin has disabled payslip access.</Text>
+          </View>
+        ) : (
+        <>
         {/* ═══════ YTD Earnings Card ═══════ */}
         <Animated.View entering={FadeInDown.delay(100).duration(600)} style={styles.summaryCardWrap}>
           <LinearGradient
@@ -189,6 +199,8 @@ export default function DriverPayslip() {
             </View>
         }
         <View style={{ height: 100 }} />
+        </>
+        )}
       </ScrollView>
     </View>);
 

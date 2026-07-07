@@ -47,6 +47,11 @@ export interface AccountsStaffCreationSetting {
     message?: string;
 }
 
+export interface PartialFeePaymentSetting {
+    enabled: boolean;
+    message?: string;
+}
+
 export interface AdminFinanceStats {
     today_collection: number;
     monthly_collection: number;
@@ -65,6 +70,11 @@ export interface AdminFinanceStats {
 // --- Mock Data (Temporary until Backend Endpoints are ready) ---
 
 
+
+export interface TalkingPointsResult {
+    points: string[];
+    source: 'ai' | 'fallback';
+}
 
 export const AdminService = {
     /**
@@ -96,10 +106,15 @@ export const AdminService = {
     },
 
     /**
-     * Generate AI Talking Points for a student
+     * Generate AI Talking Points for a student (Telugu)
      */
-    generateTalkingPoints: async (studentId: string): Promise<string[]> => {
-        return api.get<string[]>(`/analytics/talking-points/${studentId}`);
+    generateTalkingPoints: async (studentId: string): Promise<TalkingPointsResult> => {
+        const data = await api.get<TalkingPointsResult | string[]>(`/analytics/talking-points/${studentId}`);
+        if (Array.isArray(data)) {
+            const isFallback = data[0]?.startsWith('[Rule-based') || data[0]?.startsWith('[విశ్లేషణ]');
+            return { points: data, source: isFallback ? 'fallback' : 'ai' };
+        }
+        return data;
     },
 
     /**
@@ -137,5 +152,21 @@ export const AdminService = {
 
     setAccountsStaffCreationEnabled: async (enabled: boolean): Promise<AccountsStaffCreationSetting> => {
         return api.put<AccountsStaffCreationSetting>('/admin/accounts-staff-creation', { enabled });
+    },
+
+    getPartialFeePaymentSetting: async (): Promise<PartialFeePaymentSetting> => {
+        return api.get<PartialFeePaymentSetting>('/admin/partial-fee-payment');
+    },
+
+    setPartialFeePaymentEnabled: async (enabled: boolean): Promise<PartialFeePaymentSetting> => {
+        return api.put<PartialFeePaymentSetting>('/admin/partial-fee-payment', { enabled });
+    },
+
+    getStaffPayslipsSetting: async (): Promise<{ enabled: boolean }> => {
+        return api.get<{ enabled: boolean }>('/admin/staff-payslips');
+    },
+
+    setStaffPayslipsEnabled: async (enabled: boolean): Promise<{ enabled: boolean; message?: string }> => {
+        return api.put<{ enabled: boolean; message?: string }>('/admin/staff-payslips', { enabled });
     },
 };

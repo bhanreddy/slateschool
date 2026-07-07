@@ -16,6 +16,11 @@ import { useTheme } from '../../src/hooks/useTheme';
 import { useBiometric } from '../../src/hooks/useBiometric';
 import { Theme } from '../../src/theme/themes';
 import { useTranslation } from 'react-i18next';
+import {
+    SWITCH_ACCOUNT_SETTINGS,
+    SettingsAccountSwitcherSheet,
+    useSettingsAccountSwitcher,
+} from '../../src/components/SettingsAccountSwitcher';
 
 // ─── SettingRow ───────────────────────────────────────────────────────────────
 
@@ -113,6 +118,7 @@ export default function AdminSettings() {
     const { user, signOut } = useAuth();
     const [updating, setUpdating] = useState(false);
     const { isBiometricAvailable, isBiometricEnabled, isLoading: biometricLoading, toggleBiometric } = useBiometric();
+    const { switcherOpen, openSwitcher, closeSwitcher } = useSettingsAccountSwitcher();
 
     const handlePress = (item: string) =>
         alertCompat(item, 'This feature will be available in the next update.');
@@ -174,6 +180,19 @@ export default function AdminSettings() {
                         </TouchableOpacity>
                     </View>
                 </Animated.View>
+
+                {/* ── Accounts ── */}
+                <Group title="Accounts" delay={130} theme={theme}>
+                    <SettingRow
+                        icon={SWITCH_ACCOUNT_SETTINGS.icon}
+                        iconColor={SWITCH_ACCOUNT_SETTINGS.iconColor}
+                        iconBg={SWITCH_ACCOUNT_SETTINGS.iconBg}
+                        label={SWITCH_ACCOUNT_SETTINGS.label}
+                        isLast
+                        onPress={openSwitcher}
+                        rightElement={chevron}
+                    />
+                </Group>
 
                 {/* ── General ── */}
                 <Group title="General" delay={170} theme={theme}>
@@ -324,6 +343,8 @@ export default function AdminSettings() {
                 </Animated.View>
 
             </ScrollView>
+
+            <SettingsAccountSwitcherSheet visible={switcherOpen} onClose={closeSwitcher} />
         </View>
     );
 }

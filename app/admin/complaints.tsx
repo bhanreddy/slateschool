@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import AppTextInput from '@/src/components/AppTextInput';
 
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, StatusBar, Modal, KeyboardAvoidingView, Platform, ScrollView, ActivityIndicator } from 'react-native';
@@ -11,9 +11,25 @@ import { useTheme } from '../../src/hooks/useTheme';
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
 import { StudentService } from '../../src/services/studentService';
+import { ClassService, ClassSection } from '../../src/services/classService';
 import { Student } from '../../src/types/models';
+import { StudentWithDetails } from '../../src/types/schema';
 import { useTranslation } from 'react-i18next';
 import { t_field } from '../../src/utils/lang';
+
+interface PickStudent {
+  id: string;
+  display_name: string;
+  admission_no: string;
+}
+
+const EMPTY_COMPLAINT = {
+  title: '',
+  description: '',
+  category: 'Facility',
+  priority: 'medium',
+  raised_for_student_id: ''
+};
 export default function AdminComplaints() {
   useTranslation(); // Subscribe so list rows re-render when language changes (t_field).
   const {
@@ -26,20 +42,124 @@ export default function AdminComplaints() {
   const [filterType, setFilterType] = useState<'ALL' | 'OPEN' | 'IN PROGRESS' | 'CLOSED'>('ALL');
 
   const [modalVisible, setModalVisible] = useState(false);
-  const [newComplaint, setNewComplaint] = useState({
-    title: '',
-    description: '',
-    category: 'Facility',
-    priority: 'medium',
-    raised_for_student_id: ''
-  });
+  const [newComplaint, setNewComplaint] = useState({ ...EMPTY_COMPLAINT });
+  const [studentMode, setStudentMode] = useState<'single' | 'multiple'>('single');
   const [studentSearch, setStudentSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Student[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [classSections, setClassSections] = useState<ClassSection[]>([]);
+  const [selectedClassSectionId, setSelectedClassSectionId] = useState<string | null>(null);
+  const [classStudents, setClassStudents] = useState<PickStudent[]>([]);
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [loadingStudents, setLoadingStudents] = useState(false);
   useEffect(() => {
     fetchComplaints();
   }, []);
+
+  useEffect(() => {
+    if (!modalVisible) return;
+    loadAllClasses();
+  }, [modalVisible]);
+
+  useEffect(() => {
+    if (!modalVisible || studentMode !== 'multiple' || !selectedClassSectionId) return;
+    loadClassStudents(selectedClassSectionId);
+  }, [modalVisible, studentMode, selectedClassSectionId, classSections]);
+
+  const resetStudentPicker = useCallback(() => {
+    setStudentMode('single');
+    setStudentSearch('');
+    setSearchResults([]);
+    setClassSections([]);
+    setSelectedClassSectionId(null);
+    setClassStudents([]);
+    setSelectedStudentIds([]);
+    setNewComplaint((prev) => ({ ...prev, raised_for_student_id: '' }));
+  }, []);
+
+  const closeModal = () => {
+    setModalVisible(false);
+    setNewComplaint({ ...EMPTY_COMPLAINT });
+    resetStudentPicker();
+  };
+
+  const loadAllClasses = async () => {
+    setLoadingClasses(true);
+    let loadedSections: ClassSection[] = [];
+    try {
+      const year = await ClassService.getCurrentAcademicYear();
+      const sections = await ClassService.getClassSections(year?.id);
+      loadedSections = [...sections].sort((a, b) =>
+        `${a.class_name}-${a.section_name}`.localeCompare(`${b.class_name}-${b.section_name}`)
+      );
+      setClassSections(loadedSections);
+      setSelectedClassSectionId((prev) =>
+        prev && loadedSections.some((section) => section.id === prev)
+          ? prev
+          : loadedSections[0]?.id ?? null
+      );
+    } catch {
+      loadedSections = [];
+      setClassSections([]);
+      setSelectedClassSectionId(null);
+    } finally {
+      if (loadedSections.length === 0) {
+        setLoadingClasses(false);
+      }
+    }
+  };
+
+  const loadClassStudents = async (classSectionId: string) => {
+    const section = classSections.find((item) => item.id === classSectionId);
+    if (!section) return;
+    setLoadingStudents(true);
+    setSelectedStudentIds([]);
+    try {
+      const response = await StudentService.getAll<StudentWithDetails>({
+        class_id: section.class_id,
+        section_id: section.section_id,
+        limit: 200,
+      });
+      setClassStudents(response.data.map((student) => ({
+        id: student.id,
+        display_name: student.person.display_name || `${student.person.first_name} ${student.person.last_name}`,
+        admission_no: student.admission_no,
+      })));
+    } catch {
+      setClassStudents([]);
+    } finally {
+      setLoadingStudents(false);
+      setLoadingClasses(false);
+    }
+  };
+
+  const switchStudentMode = (mode: 'single' | 'multiple') => {
+    setStudentMode(mode);
+    setStudentSearch('');
+    setSearchResults([]);
+    setSelectedStudentIds([]);
+    setClassStudents([]);
+    setNewComplaint((prev) => ({ ...prev, raised_for_student_id: '' }));
+    if (mode === 'multiple' && classSections.length > 0 && !selectedClassSectionId) {
+      setSelectedClassSectionId(classSections[0].id);
+    }
+  };
+
+  const toggleStudentSelection = (student: PickStudent) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(student.id) ? prev.filter((id) => id !== student.id) : [...prev, student.id]
+    );
+  };
+
+  const selectAllClassStudents = () => {
+    setSelectedStudentIds(classStudents.map((student) => student.id));
+  };
+
+  const clearClassSelection = () => {
+    setSelectedStudentIds([]);
+  };
   const fetchComplaints = async () => {
     try {
       setLoading(true);
@@ -58,20 +178,36 @@ export default function AdminComplaints() {
       alertCompat('Error', 'Please fill in required fields');
       return;
     }
+    if (studentMode === 'single' && !newComplaint.raised_for_student_id) {
+      alertCompat('Missing Student', 'Please select a student or use multiple mode.');
+      return;
+    }
+    if (studentMode === 'multiple' && selectedStudentIds.length === 0) {
+      alertCompat('Missing Students', 'Please select at least one student from the class.');
+      return;
+    }
     try {
       setIsSubmitting(true);
-      await ComplaintService.create({
-        title: newComplaint.title,
-        description: newComplaint.description,
-        category: newComplaint.category.toLowerCase(),
-        priority: newComplaint.priority.toLowerCase(),
-        raised_for_student_id: newComplaint.raised_for_student_id || undefined
-      });
-      alertCompat('Success', 'Complaint created successfully');
-      setModalVisible(false);
-      setNewComplaint({ title: '', description: '', category: 'Facility', priority: 'medium', raised_for_student_id: '' });
-      setStudentSearch('');
-      setSearchResults([]);
+      if (studentMode === 'multiple') {
+        const result = await ComplaintService.createBulk({
+          title: newComplaint.title,
+          description: newComplaint.description,
+          category: newComplaint.category.toLowerCase(),
+          priority: newComplaint.priority.toLowerCase(),
+          raised_for_student_ids: selectedStudentIds,
+        });
+        alertCompat('Success', `Complaint filed for ${result.count} student(s).`);
+      } else {
+        await ComplaintService.create({
+          title: newComplaint.title,
+          description: newComplaint.description,
+          category: newComplaint.category.toLowerCase(),
+          priority: newComplaint.priority.toLowerCase(),
+          raised_for_student_id: newComplaint.raised_for_student_id,
+        });
+        alertCompat('Success', 'Complaint created successfully');
+      }
+      closeModal();
       fetchComplaints();
     } catch (error) {
       alertCompat('Error', 'Failed to create complaint');
@@ -260,12 +396,12 @@ export default function AdminComplaints() {
       <Ionicons name="add" size={24} color="#fff" />
     </TouchableOpacity>
 
-    <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={() => setModalVisible(false)}>
+    <Modal visible={modalVisible} animationType="slide" transparent={true} onRequestClose={closeModal}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
         <View style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>New Complaint</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)}>
+            <TouchableOpacity onPress={closeModal}>
               <Ionicons name="close" size={24} color="#6B7280" />
             </TouchableOpacity>
           </View>
@@ -295,26 +431,183 @@ export default function AdminComplaints() {
               ))}
             </View>
 
-            <Text style={styles.inputLabel}>Related Student (Optional)</Text>
-            <AppTextInput style={styles.input} placeholder="Search student name or admission no..." placeholderTextColor="#9CA3AF" value={studentSearch} onChangeText={handleStudentSearch} />
-            {isSearching && <ActivityIndicator size="small" color="#6366F1" style={{ marginTop: 8 }} />}
-            {searchResults.length > 0 && !newComplaint.raised_for_student_id && (
-              <View style={styles.searchResults}>
-                {searchResults.map((student) => (
-                  <TouchableOpacity key={student.id} style={styles.searchItem} onPress={() => {
-                    setNewComplaint((prev) => ({ ...prev, raised_for_student_id: student.id }));
-                    setStudentSearch(`${[student.first_name, student.last_name].filter(Boolean).join(' ')} (${student.admission_no})`);
-                    setSearchResults([]);
-                  }}>
-                    <Text style={styles.searchItemText}>{student.first_name} {student.last_name}</Text>
-                    <Text style={styles.searchItemSub}>{student.admission_no}</Text>
+            <Text style={styles.inputLabel}>Students *</Text>
+            <View style={styles.modeRow}>
+              {([
+                { key: 'single' as const, label: 'One Student', icon: 'person-outline' },
+                { key: 'multiple' as const, label: 'Multiple from Class', icon: 'people-outline' },
+              ]).map((mode) => {
+                const active = studentMode === mode.key;
+                return (
+                  <TouchableOpacity
+                    key={mode.key}
+                    style={[styles.modeChip, active && styles.modeChipActive]}
+                    onPress={() => switchStudentMode(mode.key)}
+                    activeOpacity={0.8}
+                  >
+                    <Ionicons name={mode.icon as any} size={14} color={active ? '#6366F1' : '#94A3B8'} />
+                    <Text style={[styles.modeChipText, active && styles.modeChipTextActive]}>{mode.label}</Text>
                   </TouchableOpacity>
-                ))}
+                );
+              })}
+            </View>
+
+            {studentMode === 'single' ? (
+              <View>
+                {newComplaint.raised_for_student_id ? (
+                  <View style={styles.selectedStudentChip}>
+                    <View style={styles.selectedStudentAvatar}>
+                      <Ionicons name="person" size={14} color="#6366F1" />
+                    </View>
+                    <Text style={styles.selectedStudentName} numberOfLines={1}>{studentSearch}</Text>
+                    <TouchableOpacity
+                      onPress={() => {
+                        setNewComplaint((prev) => ({ ...prev, raised_for_student_id: '' }));
+                        setStudentSearch('');
+                      }}
+                      style={styles.clearStudentBtn}
+                    >
+                      <Ionicons name="close" size={14} color="#EF4444" />
+                    </TouchableOpacity>
+                  </View>
+                ) : (
+                  <>
+                    <AppTextInput
+                      style={styles.input}
+                      placeholder="Search student name or admission no..."
+                      placeholderTextColor="#9CA3AF"
+                      value={studentSearch}
+                      onChangeText={handleStudentSearch}
+                    />
+                    {isSearching && <ActivityIndicator size="small" color="#6366F1" style={{ marginTop: 8 }} />}
+                    {searchResults.length > 0 && (
+                      <View style={styles.searchResults}>
+                        {searchResults.map((student) => (
+                          <TouchableOpacity
+                            key={student.id}
+                            style={styles.searchItem}
+                            onPress={() => {
+                              setNewComplaint((prev) => ({ ...prev, raised_for_student_id: student.id }));
+                              setStudentSearch(`${[student.first_name, student.last_name].filter(Boolean).join(' ')} (${student.admission_no})`);
+                              setSearchResults([]);
+                            }}
+                          >
+                            <Text style={styles.searchItemText}>{student.first_name} {student.last_name}</Text>
+                            <Text style={styles.searchItemSub}>{student.admission_no}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            ) : (
+              <View>
+                {loadingClasses ? (
+                  <View style={styles.classLoading}>
+                    <LogoLoader size={36} color="#6366F1" />
+                    <Text style={styles.classLoadingText}>Loading classes…</Text>
+                  </View>
+                ) : classSections.length === 0 ? (
+                  <Text style={styles.classEmptyText}>No classes found for the current academic year.</Text>
+                ) : (
+                  <>
+                    <Text style={styles.classSectionLabel}>Class</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classChipRow}>
+                      {classSections.map((section) => {
+                        const active = selectedClassSectionId === section.id;
+                        return (
+                          <TouchableOpacity
+                            key={section.id}
+                            style={[styles.classChip, active && styles.classChipActive]}
+                            onPress={() => setSelectedClassSectionId(section.id)}
+                            activeOpacity={0.8}
+                          >
+                            <Text style={[styles.classChipText, active && styles.classChipTextActive]}>
+                              {section.class_name} {section.section_name}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+
+                    <View style={styles.classHeaderRow}>
+                      <Text style={styles.classMetaText}>
+                        {classStudents.length} student{classStudents.length === 1 ? '' : 's'}
+                      </Text>
+                      <View style={styles.classActions}>
+                        <TouchableOpacity onPress={selectAllClassStudents}>
+                          <Text style={styles.classActionText}>Select all</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={clearClassSelection}>
+                          <Text style={styles.classActionMuted}>Clear</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {loadingStudents ? (
+                      <View style={styles.classLoading}>
+                        <LogoLoader size={36} color="#6366F1" />
+                        <Text style={styles.classLoadingText}>Loading students…</Text>
+                      </View>
+                    ) : classStudents.length === 0 ? (
+                      <Text style={styles.classEmptyText}>No students found in this class.</Text>
+                    ) : (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        nestedScrollEnabled
+                        contentContainerStyle={styles.studentCardRow}
+                        style={styles.studentCardScroll}
+                      >
+                        {classStudents.map((student) => {
+                          const checked = selectedStudentIds.includes(student.id);
+                          const initial = (student.display_name?.[0] ?? '?').toUpperCase();
+                          return (
+                            <TouchableOpacity
+                              key={student.id}
+                              style={[styles.studentCard, checked && styles.studentCardSelected]}
+                              onPress={() => toggleStudentSelection(student)}
+                              activeOpacity={0.82}
+                            >
+                              {checked ? (
+                                <View style={styles.studentCardBadge}>
+                                  <Ionicons name="checkmark" size={11} color="#fff" />
+                                </View>
+                              ) : null}
+                              <View style={[styles.studentCardAvatar, checked && styles.studentCardAvatarSelected]}>
+                                <Text style={[styles.studentCardInitial, checked && styles.studentCardInitialSelected]}>
+                                  {initial}
+                                </Text>
+                              </View>
+                              <Text style={styles.studentCardName} numberOfLines={2}>{student.display_name}</Text>
+                              <Text style={styles.studentCardAdm}>#{student.admission_no}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    )}
+
+                    {selectedStudentIds.length > 0 && (
+                      <Text style={styles.selectedCount}>
+                        {selectedStudentIds.length} student{selectedStudentIds.length === 1 ? '' : 's'} selected
+                      </Text>
+                    )}
+                  </>
+                )}
               </View>
             )}
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleCreateComplaint} disabled={isSubmitting}>
-              {isSubmitting ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitBtnText}>Submit Complaint</Text>}
+              {isSubmitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.submitBtnText}>
+                  {studentMode === 'multiple' && selectedStudentIds.length > 1
+                    ? `Submit to ${selectedStudentIds.length} Students`
+                    : 'Submit Complaint'}
+                </Text>
+              )}
             </TouchableOpacity>
           </ScrollView>
         </View>
@@ -612,5 +905,192 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold'
-  }
+  },
+  modeRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  modeChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  modeChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  modeChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  modeChipTextActive: {
+    color: '#6366F1',
+    fontWeight: '700',
+  },
+  selectedStudentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#C7D2FE',
+    backgroundColor: '#EEF2FF',
+  },
+  selectedStudentAvatar: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    backgroundColor: '#E0E7FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  selectedStudentName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.text,
+  },
+  clearStudentBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#FEE2E2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  classSectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 8,
+  },
+  classChipRow: { gap: 8, paddingRight: 8, paddingBottom: 4 },
+  classChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+  },
+  classChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  classChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.colors.textSecondary,
+  },
+  classChipTextActive: {
+    color: '#6366F1',
+    fontWeight: '700',
+  },
+  classHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  classMetaText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  classActions: { flexDirection: 'row', gap: 12 },
+  classActionText: { fontSize: 12, fontWeight: '700', color: '#6366F1' },
+  classActionMuted: { fontSize: 12, fontWeight: '700', color: theme.colors.textTertiary },
+  classLoading: { alignItems: 'center', paddingVertical: 20, gap: 8 },
+  classLoadingText: { fontSize: 13, color: theme.colors.textSecondary },
+  classEmptyText: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  studentCardScroll: { marginHorizontal: -2 },
+  studentCardRow: { gap: 12, paddingHorizontal: 2, paddingVertical: 8, paddingRight: 8 },
+  studentCard: {
+    width: 128,
+    minHeight: 148,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.card,
+    alignItems: 'center',
+    position: 'relative',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0F172A',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+      default: { boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)' },
+    }),
+  },
+  studentCardSelected: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+    ...Platform.select({
+      ios: { shadowOpacity: 0.14, shadowRadius: 12 },
+      android: { elevation: 5 },
+      default: { boxShadow: '0 10px 28px rgba(99, 102, 241, 0.18)' },
+    }),
+  },
+  studentCardBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#6366F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  studentCardAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EEF2FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  studentCardAvatarSelected: { backgroundColor: '#E0E7FF' },
+  studentCardInitial: { fontSize: 18, fontWeight: '800', color: '#6366F1' },
+  studentCardInitialSelected: { color: '#4F46E5' },
+  studentCardName: {
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+    lineHeight: 16,
+    minHeight: 32,
+    color: theme.colors.text,
+  },
+  studentCardAdm: {
+    fontSize: 11,
+    fontWeight: '600',
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+  },
+  selectedCount: {
+    marginTop: 8,
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#6366F1',
+  },
 });

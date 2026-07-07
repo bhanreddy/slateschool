@@ -153,4 +153,9 @@ export const StaffService = {
     getMyProfile: async (): Promise<StaffMyProfile> => {
         return api.get<StaffMyProfile>('/staff/me/profile');
     },
+
+    /** Staff portal feature flags (payslips visibility, etc.). */
+    getPortalConfig: async (): Promise<{ payslips_enabled: boolean }> => {
+        return api.get<{ payslips_enabled: boolean }>('/staff/portal-config', undefined, { silent: true });
+    },
 };

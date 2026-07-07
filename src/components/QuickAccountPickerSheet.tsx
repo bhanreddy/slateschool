@@ -19,6 +19,7 @@ import Animated, { FadeIn, FadeInDown, FadeInUp, ZoomIn } from 'react-native-rea
 import { useRouter } from 'expo-router';
 import type { VaultAccount } from '../services/accountVault';
 import { SCHOOL_CONFIG } from '../constants/schoolConfig';
+import { getVaultAccountSubtitle } from '../utils/portalRoutes';
 import * as Haptics from '../utils/haptics';
 
 const FALLBACK_AVATAR = 'https://cdn-icons-png.flaticon.com/512/2922/2922506.png';
@@ -34,9 +35,9 @@ interface Props {
 }
 
 function accountMeta(acct: VaultAccount) {
-  const classLabel = acct.classLabel || acct.admissionNo || 'Class pending sync';
+  const line = getVaultAccountSubtitle(acct);
   const schoolName = acct.schoolName || SCHOOL_CONFIG.name;
-  return { classLabel, schoolName, line: `${classLabel} · ${schoolName}` };
+  return { classLabel: line, schoolName, line: `${line} · ${schoolName}` };
 }
 
 function ActiveAccountCard({ account }: { account: VaultAccount }) {

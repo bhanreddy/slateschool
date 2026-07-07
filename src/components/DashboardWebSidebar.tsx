@@ -40,6 +40,8 @@ function getSidebarSection(route: string): 'navigation' | 'manage' | 'reports' {
     route.includes('/expenses') ||
     route.includes('/finance') ||
     route.includes('/manage-staff') ||
+    route.includes('/addStaff') ||
+    route.includes('/staff-form') ||
     route.includes('/access-requests') ||
     route.includes('/leaves') ||
     route.includes('/fees') ||

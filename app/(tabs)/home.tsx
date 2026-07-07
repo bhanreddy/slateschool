@@ -20,7 +20,7 @@ import * as Haptics from '@/src/utils/haptics';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -31,14 +31,12 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Animated, {
-  Extrapolation,
   FadeInDown,
   FadeInUp,
-  interpolate,
-  useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -46,16 +44,19 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import HeaderCard from '../../src/components/HeaderCard';
+import AdminHeaderCard from '../../src/components/AdminHeaderCard';
 import LogoLoader from '../../src/components/LogoLoader';
 import ScreenLayout from '../../src/components/ScreenLayout';
 import StudentHeader from '../../src/components/StudentHeader';
 import { SCHOOL_CONFIG } from '../../src/constants/schoolConfig';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useFeatures } from '../../src/hooks/useFeatures';
+import type { FeatureKey } from '../../src/config/featureFlags';
 import { useStudentQuery } from '../../src/hooks/useStudentQuery';
 import { useTheme } from '../../src/hooks/useTheme';
 import { patchAccountMetadata } from '../../src/services/accountVault';
 import { StudentDashboardResponse } from '../../src/services/studentService';
+import { isStudentRole } from '../../src/utils/roleHelpers';
 import { AttendanceSummary } from '../../src/types/models';
 import { t_field } from '../../src/utils/lang';
 
@@ -63,6 +64,7 @@ const { width } = Dimensions.get('window');
 const H_PAD = 20;
 const GAP = 12;
 const CARD_W = (width - H_PAD * 2 - GAP) / 2;
+const IS_WEB = Platform.OS === 'web';
 
 /* ═══════════════════════════════════════════
    DESIGN TOKENS
@@ -103,6 +105,8 @@ interface HomeTab {
   grad: [string, string, string];
   /** Single shadow hue — keep tight, don't oversaturate */
   shadow: string;
+  /** Feature-flag key gating this quick action (see useFeatures). */
+  feature: FeatureKey;
 }
 
 const homeTabs: HomeTab[] = [
@@ -113,6 +117,7 @@ const homeTabs: HomeTab[] = [
     ionIcon: 'megaphone-outline',
     grad: ['#3730A3', '#4F46E5', '#818CF8'],
     shadow: '#4F46E5',
+    feature: 'quick.announcements',
   },
   {
     key: 'complaints',
@@ -121,6 +126,7 @@ const homeTabs: HomeTab[] = [
     ionIcon: 'alert-circle-outline',
     grad: ['#991B1B', '#DC2626', '#F87171'],
     shadow: '#DC2626',
+    feature: 'quick.complaints',
   },
   {
     key: 'lifeValues',
@@ -129,6 +135,7 @@ const homeTabs: HomeTab[] = [
     ionIcon: 'heart-outline',
     grad: ['#065F46', '#10B981', '#6EE7B7'],
     shadow: '#10B981',
+    feature: 'quick.life_values',
   },
   {
     key: 'busmap',
@@ -137,6 +144,7 @@ const homeTabs: HomeTab[] = [
     ionIcon: 'bus-outline',
     grad: ['#B45309', '#F59E0B', '#FCD34D'],
     shadow: '#F59E0B',
+    feature: 'quick.transport',
   },
   {
     key: 'projects',
@@ -145,6 +153,7 @@ const homeTabs: HomeTab[] = [
     ionIcon: 'flask-outline',
     grad: ['#075985', '#0EA5E9', '#7DD3FC'],
     shadow: '#0EA5E9',
+    feature: 'quick.science_projects',
   },
   {
     key: 'profile',
@@ -153,6 +162,7 @@ const homeTabs: HomeTab[] = [
     ionIcon: 'person-circle-outline',
     grad: ['#9F1239', '#E11D48', '#FDA4AF'],
     shadow: '#E11D48',
+    feature: 'quick.profile',
   },
 ];
 
@@ -806,8 +816,24 @@ const HomeScreen = () => {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const { user } = useAuth();
-  const isStudent = user?.role?.code === 'student';
+  const { isEnabled, refresh: refreshFeatures } = useFeatures();
+  const visibleQuickActions = homeTabs.filter((tab) => isEnabled(tab.feature));
+
+  // Pick up admin toggles as soon as the home tab is focused.
+  useFocusEffect(
+    useCallback(() => {
+      refreshFeatures().catch(() => {});
+    }, [refreshFeatures]),
+  );
+  const isStudentPortal = isStudentRole(user?.role?.code);
+  const isWideWeb = IS_WEB && windowWidth >= 768;
+  const todayLabel = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
 
   const [svgMod, setSvgMod] = useState<ReactNativeSvgModule | null>(null);
   useEffect(() => { void import('react-native-svg').then(setSvgMod); }, []);
@@ -818,7 +844,7 @@ const HomeScreen = () => {
     'dashboard',
     2 * 60 * 1000,
     user?.userId,
-    { enabled: !!user?.userId && isStudent, persist: true }
+    { enabled: !!user?.userId && isStudentPortal, persist: true }
   );
 
   const student = useMemo(() => dash?.profile ?? null, [dash]);
@@ -834,8 +860,8 @@ const HomeScreen = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    try { await refetch(); } finally { setRefreshing(false); }
-  }, [refetch]);
+    try { await Promise.all([refetch(), refreshFeatures()]); } finally { setRefreshing(false); }
+  }, [refetch, refreshFeatures]);
 
   const nav = (key: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -848,21 +874,12 @@ const HomeScreen = () => {
   const pct = total > 0 ? Math.round((present / total) * 100) : 0;
   const attClr = pct >= 85 ? '#10B981' : pct >= 70 ? '#F59E0B' : '#EF4444';
 
-  const scrollY = useSharedValue(0);
-  const onScroll = useAnimatedScrollHandler({ onScroll: e => { scrollY.value = e.contentOffset.y; } });
+  // ponytail: pinned solid header — light hero bg needs dark chrome, not scrollY=0 transparent+white text
+  const headerScrollY = useSharedValue(60);
 
-  const heroParallax = useAnimatedStyle(() => ({
-    transform: [{
-      translateY: interpolate(scrollY.value, [-200, 0, 200], [-100, 0, 60], Extrapolation.CLAMP),
-    }],
-    opacity: interpolate(scrollY.value, [0, 120, 260], [1, 0.82, 0.4], Extrapolation.CLAMP),
-  }));
-  const greetingStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, 80], [1, 0], Extrapolation.CLAMP),
-    transform: [{
-      translateY: interpolate(scrollY.value, [0, 120], [0, -20], Extrapolation.CLAMP),
-    }],
-  }));
+  // StudentHeader is position:absolute, so the hero must reserve its full height or it overlaps the card.
+  // ponytail: mirror StudentHeader's own layout (paddingTop max(insets.top,36) + 40 icon + 16 bottom pad); keep in sync if that header changes.
+  const HEADER_HEIGHT = Math.max(insets.top, 36) + 56;
 
   const FRESH = 36 * 60 * 60 * 1000;
   const isFresh = (n: any) => !!n?.created_at && Date.now() - new Date(n.created_at).getTime() < FRESH;
@@ -883,6 +900,11 @@ const HomeScreen = () => {
     return `${cn} · ${t('studentHome.sectionPrefix')} ${sec}`.trim();
   }, [student, t]);
 
+  const firstName =
+    student?.display_name?.split(' ')[0] ||
+    user?.displayName?.split(' ')[0] ||
+    t('studentHome.studentFallback');
+
   useEffect(() => {
     if (!user?.userId || !student) return;
     void patchAccountMetadata(user.userId, {
@@ -891,20 +913,14 @@ const HomeScreen = () => {
     });
   }, [user?.userId, student, classSec]);
 
-  const handleAccountSwitched = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
-
   return (
     <HomeSvgContext.Provider value={svgMod}>
       <ScreenLayout>
         <StatusBar style={isDark ? 'light' : 'dark'} backgroundColor="transparent" translucent />
-        <StudentHeader scrollY={scrollY} />
+        <StudentHeader scrollY={headerScrollY} />
 
         <Animated.ScrollView
           showsVerticalScrollIndicator={false}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
           contentContainerStyle={[S.scroll, { backgroundColor: P.bg }]}
           refreshControl={
             <RefreshControl
@@ -916,35 +932,58 @@ const HomeScreen = () => {
           {refreshing && <View style={S.loaderRow}><LogoLoader size={28} /></View>}
 
           {/* ── HERO ── */}
-          <Animated.View style={[
-            S.hero,
-            { paddingTop: Math.max(insets.top, 36) + 60 },
-            heroParallax,
-          ]}>
-            <LinearGradient
-              colors={isDark
-                ? ['#0A0E1A', '#0F1629', '#0A0E1A']
-                : ['#1E3A5F', '#2A4E7C', '#1E3A5F']}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <View style={S.heroGlow} />
-            <View style={S.heroWarmGlow} />
-            <Noise opacity={isDark ? 0.08 : 0.05} />
+          <View style={[S.hero, { paddingTop: HEADER_HEIGHT + 14, backgroundColor: P.bg }]}>
+            <Animated.View
+              entering={FadeInDown.delay(40).duration(520)}
+              style={[
+                S.heroOuter,
+                {
+                  maxWidth: isWideWeb ? 720 : undefined,
+                  alignSelf: isWideWeb ? 'center' : 'stretch',
+                  paddingHorizontal: isWideWeb ? 0 : H_PAD,
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={
+                  isDark
+                    ? ['rgba(99,102,241,0.16)', 'rgba(20,24,36,0.62)', 'rgba(99,102,241,0.08)']
+                    : ['rgba(255,255,255,0.92)', 'rgba(244,247,255,0.96)', 'rgba(238,242,255,0.78)']
+                }
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[S.heroPanel, { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(99,102,241,0.12)' }]}
+              >
+                <View style={[S.heroOrb, { backgroundColor: isDark ? 'rgba(129,140,248,0.18)' : 'rgba(129,140,248,0.20)' }]} pointerEvents="none" />
+                <View style={[S.greetingBlock, isWideWeb && S.webGreetingBlock]}>
+                  <View style={[S.datePill, {
+                    backgroundColor: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(99,102,241,0.09)',
+                    borderColor: isDark ? 'rgba(129,140,248,0.28)' : 'rgba(99,102,241,0.18)',
+                  }]}>
+                    <View style={S.datePillDot} />
+                    <Text style={S.datePillText}>{todayLabel.toUpperCase()}</Text>
+                  </View>
+                  <Text style={[S.greetingTitle, { color: P.textPrimary }]}>
+                    {gIco} {gStr},{' '}
+                    <Text style={{ color: isDark ? '#A5B4FC' : '#4F46E5' }}>{firstName}</Text> 👋
+                  </Text>
+                  <Text style={[S.greetingSub, { color: P.textSecondary }]}>{classSec}</Text>
+                </View>
 
-            <Animated.View style={[S.greetRow, greetingStyle]} entering={FadeInDown.delay(40).duration(600)}>
-              <Text style={S.greetEmoji}>{gIco}</Text>
-              <Text style={S.greetTxt}>{gStr}</Text>
+                <View style={S.headerCardWrap}>
+                  <AdminHeaderCard
+                    compact
+                    displayName={student?.display_name || user?.displayName || t('studentHome.studentFallback')}
+                    roleLabel={classSec}
+                    staffCode={student?.current_enrollment?.roll_number ? `Roll ${student.current_enrollment.roll_number}` : undefined}
+                    photoUrl={student?.photo_url || user?.photoUrl}
+                    portalBadge="STUDENT"
+                    onAccountSwitched={onRefresh}
+                  />
+                </View>
+              </LinearGradient>
             </Animated.View>
-
-            <HeaderCard
-              studentName={student?.display_name || user?.displayName || t('studentHome.studentFallback')}
-              classSec={classSec}
-              rollNo={student?.current_enrollment?.roll_number || 'N/A'}
-              photoUrl={student?.photo_url || user?.photoUrl}
-              onAccountSwitched={handleAccountSwitched}
-            />
-          </Animated.View>
+          </View>
 
           {/* ── BODY ── */}
           <View style={[S.body, {
@@ -952,18 +991,20 @@ const HomeScreen = () => {
             borderColor: P.border,
           }]}>
             {/* 1. Snapshot — HERO */}
-            <Animated.View entering={FadeInUp.delay(160).duration(700).springify()}>
-              <SnapshotCard
-                pct={pct} attColor={attClr}
-                todayStatus={todaysStatus}
-                presentDays={present} totalDays={total}
-                isDark={isDark}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  router.push('/Screen/attendance');
-                }}
-              />
-            </Animated.View>
+            {isEnabled('home.todays_snapshot') && (
+              <Animated.View entering={FadeInUp.delay(160).duration(700).springify()}>
+                <SnapshotCard
+                  pct={pct} attColor={attClr}
+                  todayStatus={todaysStatus}
+                  presentDays={present} totalDays={total}
+                  isDark={isDark}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    router.push('/Screen/attendance');
+                  }}
+                />
+              </Animated.View>
+            )}
 
             {/* 2. Fresh notice */}
             {topNotice && (
@@ -978,7 +1019,8 @@ const HomeScreen = () => {
               </Animated.View>
             )}
 
-            {/* 3. Quick Actions grid */}
+            {/* 3. Quick Actions grid — hidden when every action is disabled */}
+            {visibleQuickActions.length > 0 && (
             <Animated.View entering={FadeInUp.delay(310).duration(700).springify()}>
               <SectionLabel
                 text={t('dashboard.quick_actions')}
@@ -986,7 +1028,7 @@ const HomeScreen = () => {
                 accent="#6366F1"
               />
               <View style={S.grid}>
-                {homeTabs.map((item, i) => (
+                {visibleQuickActions.map((item, i) => (
                   <Animated.View key={item.key} entering={FadeInUp.delay(340 + i * 34).duration(540).springify()}>
                     <FeatureCard
                       tab={{
@@ -1000,16 +1042,19 @@ const HomeScreen = () => {
                 ))}
               </View>
             </Animated.View>
+            )}
 
-            {/* 4. Class Teacher */}
-            <Animated.View entering={FadeInUp.delay(460).duration(700).springify()}>
-              <SectionLabel text={t('studentHome.academicAdvisor')} isDark={isDark} accent="#818CF8" />
-              <TeacherCard
-                name={student?.current_enrollment?.class_teacher || t('studentHome.notAssigned')}
-                role={t('common.class_teacher')}
-                isDark={isDark}
-              />
-            </Animated.View>
+            {/* 4. Class Teacher / Academic Advisor */}
+            {isEnabled('home.academic_advisor') && (
+              <Animated.View entering={FadeInUp.delay(460).duration(700).springify()}>
+                <SectionLabel text={t('studentHome.academicAdvisor')} isDark={isDark} accent="#818CF8" />
+                <TeacherCard
+                  name={student?.current_enrollment?.class_teacher || t('studentHome.notAssigned')}
+                  role={t('common.class_teacher')}
+                  isDark={isDark}
+                />
+              </Animated.View>
+            )}
 
             {/* 5. Older notice */}
             {belowNotice && (
@@ -1035,39 +1080,69 @@ const S = StyleSheet.create({
   scroll: { paddingBottom: 80 },
   loaderRow: { alignItems: 'center', paddingVertical: 18 },
 
-  hero: { paddingBottom: 64, overflow: 'hidden' },
-  heroGlow: {
+  hero: { paddingBottom: 18, overflow: 'hidden' },
+  heroOuter: { width: '100%' },
+  heroPanel: {
+    borderRadius: tokens.radius['3xl'],
+    borderWidth: 1,
+    padding: tokens.space[5],
+    overflow: 'hidden',
+    gap: tokens.space[4],
+    ...Platform.select({
+      web: {
+        boxShadow: '0 18px 45px rgba(79,70,229,0.10)',
+      } as any,
+      default: {
+        shadowColor: '#4F46E5',
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.10,
+        shadowRadius: 24,
+        elevation: 4,
+      },
+    }),
+  },
+  heroOrb: {
     position: 'absolute',
-    top: -100, left: '18%',
-    width: 420, height: 420,
-    borderRadius: 210,
-    backgroundColor: '#6366F1',
-    opacity: 0.20,
+    right: -70,
+    top: -80,
+    width: 190,
+    height: 190,
+    borderRadius: 95,
   },
-  heroWarmGlow: {
-    position: 'absolute',
-    top: 60, right: -80,
-    width: 260, height: 260,
-    borderRadius: 130,
-    backgroundColor: '#F59E0B',
-    opacity: 0.10,
+  greetingBlock: { marginBottom: tokens.space[1], zIndex: 2 },
+  webGreetingBlock: { paddingHorizontal: tokens.space[1] },
+  datePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+    marginBottom: 10,
   },
-
-  greetRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: H_PAD + 2,
-    marginBottom: tokens.space[3],
+  datePillDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#6366F1' },
+  datePillText: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.6, color: '#6366F1' },
+  greetingTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+    lineHeight: 30,
   },
-  greetEmoji: { fontSize: 16 },
-  greetTxt: {
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.72)',
-    fontWeight: '600',
-    letterSpacing: 0.3,
+  greetingSub: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 4,
+  },
+  headerCardWrap: {
+    width: '100%',
+    alignSelf: 'stretch',
+    paddingHorizontal: 0,
   },
 
   body: {
-    marginTop: -28,
+    marginTop: 0,
     paddingHorizontal: H_PAD,
     paddingTop: tokens.space[3],
     paddingBottom: tokens.space[2],

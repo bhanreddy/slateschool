@@ -3,9 +3,6 @@ import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../utils/haptics';
 import { useRouter } from 'expo-router';
-import { useTranslation } from 'react-i18next';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isTelugu } from '../utils/lang';
 
 import MenuOverlay from './MenuOverlay';
 import { SCHOOL_CONFIG } from '../constants/schoolConfig';
@@ -38,24 +35,9 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
     scrollY
 }) => {
     const router = useRouter();
-    const { i18n } = useTranslation();
     const { theme, isDark } = useTheme();
-    const [isTeluguLang, setIsTeluguLang] = useState(isTelugu(i18n.language));
     const [menuVisible, setMenuVisible] = useState(false);
     const insets = useSafeAreaInsets();
-
-    React.useEffect(() => {
-        setIsTeluguLang(isTelugu(i18n.language));
-    }, [i18n.language]);
-
-    const toggleLanguage = async () => {
-        const newLang = !isTeluguLang;
-        setIsTeluguLang(newLang);
-        const langCode = newLang ? 'te' : 'en';
-        i18n.changeLanguage(langCode);
-        await AsyncStorage.setItem('appLanguage', langCode);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    };
 
     const handleMenuPress = () => {
         if (onMenuPress) {
@@ -137,22 +119,6 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
 
                 {/* Right: Actions */}
                 <View style={styles.rightSection}>
-                    {/* Lang Switch (Pill) */}
-                    <View style={[styles.langPill, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.borderLight }]}>
-                        <Pressable
-                            onPress={() => isTeluguLang && toggleLanguage()}
-                            style={[styles.langOption, !isTeluguLang && styles.langActive, Platform.OS === 'web' && { cursor: 'pointer' }]}
-                        >
-                            <Text style={[styles.langText, !isTeluguLang && { color: theme.colors.primary, fontWeight: '700' }]}>En</Text>
-                        </Pressable>
-                        <Pressable
-                            onPress={() => !isTeluguLang && toggleLanguage()}
-                            style={[styles.langOption, isTeluguLang && styles.langActive, Platform.OS === 'web' && { cursor: 'pointer' }]}
-                        >
-                            <Text style={[styles.langText, isTeluguLang && { color: theme.colors.primary, fontWeight: '700' }]}>Te</Text>
-                        </Pressable>
-                    </View>
-
                     {showProfileButton && (
                         <Pressable
                             onPress={() => router.push('/staff/settings' as any)}
@@ -202,11 +168,10 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     rightSection: {
-        width: 80,
+        width: 40,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-end',
-        gap: 8,
     },
     iconButton: {
         width: 36,
@@ -224,34 +189,6 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: '500',
     },
-    // Language Pill
-    langPill: {
-        flexDirection: 'row',
-        borderRadius: Radii.pill, // Using arbitrary large radius
-        padding: 2,
-        height: 28,
-        alignItems: 'center',
-
-    },
-    langOption: {
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 99,
-    },
-    langActive: {
-        backgroundColor: '#FFFFFF',
-        shadowColor: 'rgba(0,0,0,0.1)',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 1,
-        elevation: 1,
-    },
-    langText: {
-        fontSize: 10,
-        color: '#94A3B8',
-        fontWeight: '600',
-    },
-    // Profile
     profileButton: {
         width: 32,
         height: 32,

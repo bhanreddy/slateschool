@@ -1,4 +1,5 @@
 import { Ionicons, MaterialIcons } from "@expo/vector-icons";
+import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -97,43 +98,70 @@ const useResponsiveLayout = () => {
   }, [winW]);
 };
 
+/* ponytail: flat canvas — pure #FFF / #000, accents only on interactive elements */
+const CANVAS_LIGHT = '#FFFFFF';
+const CANVAS_DARK = '#000000';
+const CREST_FILL = '#FFFFFF';
+
 /* ─── Theme ──────────────────────────────────────────────────────────────── */
 const useWelcomeTheme = () => {
-  const { theme } = useTheme();
-  const p = theme.colors.primary;
-  const pD = theme.colors.primaryDark;
+  const { theme, isDark } = useTheme();
+  const c = theme.colors;
+  const p = c.primary;
+  const pL = c.primaryLight;
+  const pD = c.primaryDark;
   const rgba = schoolColorWithAlpha;
+  const canvas = isDark ? CANVAS_DARK : CANVAS_LIGHT;
 
   return {
+    isDark,
     p,
+    pL,
     pD,
-    glow: rgba(p, 0.1),
-    glowSoft: rgba(p, 0.05),
-    tint: rgba(p, 0.07),
-    tintBorder: rgba(p, 0.14),
+    secondary: c.secondary,
+    accent: c.accent,
+    success: c.success,
+    glow: rgba(p, isDark ? 0.18 : 0.1),
+    glowSoft: 'transparent',
+    tint: rgba(p, isDark ? 0.14 : 0.07),
+    tintBorder: rgba(p, isDark ? 0.28 : 0.14),
+    surface: canvas,
+    card: canvas,
+    screenBg: canvas,
 
-    ink: theme.colors.textStrong,
-    inkB: theme.colors.textPrimary,
-    inkC: theme.colors.textSecondary,
-    inkD: theme.colors.textMuted,
+    ink: c.textStrong,
+    inkB: c.textPrimary,
+    inkC: c.textSecondary,
+    inkD: c.textMuted,
+
+    pageGradient: [canvas, canvas, canvas] as const,
+    studentGradient: [pD, p, pL] as const,
+    portal: {
+      staff: c.success,
+      admin: c.primary,
+      accounts: c.warning,
+      driver: c.danger,
+    },
+    orbitSatellites: [
+      { angle: -52, phase: 0, colors: [pL, p, pD] as const, icon: "school" as const },
+      { angle: 42, phase: 2.09, colors: [c.info, p, pD] as const, icon: "people" as const },
+      { angle: 152, phase: 4.19, colors: [c.secondary, c.notification, c.warning] as const, icon: "book" as const },
+    ],
+    orbitArcGradient: [c.secondary, pL, p] as const,
+    certWash: [canvas, canvas, canvas] as const,
+    crestFill: CREST_FILL,
   } as const;
 };
+
+const TILE_ENTER = FadeIn.duration(320);
+const HERO_ENTER = FadeInDown.duration(450);
+const CARD_ENTER = FadeInUp.duration(380);
 
 /* ─── Hero orbit crest (central logo + satellite icons) ─────────────────── */
 const polarXY = (cx: number, cy: number, r: number, deg: number) => {
   const rad = (deg * Math.PI) / 180;
   return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 };
-
-const ORBIT_SATELLITES = [
-  { angle: -52, phase: 0, colors: ["#A78BFA", "#7C3AED", "#6D28D9"] as const, icon: "school" as const },
-  { angle: 42, phase: 2.09, colors: ["#60A5FA", "#3B82F6", "#1D4ED8"] as const, icon: "people" as const },
-  { angle: 152, phase: 4.19, colors: ["#FB923C", "#F97316", "#EF4444"] as const, icon: "book" as const },
-] as const;
-
-const TILE_ENTER = FadeIn.duration(320);
-const HERO_ENTER = FadeInDown.duration(450);
-const CARD_ENTER = FadeInUp.duration(380);
 
 const OrbitSatellite = memo(function OrbitSatellite({
   angle,
@@ -206,11 +234,24 @@ const HeroOrbitCrest = memo(function HeroOrbitCrest({
   s,
   primary,
   glowSoft,
+  crestBg,
+  hubShadow,
+  satellites,
+  arcGradient,
   motionEnabled,
 }: {
   s: (n: number) => number;
   primary: string;
   glowSoft: string;
+  crestBg: string;
+  hubShadow: string;
+  satellites: ReadonlyArray<{
+    angle: number;
+    phase: number;
+    colors: readonly [string, string, string];
+    icon: keyof typeof Ionicons.glyphMap;
+  }>;
+  arcGradient: readonly [string, string, string];
   motionEnabled: boolean;
 }) {
   const stage = s(320);
@@ -301,9 +342,9 @@ const HeroOrbitCrest = memo(function HeroOrbitCrest({
       <Svg width={stage} height={stage} style={StyleSheet.absoluteFill} pointerEvents="none">
         <Defs>
           <SvgGradient id="heroOrbitGrad" x1="0%" y1="100%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor="#F97316" stopOpacity={0.9} />
-            <Stop offset="50%" stopColor="#C084FC" stopOpacity={0.75} />
-            <Stop offset="100%" stopColor="#7C3AED" stopOpacity={0.95} />
+            <Stop offset="0%" stopColor={arcGradient[0]} stopOpacity={0.9} />
+            <Stop offset="50%" stopColor={arcGradient[1]} stopOpacity={0.75} />
+            <Stop offset="100%" stopColor={arcGradient[2]} stopOpacity={0.95} />
           </SvgGradient>
         </Defs>
 
@@ -342,7 +383,7 @@ const HeroOrbitCrest = memo(function HeroOrbitCrest({
         />
       </Svg>
 
-      {ORBIT_SATELLITES.map((satellite) => (
+      {satellites.map((satellite) => (
         <OrbitSatellite
           key={satellite.icon}
           angle={satellite.angle}
@@ -381,6 +422,22 @@ const HeroOrbitCrest = memo(function HeroOrbitCrest({
               width: hub,
               height: hub,
               borderRadius: hub / 2,
+              backgroundColor: crestBg,
+              ...Platform.select({
+                ios: {
+                  shadowColor: hubShadow,
+                  shadowOffset: { width: 0, height: 10 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 20,
+                },
+                android: { elevation: 6 },
+                default: {
+                  shadowColor: hubShadow,
+                  shadowOffset: { width: 0, height: 10 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 20,
+                },
+              }),
             },
           ]}
         >
@@ -394,25 +451,33 @@ const HeroOrbitCrest = memo(function HeroOrbitCrest({
   );
 });
 
-/* ─── Secondary portal card (glass grid tile) ────────────────────────────── */
+/* ─── Secondary portal card (2-up grid tile) ─────────────────────────────── */
 const PortalTile = memo(function PortalTile({
   icon,
   title,
   subtitle,
-  tintBg,
+  accentColor,
   onPress,
-  gridColumns,
   s,
   borderRadius,
+  tileWidth,
+  surfaceEnd,
+  titleColor,
+  subColor,
+  isDark,
 }: {
   icon: React.ReactNode;
   title: string;
   subtitle: string;
-  tintBg: string;
+  accentColor: string;
   onPress: () => void;
-  gridColumns: 1 | 2;
   s: (n: number) => number;
   borderRadius: number;
+  tileWidth: number;
+  surfaceEnd: string;
+  titleColor: string;
+  subColor: string;
+  isDark: boolean;
 }) {
   const pressed = useSharedValue(0);
 
@@ -425,48 +490,127 @@ const PortalTile = memo(function PortalTile({
   }, [pressed]);
 
   const anim = useAnimatedStyle(() => ({
-    transform: [{ scale: interpolate(pressed.value, [0, 1], [1, 0.97]) }],
+    transform: [{ scale: interpolate(pressed.value, [0, 1], [1, 0.975]) }],
+    opacity: interpolate(pressed.value, [0, 1], [1, 0.94]),
   }));
+
+  const tint = (a: number) => schoolColorWithAlpha(accentColor, a);
 
   return (
     <Animated.View
       style={[
         styles.tile,
-        gridColumns === 1 ? styles.tileFull : styles.tileHalf,
-        { borderRadius },
+        {
+          width: tileWidth,
+          borderRadius,
+          borderColor: tint(isDark ? 0.24 : 0.12),
+          ...(isDark
+            ? Platform.select({
+                ios: {
+                  shadowColor: accentColor,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 12,
+                },
+                android: { elevation: 4 },
+                default: {
+                  shadowColor: accentColor,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.18,
+                  shadowRadius: 12,
+                },
+              })
+            : null),
+        },
         anim,
       ]}
     >
+      <LinearGradient
+        colors={[surfaceEnd, surfaceEnd, surfaceEnd]}
+        locations={[0, 0.35, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={[StyleSheet.absoluteFillObject, { borderRadius }]}
+      />
+      <View
+        pointerEvents="none"
+        style={[
+          styles.tileAccent,
+          {
+            backgroundColor: accentColor,
+            width: s(3),
+            borderTopLeftRadius: borderRadius,
+            borderBottomLeftRadius: borderRadius,
+          },
+        ]}
+      />
       <Pressable
         onPress={onPress}
         onPressIn={onPressIn}
         onPressOut={onPressOut}
-        style={[styles.tileInner, { padding: s(16), gap: s(12), minHeight: s(128) }]}
-        android_ripple={{ color: "rgba(0,0,0,0.04)", foreground: true }}
+        style={[
+          styles.tileInner,
+          {
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: s(12),
+            paddingHorizontal: s(14),
+            paddingLeft: s(16),
+            minHeight: s(92),
+            gap: s(11),
+          },
+        ]}
+        android_ripple={{ color: tint(0.08), foreground: true }}
       >
-        <View
+        <LinearGradient
+          colors={[tint(isDark ? 0.22 : 0.13), tint(0.04)]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={[
             styles.tileIcon,
             {
-              backgroundColor: tintBg,
-              width: s(48),
-              height: s(48),
-              borderRadius: s(16),
+              width: s(40),
+              height: s(40),
+              borderRadius: s(12),
+              borderColor: tint(isDark ? 0.28 : 0.14),
             },
           ]}
         >
           {icon}
-        </View>
-        <View style={styles.tileText}>
-          <Text style={[styles.tileTitle, { fontSize: s(16) }]} numberOfLines={1}>
+        </LinearGradient>
+        <View style={[styles.tileText, { flex: 1, minWidth: 0, gap: s(2) }]}>
+          <Text
+            style={[styles.tileTitle, { fontSize: s(14), color: titleColor }]}
+            numberOfLines={1}
+          >
             {title}
           </Text>
           <Text
-            style={[styles.tileSub, { fontSize: Math.max(s(12), 11), lineHeight: Math.max(s(17), 15) }]}
+            style={[
+              styles.tileSub,
+              {
+                color: subColor,
+                fontSize: Math.max(s(11), 10),
+                lineHeight: Math.max(s(15), 14),
+              },
+            ]}
             numberOfLines={2}
           >
             {subtitle}
           </Text>
+        </View>
+        <View
+          style={[
+            styles.tileArrow,
+            {
+              width: s(24),
+              height: s(24),
+              borderRadius: s(12),
+              backgroundColor: tint(isDark ? 0.12 : 0.06),
+            },
+          ]}
+        >
+          <Ionicons name="chevron-forward" size={s(13)} color={accentColor} />
         </View>
       </Pressable>
     </Animated.View>
@@ -492,11 +636,13 @@ export default function Index() {
     pagePad,
     gridGap,
     gridColumns,
+    innerW,
     glowSize,
     isMobile,
   } = useResponsiveLayout();
 
-  const tileBorderRadius = s(24);
+  const tileBorderRadius = s(22);
+  const portalTileW = gridColumns === 2 ? (innerW - gridGap) / 2 : innerW;
   const ambientGlowSize = Math.min(glowSize, 520);
 
   /* Portal icon sizes track the tile scale */
@@ -564,33 +710,24 @@ export default function Index() {
   }, [loading, user]);
 
   if (loading || user || !studentCheckDone) {
-    return <View style={{ flex: 1, backgroundColor: "#F6F4FF" }} />;
+    return <View style={{ flex: 1, backgroundColor: C.screenBg }} />;
   }
 
   return (
-    <View style={styles.screen}>
-      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
+    <View style={[styles.screen, { backgroundColor: C.screenBg }]}>
+      <StatusBar
+        barStyle={C.isDark ? "light-content" : "dark-content"}
+        translucent
+        backgroundColor="transparent"
+      />
 
-      {/* Ambient layered background */}
+      {/* Ambient layered background — flat canvas; gradient kept for layout parity */}
       <LinearGradient
-        colors={["#F8F5FF", "#F4F7FF", "#FFFFFF"]}
+        colors={[...C.pageGradient]}
         locations={[0, 0.45, 1]}
         start={{ x: 0.2, y: 0 }}
         end={{ x: 0.8, y: 1 }}
         style={StyleSheet.absoluteFill}
-      />
-      <View
-        pointerEvents="none"
-        style={[
-          styles.ambientGlow,
-          {
-            backgroundColor: C.glowSoft,
-            width: ambientGlowSize,
-            height: ambientGlowSize,
-            borderRadius: ambientGlowSize / 2,
-            top: -glowSize * 0.42,
-          },
-        ]}
       />
 
       <ScrollView
@@ -620,11 +757,7 @@ export default function Index() {
         >
           <LinearGradient
             pointerEvents="none"
-            colors={[
-              schoolColorWithAlpha(C.p, 0.1),
-              schoolColorWithAlpha(C.p, 0.04),
-              "transparent",
-            ]}
+            colors={["transparent", "transparent", "transparent"]}
             locations={[0, 0.45, 1]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
@@ -635,6 +768,10 @@ export default function Index() {
             s={s}
             primary={C.p}
             glowSoft={C.glowSoft}
+            crestBg={C.crestFill}
+            hubShadow={C.p}
+            satellites={C.orbitSatellites}
+            arcGradient={C.orbitArcGradient}
             motionEnabled={motionEnabled}
           />
 
@@ -720,7 +857,7 @@ export default function Index() {
 
           <Animated.Text
             entering={motionEnabled ? CARD_ENTER : undefined}
-            style={[styles.sectionLabel, { marginBottom: s(16) }]}
+            style={[styles.sectionLabel, { color: C.inkD, marginBottom: s(16) }]}
           >
             CHOOSE YOUR PORTAL
           </Animated.Text>
@@ -730,7 +867,27 @@ export default function Index() {
             entering={motionEnabled ? CARD_ENTER.delay(40) : undefined}
             style={[
               styles.studentWrap,
-              { width: "100%", borderRadius: s(32), marginBottom: s(24) },
+              {
+                width: "100%",
+                borderRadius: s(32),
+                marginBottom: s(24),
+                backgroundColor: C.p,
+                ...Platform.select({
+                  ios: {
+                    shadowColor: C.p,
+                    shadowOffset: { width: 0, height: 20 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 36,
+                  },
+                  android: { elevation: 12 },
+                  default: {
+                    shadowColor: C.p,
+                    shadowOffset: { width: 0, height: 20 },
+                    shadowOpacity: 0.3,
+                    shadowRadius: 36,
+                  },
+                }),
+              },
               studentAnim,
             ]}
           >
@@ -741,7 +898,7 @@ export default function Index() {
               style={[styles.studentPressable, { borderRadius: s(32) }]}
             >
               <LinearGradient
-                colors={["#5B3DF5", "#7C3AED", "#9333EA"]}
+                colors={[...C.studentGradient]}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={{ minHeight: s(isMobile ? 218 : 228), padding: s(24) }}
@@ -834,7 +991,7 @@ export default function Index() {
                     ]}
                   >
                     <Animated.View style={arrowAnim}>
-                      <Ionicons name="arrow-forward" size={s(16)} color="#6D28D9" />
+                      <Ionicons name="arrow-forward" size={s(16)} color={C.pD} />
                     </Animated.View>
                   </View>
                 </View>
@@ -848,72 +1005,179 @@ export default function Index() {
             style={[styles.tileGrid, { gap: gridGap, marginBottom: s(24) }]}
           >
             <PortalTile
-              gridColumns={gridColumns}
               borderRadius={tileBorderRadius}
+              tileWidth={portalTileW}
+              surfaceEnd={C.surface}
+              titleColor={C.ink}
+              subColor={C.inkC}
+              isDark={C.isDark}
               s={s}
-              icon={<Ionicons name="people-outline" size={tileIconSize} color="#0D9488" />}
+              accentColor={C.portal.staff}
+              icon={<Ionicons name="people-outline" size={tileIconSize} color={C.portal.staff} />}
               title={t("index.staff_login") || "Staff"}
               subtitle="Classes & records"
-              tintBg="rgba(13,148,136,0.09)"
               onPress={() => router.push("/staff-login")}
             />
             <PortalTile
-              gridColumns={gridColumns}
               borderRadius={tileBorderRadius}
+              tileWidth={portalTileW}
+              surfaceEnd={C.surface}
+              titleColor={C.ink}
+              subColor={C.inkC}
+              isDark={C.isDark}
               s={s}
-              icon={<MaterialIcons name="admin-panel-settings" size={tileIconSizeLg} color="#4F46E5" />}
+              accentColor={C.portal.admin}
+              icon={<MaterialIcons name="admin-panel-settings" size={tileIconSizeLg} color={C.portal.admin} />}
               title={t("index.admin_login") || "Admin"}
               subtitle="School management"
-              tintBg="rgba(79,70,229,0.09)"
               onPress={() => router.push("/admin-login")}
             />
             <PortalTile
-              gridColumns={gridColumns}
               borderRadius={tileBorderRadius}
+              tileWidth={portalTileW}
+              surfaceEnd={C.surface}
+              titleColor={C.ink}
+              subColor={C.inkC}
+              isDark={C.isDark}
               s={s}
-              icon={<Ionicons name="wallet-outline" size={tileIconSize} color="#B45309" />}
+              accentColor={C.portal.accounts}
+              icon={<Ionicons name="wallet-outline" size={tileIconSize} color={C.portal.accounts} />}
               title={t("index.accounts_login") || "Accounts"}
               subtitle="Fees & finance"
-              tintBg="rgba(180,83,9,0.09)"
               onPress={() => router.push("/accounts-login")}
             />
             <PortalTile
-              gridColumns={gridColumns}
               borderRadius={tileBorderRadius}
+              tileWidth={portalTileW}
+              surfaceEnd={C.surface}
+              titleColor={C.ink}
+              subColor={C.inkC}
+              isDark={C.isDark}
               s={s}
-              icon={<Ionicons name="bus-outline" size={tileIconSizeLg} color="#BE123C" />}
+              accentColor={C.portal.driver}
+              icon={<Ionicons name="bus-outline" size={tileIconSizeLg} color={C.portal.driver} />}
               title="Driver"
               subtitle="Live trip tracking"
-              tintBg="rgba(190,18,60,0.09)"
               onPress={() => router.push("/driver-login")}
             />
           </Animated.View>
 
           {/* ── Support ─────────────────────────────────────────────── */}
-          <View
+          <Animated.View
+            entering={motionEnabled ? TILE_ENTER.delay(120) : undefined}
             style={[
               styles.supportCard,
-              { width: "100%", borderRadius: s(24), padding: s(16), gap: s(14), marginBottom: s(20) },
+              {
+                width: "100%",
+                borderRadius: tileBorderRadius,
+                marginBottom: s(20),
+                borderColor: schoolColorWithAlpha(C.p, C.isDark ? 0.28 : 0.12),
+                ...(C.isDark
+                  ? Platform.select({
+                      ios: {
+                        shadowColor: C.p,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.16,
+                        shadowRadius: 12,
+                      },
+                      android: { elevation: 4 },
+                      default: {
+                        shadowColor: C.p,
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.16,
+                        shadowRadius: 12,
+                      },
+                    })
+                  : null),
+              },
             ]}
           >
+            <LinearGradient
+              colors={[C.surface, C.surface, C.surface]}
+              locations={[0, 0.5, 1]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={[StyleSheet.absoluteFillObject, { borderRadius: tileBorderRadius }]}
+            />
             <View
+              pointerEvents="none"
               style={[
-                styles.supportIcon,
+                styles.tileAccent,
                 {
-                  backgroundColor: C.tint,
-                  width: s(44),
-                  height: s(44),
-                  borderRadius: s(15),
+                  backgroundColor: C.p,
+                  width: s(3),
+                  borderTopLeftRadius: tileBorderRadius,
+                  borderBottomLeftRadius: tileBorderRadius,
                 },
               ]}
-            >
-              <Ionicons name="chatbubble-ellipses-outline" size={s(20)} color={C.p} />
+            />
+            <View
+                style={[
+                  styles.supportInner,
+                  {
+                    paddingVertical: s(13),
+                    paddingHorizontal: s(14),
+                    paddingLeft: s(16),
+                    gap: s(11),
+                  },
+                ]}
+              >
+                <LinearGradient
+                  colors={[
+                    schoolColorWithAlpha(C.p, C.isDark ? 0.22 : 0.13),
+                    schoolColorWithAlpha(C.p, 0.04),
+                  ]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={[
+                    styles.supportIcon,
+                    {
+                      width: s(40),
+                      height: s(40),
+                      borderRadius: s(12),
+                      borderColor: schoolColorWithAlpha(C.p, C.isDark ? 0.28 : 0.14),
+                    },
+                  ]}
+                >
+                  <Ionicons name="chatbubble-ellipses-outline" size={s(18)} color={C.p} />
+                </LinearGradient>
+                <View style={[styles.supportText, { gap: s(2) }]}>
+                  <Text
+                    style={[
+                      styles.supportTitle,
+                      { fontSize: s(14), color: C.isDark ? C.ink : C.p },
+                    ]}
+                  >
+                    Need help signing in?
+                  </Text>
+                <Text
+                  style={[
+                    styles.supportSub,
+                    {
+                      color: C.inkC,
+                      fontSize: Math.max(s(12), 11),
+                      lineHeight: Math.max(s(17), 15),
+                    },
+                  ]}
+                >
+                  Reach out to your school office for credentials
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.supportArrow,
+                  {
+                    width: s(24),
+                    height: s(24),
+                    borderRadius: s(12),
+                    backgroundColor: schoolColorWithAlpha(C.p, C.isDark ? 0.12 : 0.06),
+                  },
+                ]}
+              >
+                <Ionicons name="help-circle-outline" size={s(13)} color={C.p} />
+              </View>
             </View>
-            <View style={styles.supportText}>
-              <Text style={[styles.supportTitle, { color: C.inkB }]}>Need help signing in?</Text>
-              <Text style={styles.supportSub}>Reach out to your school office for credentials</Text>
-            </View>
-          </View>
+          </Animated.View>
 
           {/* ══ Startup India — government recognition strip ══════════
               Deliberately styled as a CERTIFICATE, not a card:
@@ -922,7 +1186,18 @@ export default function Index() {
               · flat bordered surface, no elevation, no press feedback —
                 nothing about it invites a tap
               · formal small-caps labelling like a printed credential   */}
-          <View style={[styles.certWrap, { width: "100%", borderRadius: s(22), marginBottom: s(32) }]}>
+          <View
+            style={[
+              styles.certWrap,
+              {
+                width: "100%",
+                borderRadius: s(22),
+                marginBottom: s(32),
+                borderColor: C.isDark ? schoolColorWithAlpha(C.p, 0.22) : schoolColorWithAlpha(C.p, 0.07),
+                backgroundColor: C.surface,
+              },
+            ]}
+          >
             {/* Tricolor hairline — the national identity mark */}
             <LinearGradient
               colors={["#FF9933", "#FF9933", "#FFFFFF", "#138808", "#138808"]}
@@ -932,9 +1207,8 @@ export default function Index() {
               style={styles.certTricolor}
             />
 
-            {/* Faint warm→green wash echoing the flag, kept near-white */}
             <LinearGradient
-              colors={["#FFFBF5", "#FFFFFF", "#F5FBF6"]}
+              colors={[...C.certWash]}
               locations={[0, 0.5, 1]}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
@@ -942,11 +1216,16 @@ export default function Index() {
             />
 
             <View style={[styles.certBody, { paddingVertical: s(20), paddingHorizontal: s(20) }]}>
-              {/* Emblem — centered, ringed like an official seal */}
               <View
                 style={[
                   styles.certSeal,
-                  { width: s(58), height: s(58), borderRadius: s(29) },
+                  {
+                    width: s(58),
+                    height: s(58),
+                    borderRadius: s(29),
+                    backgroundColor: C.surface,
+                    borderColor: schoolColorWithAlpha(C.secondary, 0.18),
+                  },
                 ]}
               >
                 <Image
@@ -955,29 +1234,41 @@ export default function Index() {
                 />
               </View>
 
-              <Text style={styles.certEyebrow}>GOVERNMENT OF INDIA</Text>
+              <Text style={[styles.certEyebrow, { color: C.secondary }]}>GOVERNMENT OF INDIA</Text>
 
-              <Text style={[styles.certTitle, { fontSize: s(17) }]}>
+              <Text style={[styles.certTitle, { fontSize: s(17), color: C.ink }]}>
                 DPIIT Recognized Startup
               </Text>
 
-              <Text style={styles.certSub}>
+              <Text style={[styles.certSub, { color: C.inkC }]}>
                 Recognized under the Startup India initiative by the{"\n"}
                 Department for Promotion of Industry and Internal Trade
               </Text>
 
               {/* Verification pill — green, official */}
-              <View style={styles.certVerified}>
-                <Ionicons name="shield-checkmark" size={12} color="#138808" />
-                <Text style={styles.certVerifiedText}>VERIFIED CREDENTIAL</Text>
+              <View
+                style={[
+                  styles.certVerified,
+                  {
+                    backgroundColor: schoolColorWithAlpha(C.success, 0.08),
+                    borderColor: schoolColorWithAlpha(C.success, 0.16),
+                  },
+                ]}
+              >
+                <Ionicons name="shield-checkmark" size={12} color={C.success} />
+                <Text style={[styles.certVerifiedText, { color: C.success }]}>
+                  VERIFIED CREDENTIAL
+                </Text>
               </View>
             </View>
           </View>
 
           {/* ── Footer ──────────────────────────────────────────────── */}
           <View style={styles.footer}>
-            <Text style={styles.footerBrand}>POWERED BY NEXSYRUS</Text>
-            <Text style={styles.footerVersion}>v 2.0.0 · SchoolIMS</Text>
+            <Text style={[styles.footerBrand, { color: C.inkD }]}>POWERED BY NEXSYRUS</Text>
+            <Text style={[styles.footerVersion, { color: C.inkD }]}>
+              v {Constants.expoConfig?.version || '1.5.0'} · SchoolIMS
+            </Text>
           </View>
 
         </View>
@@ -994,7 +1285,6 @@ export default function Index() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: "#F6F4FF",
   },
   scrollContent: {
     alignItems: "stretch",
@@ -1062,18 +1352,8 @@ const styles = StyleSheet.create({
     zIndex: 3,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.55)",
+    backgroundColor: "transparent",
     borderWidth: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#5B3DF5",
-        shadowOffset: { width: 0, height: 14 },
-        shadowOpacity: 0.14,
-        shadowRadius: 28,
-      },
-      android: { elevation: 8 },
-      web: { boxShadow: "0 14px 32px rgba(91, 61, 245, 0.14)" } as any,
-    }),
   },
   orbitSatellite: {
     position: "absolute",
@@ -1103,20 +1383,9 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   crestDisc: {
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#5B3DF5",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.12,
-        shadowRadius: 20,
-      },
-      android: { elevation: 6 },
-      web: { boxShadow: "0 10px 24px rgba(91, 61, 245, 0.12)" } as any,
-    }),
   },
   heroEyebrow: {
     fontSize: 11,
@@ -1149,23 +1418,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 2,
-    color: "#0F172A",
-    opacity: 0.5,
+    opacity: 0.72,
   },
 
   /* ── Student primary card ──────────────────────────────── */
   studentWrap: {
-    /* Android elevation needs a background color on the elevated view */
-    backgroundColor: "#5B3DF5",
-    ...Platform.select({
-      ios: {
-        shadowColor: "#5B3DF5",
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.3,
-        shadowRadius: 36,
-      },
-      android: { elevation: 12 },
-    }),
+    /* shadow + fill applied inline from theme */
   },
   studentPressable: {
     overflow: "hidden",
@@ -1267,90 +1525,92 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   tile: {
-    backgroundColor: "rgba(255,255,255,0.9)",
-    overflow: Platform.OS === "android" ? "hidden" : "visible",
+    overflow: "hidden",
+    borderWidth: 1,
     ...Platform.select({
       ios: {
         shadowColor: "#1E1B4B",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.06,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
     }),
   },
-  tileFull: {
-    width: "100%",
-    flexGrow: 1,
-    flexShrink: 0,
-    flexBasis: "100%",
+  tileAccent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 1,
   },
-  tileHalf: {
-    flex: 1,
-    minWidth: "46%",
+  tileInner: {
+    zIndex: 2,
   },
-  tileInner: {},
   tileIcon: {
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
   },
-  tileText: {
-    gap: 2,
+  tileArrow: {
+    alignItems: "center",
+    justifyContent: "center",
   },
+  tileText: {},
   tileTitle: {
     fontWeight: "800",
-    color: "#0F172A",
-    letterSpacing: -0.3,
+    letterSpacing: -0.35,
   },
   tileSub: {
     fontWeight: "500",
-    color: "#64748B",
-    opacity: 0.9,
   },
 
   /* ── Support card ──────────────────────────────────────── */
   supportCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.9)",
+    overflow: "hidden",
+    borderWidth: 1,
     ...Platform.select({
       ios: {
         shadowColor: "#1E1B4B",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.06,
-        shadowRadius: 20,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.08,
+        shadowRadius: 16,
       },
-      android: { elevation: 2 },
+      android: { elevation: 3 },
     }),
+  },
+  supportInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    zIndex: 2,
   },
   supportIcon: {
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    flexShrink: 0,
   },
   supportText: {
     flex: 1,
-    gap: 2,
+    minWidth: 0,
   },
   supportTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: -0.2,
+    fontWeight: "800",
+    letterSpacing: -0.3,
   },
   supportSub: {
-    fontSize: 12,
-    lineHeight: 17,
-    color: "#64748B",
-    opacity: 0.9,
+    fontWeight: "500",
+  },
+  supportArrow: {
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
   },
 
   /* ── Startup India certification strip ─────────────────── */
   certWrap: {
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(15, 23, 42, 0.07)",
-    backgroundColor: "#FFFFFF",
-    /* Intentionally NO elevation / shadow — flat like a printed
-       credential, so it never reads as a tappable card. */
   },
   certTricolor: {
     height: 3,
@@ -1360,7 +1620,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   certSeal: {
-    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
@@ -1380,13 +1639,11 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 2.4,
-    color: "#B45309",
     opacity: 0.85,
     marginBottom: 6,
   },
   certTitle: {
     fontWeight: "900",
-    color: "#0F172A",
     letterSpacing: -0.4,
     textAlign: "center",
     marginBottom: 6,
@@ -1395,7 +1652,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     fontWeight: "500",
-    color: "#64748B",
     textAlign: "center",
     marginBottom: 14,
   },
@@ -1406,15 +1662,12 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    backgroundColor: "rgba(19, 136, 8, 0.08)",
     borderWidth: 1,
-    borderColor: "rgba(19, 136, 8, 0.16)",
   },
   certVerifiedText: {
     fontSize: 9,
     fontWeight: "800",
     letterSpacing: 1,
-    color: "#138808",
   },
 
   /* ── Footer ────────────────────────────────────────────── */
@@ -1426,11 +1679,9 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 2.5,
-    color: "#94A3B8",
   },
   footerVersion: {
     fontSize: 10,
-    color: "#94A3B8",
     letterSpacing: 0.5,
     opacity: 0.7,
   },

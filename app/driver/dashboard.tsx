@@ -17,6 +17,7 @@ import * as Haptics from '@/src/utils/haptics';
 import { api } from '../../src/services/apiClient';
 import { usePersistedSWR } from '../../src/hooks/usePersistedSWR';
 import LogoLoader from '../../src/components/LogoLoader';
+import DashboardHero from '../../src/components/DashboardHero';
 
 const PINK = '#EC4899';
 const PINK_DARK = '#BE185D';
@@ -390,15 +391,25 @@ export default function DriverDashboard() {
             <LogoLoader size={30} />
           </View>
         }
-        {/* ═══════ Hero Card ═══════ */}
+        {/* ═══════ Greeting panel ═══════ */}
+        <View style={{ marginBottom: 16 }}>
+          <DashboardHero
+            eyebrow={new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()}
+            greeting={greeting}
+            name={displayName}
+            stacks
+          />
+        </View>
+
+        {/* ═══════ Trip Tracking Card ═══════ */}
         <Animated.View entering={FadeInDown.delay(80).duration(500)} style={s.heroWrap}>
           <LinearGradient colors={PINK_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
             <View style={[s.heroDecor, { top: -30, right: -30, width: 120, height: 120 }]} />
             <View style={[s.heroDecor, { bottom: -15, left: -15, width: 60, height: 60 }]} />
             <View style={s.heroTop}>
               <View>
-                <Text style={s.heroGreet}>{greeting},</Text>
-                <Text style={s.heroName}>{displayName} 👋</Text>
+                <Text style={s.heroGreet}>On duty</Text>
+                <Text style={s.heroName}>Today's Trip</Text>
               </View>
               <View style={s.heroBusPill}>
                 <Ionicons name="bus" size={14} color="#FFF" />

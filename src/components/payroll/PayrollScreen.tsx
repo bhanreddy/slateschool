@@ -19,6 +19,7 @@ import { PayrollEntry } from '../../types/payroll';
 import { useTheme } from '../../hooks/useTheme';
 import { useAccountsWebChrome } from '../../contexts/AccountsWebChromeContext';
 import { Theme } from '../../theme/themes';
+import { AdminService } from '../../services/adminService';
 
 const { width: SW } = Dimensions.get('window');
 
@@ -375,6 +376,33 @@ const bannerSt = StyleSheet.create({
   sub: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
 });
 
+const StaffPayslipsBanner = ({ enabled, isDark, onToggle, toggling }: {
+  enabled: boolean; isDark: boolean;
+  onToggle?: (v: boolean) => void; toggling?: boolean;
+}) => (
+  <Animated.View entering={FadeInDown.delay(60).duration(400)} style={[bannerSt.wrap, {
+    backgroundColor: enabled ? (isDark ? '#0f2922' : '#ECFDF5') : (isDark ? '#451a1a' : '#FEF2F2'),
+    borderColor: enabled ? '#A7F3D0' : '#FECACA',
+  }]}>
+    <View style={bannerSt.left}>
+      <Ionicons name={enabled ? 'document-text-outline' : 'eye-off-outline'} size={20} color={enabled ? '#059669' : '#DC2626'} />
+      <View style={{ flex: 1 }}>
+        <Text style={[bannerSt.title, { color: isDark ? '#F8FAFC' : '#0F172A' }]}>Staff Portal Payslips</Text>
+        <Text style={[bannerSt.sub, { color: isDark ? '#94A3B8' : '#64748B' }]}>
+          {enabled ? 'Staff can view and download their payslips.' : 'Payslips are hidden from the staff portal.'}
+        </Text>
+      </View>
+    </View>
+    <Switch
+      value={enabled}
+      onValueChange={onToggle}
+      disabled={toggling}
+      trackColor={{ false: '#FCA5A5', true: '#6EE7B7' }}
+      thumbColor={enabled ? '#10B981' : '#EF4444'}
+    />
+  </Animated.View>
+);
+
 type AdjustModalProps = {
   visible: boolean;
   item: PayrollEntry | null;
@@ -498,8 +526,28 @@ export default function PayrollScreen({ isAdmin = false, title = 'Payroll', show
   const [adjustTarget, setAdjustTarget] = useState<PayrollEntry | null>(null);
   const [adjustSaving, setAdjustSaving] = useState(false);
   const [toggleSaving, setToggleSaving] = useState(false);
+  const [staffPayslipsEnabled, setStaffPayslipsEnabled] = useState(true);
+  const [payslipsToggleLoading, setPayslipsToggleLoading] = useState(false);
+  const [payslipsToggleSaving, setPayslipsToggleSaving] = useState(false);
 
   useEffect(() => { fetchPayroll(); }, [selectedMonth, selectedYear]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    let alive = true;
+    setPayslipsToggleLoading(true);
+    AdminService.getStaffPayslipsSetting()
+      .then((res) => {
+        if (alive) setStaffPayslipsEnabled(res?.enabled !== false);
+      })
+      .catch(() => {
+        if (alive) setStaffPayslipsEnabled(true);
+      })
+      .finally(() => {
+        if (alive) setPayslipsToggleLoading(false);
+      });
+    return () => { alive = false; };
+  }, [isAdmin]);
 
   const canProcess = isAdmin || !accountsDistributionBlocked;
 
@@ -555,6 +603,18 @@ export default function PayrollScreen({ isAdmin = false, title = 'Payroll', show
     }
   };
 
+  const handleToggleStaffPayslips = async (enabled: boolean) => {
+    setPayslipsToggleSaving(true);
+    try {
+      const res = await AdminService.setStaffPayslipsEnabled(enabled);
+      setStaffPayslipsEnabled(res?.enabled !== false);
+    } catch (err: unknown) {
+      alertCompat('Error', err instanceof Error ? err.message : 'Failed to update payslips setting.');
+    } finally {
+      setPayslipsToggleSaving(false);
+    }
+  };
+
   const paidCount = payrollData.filter(e => e.status === 'paid').length;
   const count = { paid: paidCount, total: payrollData.length };
 
@@ -583,6 +643,15 @@ export default function PayrollScreen({ isAdmin = false, title = 'Payroll', show
         onToggle={handleToggleDistribution}
         toggling={toggleSaving || distributionLoading}
       />
+
+      {isAdmin && (
+        <StaffPayslipsBanner
+          enabled={staffPayslipsEnabled}
+          isDark={isDark}
+          onToggle={handleToggleStaffPayslips}
+          toggling={payslipsToggleLoading || payslipsToggleSaving}
+        />
+      )}
 
       <SummaryCards summary={summary} count={count} isDark={isDark} />
 

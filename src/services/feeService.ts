@@ -43,7 +43,12 @@ export interface CollectFeeRequest {
     payment_method: 'cash' | 'card' | 'upi' | 'bank_transfer' | 'cheque' | 'online';
     transaction_ref?: string;
     remarks?: string;
+    request_approval?: boolean;
 }
+
+export type CollectFeeResult =
+    | { status: 'posted'; transaction: FeeTransaction }
+    | { status: 'pending_approval'; message: string; approval_request: { id: string; type: string; payload: Record<string, unknown> } };
 
 export interface AdjustFeeRequest {
     student_fee_id: string;
@@ -60,6 +65,7 @@ export interface FeeSummary {
     student_name: string;
     class_name?: string;
     father_name?: string;
+    father_mobile?: string;
     student_gender?: string;
     total_amount: number | string;
     paid_amount: number | string;
@@ -88,6 +94,7 @@ export interface SchoolFeeType {
     id: string;
     name: string;
     code?: string;
+    sort_order?: number;
 }
 
 export interface CollectionSummaryParams {
@@ -196,12 +203,36 @@ export const FeeService = {
         return Number(summary?.total_balance ?? summary?.balance ?? 0);
     },
 
+    /** Serial receipt number linked to a fee transaction (RCT-YYYYMMDD-####). */
+    lookupReceiptNo: async (transactionId: string): Promise<string | null> => {
+        const res = await api.get<{ receipt_no: string | null }>(
+            `/fees/transactions/${transactionId}/receipt-no`,
+            undefined,
+            { silent: true },
+        );
+        return res?.receipt_no ?? null;
+    },
+
     /**
      * Collect fee payment
      */
-    collectFee: async (data: CollectFeeRequest): Promise<FeeTransaction> => {
-        const response = await api.post<{ transaction: FeeTransaction }>('/fees/collect', data);
-        return response.transaction;
+    collectFee: async (data: CollectFeeRequest): Promise<CollectFeeResult> => {
+        const response = await api.post<{
+            transaction?: FeeTransaction;
+            status?: string;
+            message?: string;
+            approval_request?: { id: string; type: string; payload: Record<string, unknown> };
+        }>('/fees/collect', data, { silent: true });
+
+        if (response?.status === 'pending_approval') {
+            return {
+                status: 'pending_approval',
+                message: response.message || 'Payment requires admin approval',
+                approval_request: response.approval_request!,
+            };
+        }
+
+        return { status: 'posted', transaction: response.transaction! };
     },
 
     /**
@@ -294,7 +325,14 @@ export const FeeService = {
      */
     getFeeTypes: async (): Promise<SchoolFeeType[]> => {
         const result = await api.get<SchoolFeeType[]>('/fees/types');
-        return Array.isArray(result) ? result : (result as any)?.data ?? [];
+        const rows = Array.isArray(result) ? result : (result as any)?.data ?? [];
+        return [...rows].sort((a, b) =>
+            (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name)
+        );
+    },
+
+    reorderFeeTypes: async (typeIds: string[]): Promise<FeeType[]> => {
+        return api.put<FeeType[]>('/fees/types/reorder', { type_ids: typeIds });
     },
 
     /**

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Modal, View, Image, Pressable, Text, StyleSheet, Dimensions, Platform } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Modal, View, Image, Pressable, Text, StyleSheet, Dimensions, Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../hooks/useAuth';
 
@@ -33,30 +33,45 @@ export default function FestivalPosterGate() {
   const { user } = useAuth();
   const userId = user?.userId ?? null;
   const [poster, setPoster] = useState<FestivalPoster | null>(null);
+  // Latest values without re-subscribing the AppState listener on every render.
+  const userIdRef = useRef(userId);
+  const posterRef = useRef(poster);
+  userIdRef.current = userId;
+  posterRef.current = poster;
 
   useEffect(() => {
-    if (!userId) return;
-    let mounted = true;
+    let cancelled = false;
 
-    (async () => {
+    const check = async () => {
+      const uid = userIdRef.current;
+      // Don't fetch when logged out, or replace a poster that's already showing.
+      if (!uid || posterRef.current) return;
       try {
         const res = await fetch(`${SUPERADMIN_API_URL}/api/public/festival-poster?app=schoolims`);
         if (!res.ok) return;
         const body = await res.json();
         const p: FestivalPoster | null = body?.poster ?? null;
-        if (!p || !p.image_url || !mounted) return;
-        const seen = await AsyncStorage.getItem(seenKey(userId, p.id));
-        if (seen || !mounted) return;
+        if (!p || !p.image_url || cancelled) return;
+        const seen = await AsyncStorage.getItem(seenKey(uid, p.id));
+        if (seen || cancelled) return;
         // Mark seen at show-time so an app kill can't re-show it.
-        await AsyncStorage.setItem(seenKey(userId, p.id), new Date().toISOString());
-        if (mounted) setPoster(p);
+        await AsyncStorage.setItem(seenKey(uid, p.id), new Date().toISOString());
+        if (!cancelled) setPoster(p);
       } catch {
         // Silent: the poster popup must never affect app startup.
       }
-    })();
+    };
+
+    // Fire on login (userId change) and again whenever the app returns to
+    // foreground, so already-open sessions pick up a newly posted poster.
+    check();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') check();
+    });
 
     return () => {
-      mounted = false;
+      cancelled = true;
+      sub.remove();
     };
   }, [userId]);
 

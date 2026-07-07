@@ -19,6 +19,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePermissions } from '../../src/hooks/usePermissions';
 import { StaffService } from '@/src/services/staffService';
 import { ReferenceDataService } from '../../src/services/referenceDataService';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -433,6 +434,8 @@ export default function AddStaffScreen() {
   const { id } = useLocalSearchParams();
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { hasPermission } = usePermissions();
+  const canViewSalary = hasPermission('salary.view');
 
   const [loading, setLoading] = useState(false);
   const [designations, setDesignations] = useState<any[]>([]);
@@ -511,11 +514,14 @@ export default function AddStaffScreen() {
         first_name: formData.firstName, last_name: formData.lastName, middle_name: '',
         email: formData.email,
         phone: formData.phone, designation_id: parseInt(formData.designationId),
-        department: '', salary: formData.salary ? parseFloat(formData.salary) : undefined,
-        gender_id: parseInt(formData.genderId), staff_code: formData.staffCode,
+        department: '', gender_id: parseInt(formData.genderId), staff_code: formData.staffCode,
         joining_date: formData.joiningDate, dob: formData.dob || undefined,
         role_code: formData.loginRole || calculatedRole,
       };
+
+      if (canViewSalary && formData.salary) {
+        payload.salary = parseFloat(formData.salary);
+      }
 
       // Include password: always for create, only if typed for edit
       if (!isEditMode) {
@@ -665,12 +671,14 @@ export default function AddStaffScreen() {
               isDark={isDark}
             />
 
-            <SalaryField
-              value={formData.salary}
-              onChange={(t: string) => update('salary', t)}
-              isDark={isDark}
-              accentColor={SECTION_COLORS.employment.accent}
-            />
+            {canViewSalary ? (
+              <SalaryField
+                value={formData.salary}
+                onChange={(t: string) => update('salary', t)}
+                isDark={isDark}
+                accentColor={SECTION_COLORS.employment.accent}
+              />
+            ) : null}
           </SectionCard>
 
           {/* ── SECTION 3: CONTACT ── */}

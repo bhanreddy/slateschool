@@ -9,7 +9,9 @@ import {
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import AdminHeader from '../../src/components/AdminHeader';
+import { Redirect } from 'expo-router';
 import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContext';
+import { usePermissions } from '../../src/hooks/usePermissions';
 import Animated, {
   FadeInDown, FadeIn, Layout,
   useAnimatedStyle, useSharedValue,
@@ -21,6 +23,9 @@ import { Expense } from '../../src/types/expenses';
 import { useTheme } from '../../src/hooks/useTheme';
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
+import ExpenseDateFilterBar from '../../src/components/expenses/ExpenseDateFilterBar';
+import BulkExpenseSheet from '../../src/components/expenses/BulkExpenseSheet';
+import { monthStartInput, todayDateInput } from '../../src/components/expenses/expenseConstants';
 
 // ─── Category config ──────────────────────────────────────────────────────────
 const CATEGORY_CONFIG: Record<string, { icon: string; color: string; grad: [string, string] }> = {
@@ -321,11 +326,15 @@ const dtSt = StyleSheet.create({
 export default function AccountsExpenses() {
   const { theme, isDark } = useTheme();
   const { shellActive } = useAccountsWebChrome();
+  const { hasPermission } = usePermissions();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
-  const { expenses, loading, fetchExpenses, createExpense } = useExpenses();
+  const { expenses, loading, fetchExpenses, createExpense, createBulkExpenses } = useExpenses();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [fromDate, setFromDate] = useState(monthStartInput);
+  const [toDate, setToDate] = useState(todayDateInput);
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [isBulkModalVisible, setIsBulkModalVisible] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   const [newTitle, setNewTitle] = useState('');
@@ -334,9 +343,19 @@ export default function AccountsExpenses() {
   const [newDescription, setNewDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const fetchOptions = useMemo(
+    () => ({ accountsScope: true as const, fromDate, toDate }),
+    [fromDate, toDate]
+  );
+
   useEffect(() => {
-    fetchExpenses(searchQuery, { accountsScope: true });
-  }, [searchQuery]);
+    fetchExpenses(searchQuery, fetchOptions);
+  }, [searchQuery, fetchOptions]);
+
+  const resetDateFilters = () => {
+    setFromDate(monthStartInput());
+    setToDate(todayDateInput());
+  };
 
   const handleAddExpense = async () => {
     if (!newTitle || !newAmount) { alertCompat('Required', 'Title and Amount are required.'); return; }
@@ -359,12 +378,27 @@ export default function AccountsExpenses() {
 
   const selectedCat = selectedExpense ? CATEGORY_CONFIG[selectedExpense.category] || CATEGORY_CONFIG.Other : null;
 
+  // Expenses are hidden from accounts (RBAC epic #2). Cosmetic guard against
+  // direct navigation — the server already 403s these routes for accounts.
+  if (!hasPermission('expenses.view')) {
+    return <Redirect href="/accounts/dashboard" />;
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#0A0F1E' : '#F1F5F9'} />
       {!shellActive && <AdminHeader title="Expense Tracker" showBackButton />}
 
       <SearchBar value={searchQuery} onChange={setSearchQuery} isDark={isDark} />
+
+      <ExpenseDateFilterBar
+        fromDate={fromDate}
+        toDate={toDate}
+        onFromDateChange={setFromDate}
+        onToDateChange={setToDate}
+        onClear={resetDateFilters}
+        isDark={isDark}
+      />
 
           {/* Summary strip */}
           {!loading && expenses.length > 0 && (
@@ -383,7 +417,7 @@ export default function AccountsExpenses() {
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               refreshing={loading}
-              onRefresh={() => fetchExpenses(searchQuery, { accountsScope: true })}
+              onRefresh={() => fetchExpenses(searchQuery, fetchOptions)}
               ListEmptyComponent={
                 <Animated.View entering={FadeIn.duration(400)} style={styles.emptyWrap}>
                   <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? '#1E293B' : '#EEF2FF' }]}>
@@ -396,7 +430,15 @@ export default function AccountsExpenses() {
             />
           )}
 
-          {/* FAB */}
+          {/* FABs */}
+          <Pressable
+            style={({ pressed }) => [styles.fabWrapSecondary, pressed && { opacity: 0.88 }]}
+            onPress={() => setIsBulkModalVisible(true)}
+          >
+            <View style={[styles.fabSecondary, { backgroundColor: isDark ? '#1E293B' : '#fff', borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(99,102,241,0.25)' }]}>
+              <Ionicons name="grid-outline" size={22} color="#6366F1" />
+            </View>
+          </Pressable>
           <Pressable
             style={({ pressed }) => [styles.fabWrap, pressed && { opacity: 0.88 }]}
             onPress={() => setIsAddModalVisible(true)}
@@ -455,6 +497,13 @@ export default function AccountsExpenses() {
           </Pressable>
         </ScrollView>
       </BottomSheet>
+
+      <BulkExpenseSheet
+        visible={isBulkModalVisible}
+        onClose={() => setIsBulkModalVisible(false)}
+        onSubmit={createBulkExpenses}
+        isDark={isDark}
+      />
 
       {/* ── EXPENSE DETAILS SHEET ── */}
       <BottomSheet
@@ -520,6 +569,20 @@ const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
     borderRadius: 28,
     shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.45, shadowRadius: 20, elevation: 16,
+  },
+  fabWrapSecondary: {
+    position: 'absolute', bottom: 32, right: 96,
+    borderRadius: 24,
+    shadowColor: '#6366F1', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2, shadowRadius: 12, elevation: 8,
+  },
+  fabSecondary: {
+    width: 52,
+    height: 52,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1.5,
   },
   fab: { width: 60, height: 60, borderRadius: 28, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
   fabGloss: { position: 'absolute', top: 0, left: 0, right: 0, height: 30, borderRadius: 28 },

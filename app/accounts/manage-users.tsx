@@ -16,6 +16,7 @@ import { useTheme } from '../../src/hooks/useTheme';
 import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContext';
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
+import Avatar from '../../src/components/Avatar';
 import {
   personListDisplayName,
   staffRoleDepartmentLine,
@@ -25,6 +26,16 @@ import {
 /** Higher page size than the API default so the un-searched browse list is usable. */
 const LIST_PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 400;
+
+function resolvePhotoUrl(row: Record<string, unknown>): string | null {
+  if (typeof row.photo_url === 'string' && row.photo_url.trim()) return row.photo_url;
+  const person = row.person;
+  if (person && typeof person === 'object' && !Array.isArray(person)) {
+    const url = (person as Record<string, unknown>).photo_url;
+    if (typeof url === 'string' && url.trim()) return url;
+  }
+  return null;
+}
 
 export default function ManageUsersScreen() {
   const {
@@ -161,11 +172,16 @@ export default function ManageUsersScreen() {
   }: { item: any; }) => {
     const row = item as Record<string, unknown>;
     const displayName = personListDisplayName(row);
-    const initial = (displayName.trim()[0] || 'U').toUpperCase();
+    const photoUrl = resolvePhotoUrl(row);
     return <View style={styles.userCard}>
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{initial}</Text>
-      </View>
+      <Avatar
+        photoUrl={photoUrl}
+        name={displayName}
+        size={44}
+        ringColor={theme.colors.border}
+        ringWidth={1}
+        style={styles.avatar}
+      />
       <View style={styles.userInfo}>
         <Text style={styles.userName}>{displayName}</Text>
         <Text style={styles.userSub}>
@@ -282,18 +298,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     elevation: 2
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: theme.colors.card,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12
-  },
-  avatarText: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: theme.colors.textSecondary
+    marginRight: 12,
   },
   userInfo: {
     flex: 1

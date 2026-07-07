@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Image,
@@ -10,6 +10,14 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from 'react-native-reanimated';
 import {
   SafeAreaView,
   useSafeAreaInsets,
@@ -30,13 +38,36 @@ import {
 const ribbonTheme = SCHOOL_CONFIG.theme;
 
 const STRIPE_H = 3;
-const WAVE_H = 30;
+const WAVE_H = 16;
 
 /** Bottom wave depth — used by root layout for content inset. */
 export const SCHOOL_RIBBON_WAVE_HEIGHT = WAVE_H;
 
 /** How far screen content slides up under the transparent wave cutout. */
 export const SCHOOL_RIBBON_OVERLAP = Math.round(WAVE_H * 0.78);
+
+/** Mobile ribbon logo frame size (used by root layout for content inset). */
+export const MOBILE_RIBBON_LOGO_SIZE = 48;
+
+const MOBILE_RIBBON_ROW_PADDING_TOP = 3;
+const MOBILE_RIBBON_ROW_PADDING_BOTTOM = 2;
+const MOBILE_RIBBON_BOTTOM_PAD = 0;
+/** Nudge logo upward within the ribbon row. */
+const MOBILE_RIBBON_LOGO_OFFSET_UP = 12;
+
+/** Body height below the status-bar inset (logo row + padding). */
+export const MOBILE_RIBBON_CONTENT_HEIGHT =
+  MOBILE_RIBBON_ROW_PADDING_TOP +
+  MOBILE_RIBBON_ROW_PADDING_BOTTOM +
+  MOBILE_RIBBON_LOGO_SIZE +
+  MOBILE_RIBBON_BOTTOM_PAD;
+
+const MARQUEE_GAP = '          ';
+const MARQUEE_ITEM_GAP = '                         ';
+const MARQUEE_SPEED_PX_PER_SEC = 52;
+
+const formatTaglineQuotes = (tagline: string) =>
+  `\u201C${tagline}\u201D`;
 
 /* ------------------------------------------------------------------ */
 /* Unified banner shape (body + wavy bottom + gold crest)              */
@@ -323,6 +354,279 @@ const adaptiveNameStyles = StyleSheet.create({
 });
 
 /* ------------------------------------------------------------------ */
+/* Scrolling marquee (TV-style ticker)                                 */
+/* ------------------------------------------------------------------ */
+
+function MobileMarqueeSegment({
+  schoolName,
+  tagline,
+}: {
+  schoolName: string;
+  tagline: string;
+}) {
+  return (
+    <View style={marqueeStyles.segment}>
+      {schoolName ? (
+        <Text style={marqueeStyles.name} numberOfLines={1}>
+          {schoolName}
+        </Text>
+      ) : null}
+
+      {schoolName && tagline ? (
+        <Text style={marqueeStyles.itemGap}>{MARQUEE_ITEM_GAP}</Text>
+      ) : null}
+
+      {tagline ? (
+        <Text style={marqueeStyles.tagline} numberOfLines={1}>
+          {formatTaglineQuotes(tagline)}
+        </Text>
+      ) : null}
+
+      <Text style={marqueeStyles.itemGap}>{MARQUEE_GAP}</Text>
+    </View>
+  );
+}
+
+function MobileRibbonMarquee({
+  schoolName,
+  tagline,
+}: {
+  schoolName: string;
+  tagline: string;
+}) {
+  const [segmentWidth, setSegmentWidth] = useState(0);
+  const translateX = useSharedValue(0);
+
+  const hasContent = Boolean(schoolName || tagline);
+
+  useEffect(() => {
+    if (!hasContent || segmentWidth <= 0) {
+      cancelAnimation(translateX);
+      translateX.value = 0;
+      return;
+    }
+
+    cancelAnimation(translateX);
+    translateX.value = 0;
+    const duration = (segmentWidth / MARQUEE_SPEED_PX_PER_SEC) * 1000;
+    translateX.value = withRepeat(
+      withTiming(-segmentWidth, { duration, easing: Easing.linear }),
+      -1,
+      false,
+    );
+  }, [hasContent, segmentWidth, translateX]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  if (!hasContent) return null;
+
+  return (
+    <View style={marqueeStyles.clip} accessibilityRole="text">
+      <View
+        style={[marqueeStyles.segment, marqueeStyles.measureHidden]}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (w > 0 && Math.abs(w - segmentWidth) > 0.5) {
+            setSegmentWidth(w);
+          }
+        }}
+      >
+        <MobileMarqueeSegment
+          schoolName={schoolName}
+          tagline={tagline}
+        />
+      </View>
+
+      {segmentWidth > 0 ? (
+        <Animated.View style={[marqueeStyles.track, animStyle]}>
+          <MobileMarqueeSegment
+            schoolName={schoolName}
+            tagline={tagline}
+          />
+          <MobileMarqueeSegment
+            schoolName={schoolName}
+            tagline={tagline}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+function MarqueeSegment({
+  schoolName,
+  tagline,
+  motto,
+  baseStyle,
+}: {
+  schoolName: string;
+  tagline: string;
+  motto: string;
+  baseStyle: TextStyle;
+}) {
+  return (
+    <Text style={baseStyle} numberOfLines={1}>
+      <Text style={marqueeStyles.name}>{schoolName}</Text>
+      {tagline ? (
+        <>
+          <Text style={marqueeStyles.dot}>{'   •   '}</Text>
+          <Text style={marqueeStyles.tagline}>{formatTaglineQuotes(tagline)}</Text>
+        </>
+      ) : null}
+      {motto ? (
+        <>
+          <Text style={marqueeStyles.dot}>{'   •   '}</Text>
+          <Text style={marqueeStyles.motto}>{motto}</Text>
+        </>
+      ) : null}
+      <Text style={marqueeStyles.dot}>{MARQUEE_GAP}</Text>
+    </Text>
+  );
+}
+
+function RibbonMarquee({
+  schoolName,
+  tagline,
+  motto,
+}: {
+  schoolName: string;
+  tagline: string;
+  motto: string;
+}) {
+  const [segmentWidth, setSegmentWidth] = useState(0);
+  const translateX = useSharedValue(0);
+
+  const hasContent = Boolean(schoolName || tagline || motto);
+
+  useEffect(() => {
+    if (!hasContent || segmentWidth <= 0) {
+      cancelAnimation(translateX);
+      translateX.value = 0;
+      return;
+    }
+
+    cancelAnimation(translateX);
+    translateX.value = 0;
+    const duration = (segmentWidth / MARQUEE_SPEED_PX_PER_SEC) * 1000;
+    translateX.value = withRepeat(
+      withTiming(-segmentWidth, { duration, easing: Easing.linear }),
+      -1,
+      false,
+    );
+  }, [hasContent, segmentWidth, translateX]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  if (!hasContent) return null;
+
+  const baseStyle = marqueeStyles.text;
+
+  return (
+    <View style={marqueeStyles.clip} accessibilityRole="text">
+      <Text
+        style={[baseStyle, marqueeStyles.measureHidden]}
+        numberOfLines={1}
+        onLayout={(e) => {
+          const w = e.nativeEvent.layout.width;
+          if (w > 0 && Math.abs(w - segmentWidth) > 0.5) {
+            setSegmentWidth(w);
+          }
+        }}
+      >
+        <MarqueeSegment
+          schoolName={schoolName}
+          tagline={tagline}
+          motto={motto}
+          baseStyle={baseStyle}
+        />
+      </Text>
+
+      {segmentWidth > 0 ? (
+        <Animated.View style={[marqueeStyles.track, animStyle]}>
+          <MarqueeSegment
+            schoolName={schoolName}
+            tagline={tagline}
+            motto={motto}
+            baseStyle={baseStyle}
+          />
+          <MarqueeSegment
+            schoolName={schoolName}
+            tagline={tagline}
+            motto={motto}
+            baseStyle={baseStyle}
+          />
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+const marqueeStyles = StyleSheet.create({
+  clip: {
+    flex: 1,
+    minWidth: 0,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  track: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  segment: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  measureHidden: {
+    position: 'absolute',
+    opacity: 0,
+    left: -9999,
+  },
+  itemGap: {
+    fontSize: 17,
+    lineHeight: 22,
+    color: 'transparent',
+    flexShrink: 0,
+  },
+  text: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: ribbonTheme.ribbonTitle,
+    flexShrink: 0,
+  },
+  name: {
+    fontWeight: '900',
+    fontSize: 17,
+    lineHeight: 22,
+    color: ribbonTheme.ribbonTitle,
+    letterSpacing: 0.25,
+    flexShrink: 0,
+  },
+  tagline: {
+    fontWeight: '700',
+    fontSize: 15,
+    lineHeight: 22,
+    color: ribbonTheme.ribbonTagline,
+    fontStyle: 'italic',
+    flexShrink: 0,
+  },
+  motto: {
+    fontWeight: '700',
+    color: ribbonTheme.ribbonBody,
+    letterSpacing: 0.3,
+  },
+  dot: {
+    color: ribbonTheme.marqueeSeparator,
+    fontWeight: '700',
+  },
+});
+
+/* ------------------------------------------------------------------ */
 /* Mobile header                                                       */
 /* ------------------------------------------------------------------ */
 
@@ -333,7 +637,6 @@ function MobileHeaderRibbon() {
 
   const schoolName = SCHOOL_NAME || SCHOOL_CONFIG.name;
   const tagline = SCHOOL_CONFIG.tagline?.trim() || '';
-  const titleFallbackWidth = Math.max(0, width - 92);
 
   return (
     <View
@@ -343,7 +646,7 @@ function MobileHeaderRibbon() {
       <View
         style={[
           headerStyles.shell,
-          { paddingTop: insets.top, paddingBottom: 4 },
+          { paddingBottom: MOBILE_RIBBON_BOTTOM_PAD },
         ]}
         onLayout={(e) =>
           setBannerHeight(e.nativeEvent.layout.height)
@@ -360,7 +663,15 @@ function MobileHeaderRibbon() {
 
         <HeaderSparkles top={insets.top} />
 
-        <View style={headerStyles.contentRow}>
+        <View
+          style={[
+            headerStyles.contentRow,
+            {
+              paddingTop: insets.top + MOBILE_RIBBON_ROW_PADDING_TOP,
+              paddingBottom: MOBILE_RIBBON_ROW_PADDING_BOTTOM,
+            },
+          ]}
+        >
           <View style={headerStyles.logoFrame}>
             <Image
               source={SCHOOL_CONFIG.logo}
@@ -370,22 +681,10 @@ function MobileHeaderRibbon() {
           </View>
 
           <View style={headerStyles.titleBlock}>
-            <AdaptiveSchoolName
-              text={schoolName}
-              baseStyle={headerStyles.schoolName}
-              maxFontSize={20}
-              minFontSize={12}
-              fallbackWidth={titleFallbackWidth}
+            <MobileRibbonMarquee
+              schoolName={schoolName}
+              tagline={tagline}
             />
-
-            {tagline ? (
-              <Text
-                style={headerStyles.tagline}
-                numberOfLines={1}
-              >
-                {`"${tagline}"`}
-              </Text>
-            ) : null}
           </View>
         </View>
       </View>
@@ -416,60 +715,48 @@ const headerStyles = StyleSheet.create({
   contentRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
     paddingHorizontal: 14,
-    paddingVertical: 12,
   },
 
   logoFrame: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
+    width: MOBILE_RIBBON_LOGO_SIZE,
+    height: MOBILE_RIBBON_LOGO_SIZE,
+    marginTop: -MOBILE_RIBBON_LOGO_OFFSET_UP,
+    borderRadius: 10,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    padding: 5,
+    borderWidth: 2,
+    borderColor: schoolColorWithAlpha(ribbonTheme.accent, 0.55),
 
     ...Platform.select({
       web: {
-        boxShadow: '0 4px 12px rgba(0,0,0,0.14)',
+        boxShadow: '0 5px 16px rgba(0,0,0,0.18)',
       } as object,
 
       default: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 3 },
-        shadowOpacity: 0.16,
-        shadowRadius: 6,
-        elevation: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.22,
+        shadowRadius: 8,
+        elevation: 6,
       },
     }),
   },
 
   logo: {
-    width: 44,
-    height: 44,
+    width: MOBILE_RIBBON_LOGO_SIZE - 14,
+    height: MOBILE_RIBBON_LOGO_SIZE - 14,
   },
 
   titleBlock: {
     flex: 1,
     minWidth: 0,
     justifyContent: 'center',
+    height: MOBILE_RIBBON_LOGO_SIZE,
   },
-
-  schoolName: {
-    color: ribbonTheme.ribbonTitle,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-
-  tagline: {
-    marginTop: 2,
-    color: ribbonTheme.ribbonTagline,
-    fontWeight: '700',
-    fontSize: 12,
-    letterSpacing: 0.25,
-  },
-
 });
 
 /* ------------------------------------------------------------------ */
@@ -591,8 +878,8 @@ function StaticLetterheadRibbon() {
         <View
           style={[
             styles.inner,
-            compactInfo &&
-              styles.innerCompact,
+            compactInfo && styles.innerCompact,
+            Platform.OS === 'web' && styles.ribbonTextReset,
           ]}
         >
           <View
@@ -852,7 +1139,8 @@ const styles = StyleSheet.create({
   },
 
   infoText: {
-    color: ribbonTheme.ribbonBody,
+    color: '#FFFFFF',
+    opacity: 0.92,
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '500',
@@ -895,9 +1183,15 @@ const styles = StyleSheet.create({
   },
 
   infoTextStacked: {
-    color: ribbonTheme.ribbonBodyMuted,
+    color: '#FFFFFF',
+    opacity: 0.9,
     fontSize: 10,
     lineHeight: 14,
     fontWeight: '500',
   },
+
+  /* Web: block dark-theme body color from bleeding into ribbon copy */
+  ribbonTextReset: {
+    color: '#FFFFFF',
+  } as TextStyle,
 });

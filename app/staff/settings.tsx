@@ -5,6 +5,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import StaffHeader from '../../src/components/StaffHeader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
+import AccountSwitcherSheet from '../../src/components/AccountSwitcherSheet';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -140,6 +141,7 @@ export default function StaffSettings() {
     const { theme, isDark, toggleTheme } = useTheme();
     const styles = React.useMemo(() => getStyles(theme.colors), [theme]);
     const [updating, setUpdating] = useState(false);
+    const [switcherOpen, setSwitcherOpen] = useState(false);
     const { isBiometricAvailable, isBiometricEnabled, isLoading: biometricLoading, toggleBiometric } = useBiometric();
     const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
 
@@ -212,6 +214,18 @@ export default function StaffSettings() {
 
 
                 </Animated.View>
+
+                {/* ── Accounts ── */}
+                <Group title="Accounts" delay={130} colors={theme.colors}>
+                    <SettingRow
+                        icon="people-circle" iconColor="#2563EB" iconBg="#EFF6FF"
+                        label="Switch account"
+                        sublabel="Parent login, staff login, or another child"
+                        isLast
+                        onPress={() => setSwitcherOpen(true)}
+                        rightElement={chevron}
+                    />
+                </Group>
 
                 {/* ── General ── */}
                 <Group title="General" delay={170} colors={theme.colors}>
@@ -321,6 +335,7 @@ export default function StaffSettings() {
                 </Animated.View>
 
             </ScrollView>
+            <AccountSwitcherSheet visible={switcherOpen} onClose={() => setSwitcherOpen(false)} />
         </View>
     );
 }

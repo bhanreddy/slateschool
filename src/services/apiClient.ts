@@ -10,6 +10,8 @@ import { isPersistentSessionRole } from '../utils/roleHelpers';
 import { SessionPolicy } from './sessionPolicyService';
 import { SecureTokenStore } from './secureTokenStore';
 import { supabase } from './supabaseConfig';
+import { getOrCreateDeviceId } from './deviceId';
+import { getActiveContextId } from './activeContextStore';
 
 /**
  * Resolve the current role for the 401 guard WITHOUT depending on
@@ -232,6 +234,8 @@ export class APIError extends Error {
 // Generic API request function
 export interface APIOptions extends RequestInit {
   silent?: boolean;
+  /** Send X-Device-Id / X-Active-Context (portal context API only). */
+  sendActiveContext?: boolean;
   _isRetry?: boolean;
   _retryCount?: number; // tracks 503 / 429 retry attempts
   _multipart?: boolean;
@@ -283,7 +287,7 @@ async function apiRequestInner<T>(
   endpoint: string,
   options: APIOptions = {})
   : Promise<T> {
-  const { silent, _isRetry, _retryCount = 0, _multipart, timeoutMs = 60000, ...fetchOptions } = options;
+  const { silent, sendActiveContext, _isRetry, _retryCount = 0, _multipart, timeoutMs = 60000, ...fetchOptions } = options;
   const isMultipart = _multipart === true;
   const { data: { session: liveSession } } = await supabase.auth.getSession();
   const session = liveSession ?? await restoreLiveSessionFromStoredAuth();
@@ -305,6 +309,19 @@ async function apiRequestInner<T>(
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Portal context headers are opt-in (same-login child switching only).
+  // Vault account switching uses separate JWTs — do not send these by default.
+  if (options.sendActiveContext) {
+    try {
+      const deviceId = await getOrCreateDeviceId();
+      if (deviceId) headers['X-Device-Id'] = deviceId;
+      const activeContextId = await getActiveContextId();
+      if (activeContextId) headers['X-Active-Context'] = activeContextId;
+    } catch {
+      // non-fatal
+    }
   }
 
   const method = (fetchOptions.method || 'GET').toUpperCase();
@@ -335,6 +352,12 @@ async function apiRequestInner<T>(
       ...fetchOptions,
       body: finalBody,
       headers,
+      // On web, `fetch` honours the browser HTTP cache by default, so a page
+      // reload can serve a stale GET response instead of hitting the server.
+      // Force `no-store` for reads so reloads always fetch the latest data.
+      ...(Platform.OS === 'web' && (method === 'GET' || method === 'DELETE')
+        ? { cache: 'no-store' as RequestCache }
+        : {}),
       // @ts-ignore - React Native setup might not have full AbortSignal types
       signal: controller.signal
     });
@@ -470,19 +493,24 @@ async function apiRequestInner<T>(
           message,
           response.status,
           errorData.errors,
-          requestId
+          requestId,
+          errorData.code
         );
       }
 
-      // Handle Rate Limit (429) — retry with Retry-After backoff before alerting
+      // Handle Rate Limit (429). The global limiter uses a 15-min window, so on
+      // overflow `Retry-After` can be many minutes out. Sleeping that long makes
+      // the app look frozen and the retry still fails — so only retry when the
+      // wait is short (a brief burst); otherwise fail fast instead of hanging.
       if (response.status === 429) {
-        if (_retryCount < 2) {
-          const retryAfterHeader = response.headers.get('Retry-After');
-          const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
-          const delayMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
-            ? retryAfterSec * 1000
-            : (_retryCount + 1) * 1000;
-          await new Promise((r) => setTimeout(r, delayMs));
+        const retryAfterHeader = response.headers.get('Retry-After');
+        const retryAfterSec = retryAfterHeader ? Number(retryAfterHeader) : NaN;
+        const waitMs = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+          ? retryAfterSec * 1000
+          : (_retryCount + 1) * 1000;
+        const MAX_RETRY_WAIT_MS = 5000;
+        if (_retryCount < 2 && waitMs <= MAX_RETRY_WAIT_MS) {
+          await new Promise((r) => setTimeout(r, waitMs));
           return await apiRequest<T>(endpoint, {
             ...options,
             silent: true,

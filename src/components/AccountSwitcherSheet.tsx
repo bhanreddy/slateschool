@@ -24,6 +24,11 @@ import { alertCompat } from '../utils/crossPlatformAlert';
 import * as accountVault from '../services/accountVault';
 import type { VaultAccount } from '../services/accountVault';
 import {
+  getHomeRouteForRole,
+  getVaultAccountSubtitle,
+} from '../utils/portalRoutes';
+import {
+  ensureFreshAccessTokens,
   getUnreadCountsForAllVaultedAccounts,
   removeVaultedAccount,
 } from '../services/pushFanout';
@@ -36,16 +41,10 @@ interface Props {
 }
 
 /**
- * AccountSwitcherSheet — Phase 4b: the Instagram-style multi-account switcher.
+ * AccountSwitcherSheet — direct multi-login switcher (no admin setup).
  *
- * Lists every vaulted account with avatar + name + unread badge, a checkmark on
- * the active one, tap-to-switch (no password), an inline "Add account" form, and
- * per-account remove. Heavy lifting lives in earlier phases:
- *   - switch        → useAuth.switchAccount (Phase 2, seamless, no prompt)
- *   - add           → useAuth.addAccount (Phase 1/2) then switchAccount to it
- *   - remove active → useAuth.signOut (Phase 3a: unregister + vault remove)
- *   - remove other  → pushFanout.removeVaultedAccount (Phase 3b)
- *   - badges        → pushFanout.getUnreadCountsForAllVaultedAccounts (Phase 4a)
+ * Each saved account uses its own email & password (parent login, staff login, etc.).
+ * Tap to switch instantly, or add another login you already have.
  */
 export default function AccountSwitcherSheet({ visible, onClose }: Props) {
   const { switchAccount, addAccount, signOut } = useAuth();
@@ -66,9 +65,12 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
   const [addError, setAddError] = useState<string | null>(null);
   const [addBusy, setAddBusy] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (refreshTokens = true) => {
     setLoading(true);
     try {
+      if (refreshTokens) {
+        await ensureFreshAccessTokens().catch(() => {});
+      }
       const [accs, active] = await Promise.all([
         accountVault.listAccounts(),
         accountVault.getActiveAccountId(),
@@ -108,6 +110,9 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
         alertCompat('Could not switch', res.error);
         return;
       }
+      if (res?.session?.validatedUser?.role?.code) {
+        router.replace(getHomeRouteForRole(res.session.validatedUser.role.code) as any);
+      }
       onClose();
     } finally {
       setBusyId(null);
@@ -130,6 +135,7 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
       }
       if (res?.session) {
         await switchAccount(res.session.validatedUser.userId);
+        router.replace(getHomeRouteForRole(res.session.validatedUser.role?.code) as any);
         onClose();
       }
     } catch (e: any) {
@@ -199,8 +205,8 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
                 <Text style={s.title}>Switch account</Text>
                 <Text style={s.subtitle}>
                   {accounts.length > 0
-                    ? `Tap an account to switch instantly · ${accounts.length} on this device`
-                    : 'Manage the accounts on this device'}
+                    ? 'Each login stays on this device — switch anytime with one tap'
+                    : 'Add a parent or staff login you already use'}
                 </Text>
               </View>
               <TouchableOpacity style={s.closeBtn} onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -246,13 +252,14 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
                           </Text>
                           <View style={s.rowSubLine}>
                             {isActive && <Text style={s.activeTag}>Active</Text>}
-                            {unread > 0 ? (
+                            <Text style={s.rowSubMuted} numberOfLines={1}>
+                              {getVaultAccountSubtitle(acct)}
+                            </Text>
+                            {unread > 0 && (
                               <Text style={s.rowSubMuted} numberOfLines={1}>
-                                {unread > 99 ? '99+' : unread} unread
+                                {' · '}{unread > 99 ? '99+' : unread} unread
                               </Text>
-                            ) : acct.admissionNo ? (
-                              <Text style={s.rowSubMuted} numberOfLines={1}>{acct.admissionNo}</Text>
-                            ) : null}
+                            )}
                           </View>
                         </View>
 
@@ -299,12 +306,15 @@ export default function AccountSwitcherSheet({ visible, onClose }: Props) {
                     </View>
                     <View style={s.rowMeta}>
                       <Text style={[s.rowName, { color: theme.colors.primary }]}>Add account</Text>
-                      <Text style={s.rowSubMuted}>Log in to another child or account</Text>
+                      <Text style={s.rowSubMuted}>Use that login&apos;s email & password (parent or staff)</Text>
                     </View>
                   </TouchableOpacity>
                 ) : (
                   <Animated.View entering={FadeInDown.duration(260)} style={s.addForm}>
-                    <Text style={s.addFormTitle}>Add another account</Text>
+                    <Text style={s.addFormTitle}>Add another login</Text>
+                    <Text style={[s.rowSubMuted, { marginBottom: 10 }]}>
+                      Enter the email and password for your other account. No admin setup needed.
+                    </Text>
                     <TextInput
                       style={s.input}
                       placeholder="Email"

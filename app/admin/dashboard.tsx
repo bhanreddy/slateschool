@@ -1,14 +1,14 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, StatusBar,
   BackHandler, Pressable, Dimensions, FlatList, Platform,
-  useWindowDimensions, DimensionValue,
+  useWindowDimensions, DimensionValue, RefreshControl,
 } from 'react-native';
 import { useRouter, useFocusEffect, usePathname } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
-  FadeInDown, FadeIn, FadeInUp,
+  FadeInDown, FadeIn,
   useSharedValue, useAnimatedScrollHandler, useAnimatedStyle,
   withSpring, withRepeat, withTiming, withSequence,
   interpolate, Extrapolation,
@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart, BarChart } from 'react-native-gifted-charts';
 import AdminHeader from '../../src/components/AdminHeader';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePermissions } from '../../src/hooks/usePermissions';
 import { AdminDashboardStats } from '../../src/types/models';
 import { AdminService } from '../../src/services/adminService';
 import { AccessControlService } from '../../src/services/accessControlService';
@@ -35,6 +36,8 @@ import { useAnalytics } from '../../src/hooks/useAnalytics';
 import { usePersistedSWR } from '../../src/hooks/usePersistedSWR';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import PaymentDueBanner from '../../src/components/PaymentDueBanner';
+import AdminHeaderCard from '../../src/components/AdminHeaderCard';
+import DashboardHero from '../../src/components/DashboardHero';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -82,6 +85,7 @@ const ACTION_CARD_VISUALS: Record<string, ActionCardVisual> = {
   '/admin/transport':                  { g: ['#0C4A6E', '#38BDF8'], accent: '#BAE6FD', badge: '#7DD3FC', rim: 'rgba(186,230,253,0.44)', orb: 'rgba(56,189,248,0.28)', wash: 'rgba(224,242,254,0.17)', label: '#E0F2FE', shadow: '#0284C7' },
   '/admin/leaves':                     { g: ['#14532D', '#22C55E'], accent: '#86EFAC', badge: '#4ADE80', rim: 'rgba(134,239,172,0.43)', orb: 'rgba(34,197,94,0.28)', wash: 'rgba(220,252,231,0.17)', label: '#DCFCE7', shadow: '#16A34A' },
   '/admin/manage-staff':               { g: ['#581C87', '#A855F7'], accent: '#D8B4FE', badge: '#C084FC', rim: 'rgba(216,180,254,0.45)', orb: 'rgba(168,85,247,0.29)', wash: 'rgba(243,232,255,0.17)', label: '#F3E8FF', shadow: '#9333EA' },
+  '/admin/addStaff':                   { g: ['#6D28D9', '#8B5CF6'], accent: '#C4B5FD', badge: '#A78BFA', rim: 'rgba(196,181,253,0.46)', orb: 'rgba(139,92,246,0.30)', wash: 'rgba(237,233,254,0.17)', label: '#EDE9FE', shadow: '#7C3AED' },
   '/admin/add-accounts-staff':         { g: ['#9A3412', '#FB923C'], accent: '#FED7AA', badge: '#FDBA74', rim: 'rgba(254,215,170,0.43)', orb: 'rgba(251,146,60,0.28)', wash: 'rgba(255,237,213,0.17)', label: '#FFEDD5', shadow: '#EA580C' },
   '/admin/access-requests':            { g: ['#7F1D1D', '#DC2626'], accent: '#FCA5A5', badge: '#F87171', rim: 'rgba(252,165,165,0.48)', orb: 'rgba(220,38,38,0.32)', wash: 'rgba(254,226,226,0.18)', label: '#FEE2E2', shadow: '#B91C1C' },
 };
@@ -95,6 +99,7 @@ interface ActionItem {
   badge?: number;
   category: string;
   description?: string;
+  permission?: string;
 }
 
 interface StatItem {
@@ -113,6 +118,17 @@ interface StatItem {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CONTAINER_PADDING = 20;
 const isWeb = Platform.OS === 'web';
+const isAndroid = Platform.OS === 'android';
+const AnimatedFlatList = Animated.FlatList as any; // ⚡PERF: reanimated-scrollable FlatList
+
+/** Skip layout/enter animations on Android — they tank scroll FPS on heavy screens. */
+const enterAnim = (delay = 0) =>
+  isAndroid ? undefined : FadeInDown.delay(delay).springify().damping(15);
+
+const ANDROID_SCROLL_PROPS = isAndroid
+  ? ({ removeClippedSubviews: true, overScrollMode: 'never' as const, nestedScrollEnabled: true })
+  : {};
+
 const CARD_MARGIN = 14;
 const MAX_CONTENT_WIDTH = 1000;
 const ACTUAL_WIDTH = Math.min(SCREEN_WIDTH, MAX_CONTENT_WIDTH);
@@ -125,13 +141,23 @@ const GRID_COLS = 3;
 /* PULSE INDICATOR                                                           */
 /* ─────────────────────────────────────────────────────────────────────────── */
 function PulseIndicator({ color = '#10B981' }: { color?: string }) {
-  const op = useSharedValue(0.4);
-  const sc = useSharedValue(0.8);
+  const op = useSharedValue(isAndroid ? 1 : 0.4);
+  const sc = useSharedValue(isAndroid ? 1 : 0.8);
   React.useEffect(() => {
+    if (isAndroid) return;
     op.value = withRepeat(withSequence(withTiming(1, { duration: 800 }), withTiming(0.4, { duration: 1200 })), -1, true);
     sc.value = withRepeat(withSequence(withTiming(1.3, { duration: 800 }), withTiming(0.8, { duration: 1200 })), -1, true);
-  }, []);
+  }, [op, sc]);
   const animStyle = useAnimatedStyle(() => ({ opacity: op.value, transform: [{ scale: sc.value }] }));
+
+  if (isAndroid) {
+    return (
+      <View style={{ width: 14, height: 14, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ width: 7, height: 7, backgroundColor: color, borderRadius: 3.5 }} />
+      </View>
+    );
+  }
+
   return (
     <View style={{ width: 14, height: 14, alignItems: 'center', justifyContent: 'center' }}>
       <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: 7 }, animStyle]} />
@@ -158,7 +184,8 @@ const SummaryMiniCard = React.memo(({ label, value, icon, color, isDark, delay }
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(delay).springify().damping(15)}
+      entering={enterAnim(delay)}
+      renderToHardwareTextureAndroid={isAndroid}
       style={{
         flex: isCompact ? 0 : 1,
         flexBasis: isCompact ? '47%' : undefined,
@@ -172,7 +199,7 @@ const SummaryMiniCard = React.memo(({ label, value, icon, color, isDark, delay }
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: isDark ? 0.15 : 0.03,
         shadowRadius: 8,
-        elevation: 2,
+        elevation: isAndroid ? 1 : 2,
         flexDirection: 'row',
         alignItems: 'center',
         gap: isCompact ? 10 : 12
@@ -218,14 +245,18 @@ const DashboardCard = React.memo(
           onPressOut={() => { scale.value = withSpring(1, { damping: 13, stiffness: 250 }); }}
           onPress={onPress}
         >
-          <Animated.View style={[cardAnim, {
+          <Animated.View renderToHardwareTextureAndroid={isAndroid} style={[cardAnim, {
             borderRadius: isWideScreen ? 24 : 22,
             overflow: 'hidden',
-            shadowColor: g0,
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: 0.40,
-            shadowRadius: 24,
-            elevation: 14,
+            ...(isAndroid
+              ? { elevation: 3 }
+              : {
+                  shadowColor: g0,
+                  shadowOffset: { width: 0, height: 12 },
+                  shadowOpacity: 0.40,
+                  shadowRadius: 24,
+                  elevation: 14,
+                }),
           }]}>
             <LinearGradient
               colors={[g0, g1]}
@@ -341,16 +372,18 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.91, { damping: 12, stiffness: 400 });
-    iconScale.value = withSequence(
-      withSpring(1.22, { damping: 6, stiffness: 460 }),
-      withSpring(1.0, { damping: 10, stiffness: 320 }),
-    );
-    iconRotate.value = withSequence(
-      withTiming(-6, { duration: 80 }),
-      withTiming(6, { duration: 80 }),
-      withTiming(0, { duration: 100 }),
-    );
+    scale.value = withSpring(isAndroid ? 0.96 : 0.91, { damping: 12, stiffness: 400 });
+    if (!isAndroid) {
+      iconScale.value = withSequence(
+        withSpring(1.22, { damping: 6, stiffness: 460 }),
+        withSpring(1.0, { damping: 10, stiffness: 320 }),
+      );
+      iconRotate.value = withSequence(
+        withTiming(-6, { duration: 80 }),
+        withTiming(6, { duration: 80 }),
+        withTiming(0, { duration: 100 }),
+      );
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
   const handlePressOut = () => {
@@ -364,7 +397,7 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
 
   return (
     <Animated.View
-      entering={FadeInDown.delay(index * 45).springify().mass(0.5).damping(13)}
+      entering={enterAnim(index * 45)}
       style={[styles.gridWrapper, { width: cardWidth }]}
     >
       <TouchableOpacity
@@ -373,14 +406,16 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
         onPressOut={handlePressOut}
         onPress={() => router.push(item.route as any)}
       >
-        <Animated.View style={[cardAnimStyle, {
-          shadowColor: item.gradient?.[1] ?? t.shadow,
-          shadowOffset: { width: 0, height: 14 },
-          shadowOpacity: isDark ? 0.36 : 0.24,
-          shadowRadius: 24,
-          elevation: 12,
-        }]}>
-          <View style={[styles.gridItem, { borderRadius: radius }]}>
+        <Animated.View style={[cardAnimStyle, isAndroid
+          ? { elevation: 2 }
+          : {
+              shadowColor: item.gradient?.[1] ?? t.shadow,
+              shadowOffset: { width: 0, height: 14 },
+              shadowOpacity: isDark ? 0.36 : 0.24,
+              shadowRadius: 24,
+              elevation: 12,
+            }]}>
+          <View renderToHardwareTextureAndroid={isAndroid} style={[styles.gridItem, { borderRadius: radius }]}>
 
             <LinearGradient
               colors={[g0, g1]}
@@ -389,25 +424,29 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
               style={StyleSheet.absoluteFill}
             />
 
-            <LinearGradient
-              colors={[t.wash, 'rgba(255,255,255,0.04)', 'transparent']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0.7 }}
-              style={{
-                position: 'absolute',
-                top: 0, left: 0, right: 0,
-                height: '58%',
-                borderTopLeftRadius: radius,
-                borderTopRightRadius: radius,
-              }}
-            />
+            {!isAndroid && (
+              <>
+                <LinearGradient
+                  colors={[t.wash, 'rgba(255,255,255,0.04)', 'transparent']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0.7 }}
+                  style={{
+                    position: 'absolute',
+                    top: 0, left: 0, right: 0,
+                    height: '58%',
+                    borderTopLeftRadius: radius,
+                    borderTopRightRadius: radius,
+                  }}
+                />
 
-            <LinearGradient
-              colors={['transparent', 'rgba(15,23,42,0.32)']}
-              start={{ x: 0.5, y: 0 }}
-              end={{ x: 0.5, y: 1 }}
-              style={StyleSheet.absoluteFill}
-            />
+                <LinearGradient
+                  colors={['transparent', 'rgba(15,23,42,0.32)']}
+                  start={{ x: 0.5, y: 0 }}
+                  end={{ x: 0.5, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+              </>
+            )}
 
             <View style={{
               ...StyleSheet.absoluteFillObject,
@@ -416,35 +455,39 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
               borderColor: t.rim,
             }} />
 
-            <LinearGradient
-              colors={[t.accent, 'rgba(255,255,255,0.08)']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 0, y: 1 }}
-              style={{
-                position: 'absolute',
-                top: 12,
-                bottom: 12,
-                left: 0,
-                width: 4,
-                borderTopRightRadius: 99,
-                borderBottomRightRadius: 99,
-                opacity: 0.95,
-              }}
-            />
+            {!isAndroid && (
+              <>
+                <LinearGradient
+                  colors={[t.accent, 'rgba(255,255,255,0.08)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={{
+                    position: 'absolute',
+                    top: 12,
+                    bottom: 12,
+                    left: 0,
+                    width: 4,
+                    borderTopRightRadius: 99,
+                    borderBottomRightRadius: 99,
+                    opacity: 0.95,
+                  }}
+                />
 
-            <View style={{
-              position: 'absolute',
-              width: orbSize, height: orbSize, borderRadius: orbSize / 2,
-              backgroundColor: t.orb,
-              bottom: -(orbSize * 0.46), right: -(orbSize * 0.42),
-            }} />
-            <View style={{
-              position: 'absolute',
-              width: orbSize * 0.48, height: orbSize * 0.48,
-              borderRadius: (orbSize * 0.48) / 2,
-              backgroundColor: 'rgba(255,255,255,0.08)',
-              top: -(orbSize * 0.20), right: -(orbSize * 0.18),
-            }} />
+                <View style={{
+                  position: 'absolute',
+                  width: orbSize, height: orbSize, borderRadius: orbSize / 2,
+                  backgroundColor: t.orb,
+                  bottom: -(orbSize * 0.46), right: -(orbSize * 0.42),
+                }} />
+                <View style={{
+                  position: 'absolute',
+                  width: orbSize * 0.48, height: orbSize * 0.48,
+                  borderRadius: (orbSize * 0.48) / 2,
+                  backgroundColor: 'rgba(255,255,255,0.08)',
+                  top: -(orbSize * 0.20), right: -(orbSize * 0.18),
+                }} />
+              </>
+            )}
 
             {item.badge !== undefined && item.badge > 0 && (
               <View style={[styles.gridBadge, { backgroundColor: t.badge, shadowColor: t.badge }]}>
@@ -485,18 +528,22 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
                 alignItems: 'center',
                 justifyContent: 'center',
                 overflow: 'hidden',
-                shadowColor: 'rgba(0,0,0,0.5)',
-                shadowOffset: { width: 0, height: 5 },
-                shadowOpacity: 0.55,
-                shadowRadius: 10,
-                elevation: 6,
+                ...(isAndroid ? { elevation: 0 } : {
+                  shadowColor: 'rgba(0,0,0,0.5)',
+                  shadowOffset: { width: 0, height: 5 },
+                  shadowOpacity: 0.55,
+                  shadowRadius: 10,
+                  elevation: 6,
+                }),
               }]}>
-                <LinearGradient
-                  colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.10)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
+                {!isAndroid && (
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.10)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                )}
                 <Ionicons
                   name={item.icon}
                   size={isWideScreen ? 24 : 20}
@@ -573,29 +620,55 @@ interface MetricCardProps {
   width: number;
   isDark: boolean;
   isWideScreen: boolean;
+  /** Small muted line under the value — e.g. "No data yet" / "Not tracked". */
+  subLabel?: string;
+  /** Render a pulsing skeleton instead of a value (first load). */
+  loading?: boolean;
+  /** Render a retry affordance instead of a value (fetch failed). */
+  error?: boolean;
+  /** Called when the retry affordance is pressed. */
+  onRetry?: () => void;
 }
 
-const MetricCard = React.memo(({ iconName, iconColor, iconBg, value, label, width, isDark, isWideScreen }: MetricCardProps) => {
+const MetricCard = React.memo(({
+  iconName, iconColor, iconBg, value, label, width, isDark, isWideScreen,
+  subLabel, loading = false, error = false, onRetry,
+}: MetricCardProps) => {
   const scale = useSharedValue(1);
   const anim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  // Gentle pulse for the skeleton placeholder while loading.
+  const pulse = useSharedValue(0.4);
+  useEffect(() => {
+    if (loading) {
+      pulse.value = withRepeat(withTiming(0.85, { duration: 700 }), -1, true);
+    } else {
+      pulse.value = 0.4;
+    }
+  }, [loading, pulse]);
+  const skeletonAnim = useAnimatedStyle(() => ({ opacity: pulse.value }));
+
+  const skeletonColor = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(15,23,42,0.09)';
 
   return (
     <Pressable
       onPressIn={() => { scale.value = withSpring(0.97, { damping: 16, stiffness: 340 }); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
       onPressOut={() => { scale.value = withSpring(1, { damping: 14, stiffness: 260 }); }}
     >
-      <Animated.View style={[anim, {
+      <Animated.View renderToHardwareTextureAndroid={isAndroid} style={[anim, {
         width,
         backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
         borderRadius: isWideScreen ? 20 : 18,
         padding: isWideScreen ? 18 : 14,
         borderWidth: 1,
         borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: isDark ? 0.2 : 0.05,
-        shadowRadius: 12,
-        elevation: 4,
+        ...(isAndroid ? { elevation: 1 } : {
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.2 : 0.05,
+          shadowRadius: 12,
+          elevation: 4,
+        }),
         overflow: 'hidden',
       }]}>
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: iconColor }} />
@@ -623,11 +696,44 @@ const MetricCard = React.memo(({ iconName, iconColor, iconBg, value, label, widt
           textTransform: 'uppercase', marginBottom: isWideScreen ? 6 : 4,
         }}>{label}</Text>
 
-        <Text numberOfLines={1} style={{
-          fontSize: isWideScreen ? 22 : 17,
-          fontWeight: '900', letterSpacing: -0.5,
-          color: iconColor,
-        }}>{value}</Text>
+        {loading ? (
+          // Skeleton — never show "0" while the first fetch is in flight.
+          <Animated.View style={[skeletonAnim, {
+            width: '62%', height: isWideScreen ? 22 : 17,
+            borderRadius: 6, backgroundColor: skeletonColor,
+          }]} />
+        ) : error ? (
+          // Retry affordance — no silent zero on failure.
+          <Pressable
+            onPress={onRetry}
+            hitSlop={8}
+            style={{ flexDirection: 'row', alignItems: 'center' }}
+            accessibilityRole="button"
+            accessibilityLabel={`Retry loading ${label}`}
+          >
+            <Ionicons name="refresh" size={isWideScreen ? 18 : 15} color={iconColor} />
+            <Text style={{
+              marginLeft: 5,
+              fontSize: isWideScreen ? 13 : 11, fontWeight: '800',
+              color: iconColor,
+            }}>Retry</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Text numberOfLines={1} style={{
+              fontSize: isWideScreen ? 22 : 17,
+              fontWeight: '900', letterSpacing: -0.5,
+              color: iconColor,
+            }}>{value}</Text>
+            {subLabel ? (
+              <Text numberOfLines={1} style={{
+                marginTop: 2,
+                fontSize: isWideScreen ? 10 : 9, fontWeight: '600',
+                color: isDark ? 'rgba(255,255,255,0.38)' : 'rgba(15,23,42,0.38)',
+              }}>{subLabel}</Text>
+            ) : null}
+          </>
+        )}
       </Animated.View>
     </Pressable>
   );
@@ -641,7 +747,7 @@ function SectionHeader({ label, delay, styles, isDark, accentColor }: {
 }) {
   const color = accentColor ?? '#3B82F6';
   return (
-    <Animated.View entering={FadeInDown.delay(delay).springify().damping(16)} style={styles.sectionHeaderPill}>
+    <Animated.View entering={enterAnim(delay)} style={styles.sectionHeaderPill}>
       <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
         <View style={{ width: 4, height: 20, borderRadius: 2, backgroundColor: color, marginRight: 12, flexShrink: 0 }} />
         <Text style={[styles.sectionLabel, { color: isDark ? 'rgba(255,255,255,0.88)' : '#0F172A', letterSpacing: 2 }]}>
@@ -672,7 +778,7 @@ function TierLegend({ isDark }: { isDark: boolean }) {
   ];
   return (
     <Animated.View
-      entering={FadeInDown.delay(300).springify()}
+      entering={enterAnim(300)}
       style={{
         flexDirection: 'row', flexWrap: 'wrap', gap: 8,
         marginTop: -4,
@@ -721,7 +827,8 @@ function PremiumProgressCard({ title, pct, gradientColors, pctColor, isDark, isW
   const safeWidth = `${Math.min(Math.max(pct, 0), 100)}%` as any;
   return (
     <Animated.View
-      entering={FadeInDown.delay(delay).springify()}
+      entering={enterAnim(delay)}
+      renderToHardwareTextureAndroid={isAndroid}
       style={{
         backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
         borderRadius: isWideScreen ? 24 : 20,
@@ -729,11 +836,13 @@ function PremiumProgressCard({ title, pct, gradientColors, pctColor, isDark, isW
         borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
         padding: isWideScreen ? 24 : 18,
         marginBottom: isWideScreen ? 24 : 16,
-        shadowColor: gradientColors[0],
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: isDark ? 0.18 : 0.07,
-        shadowRadius: 16,
-        elevation: 5,
+        ...(isAndroid ? { elevation: 2 } : {
+          shadowColor: gradientColors[0],
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: isDark ? 0.18 : 0.07,
+          shadowRadius: 16,
+          elevation: 5,
+        }),
         overflow: 'hidden',
       }}
     >
@@ -770,7 +879,8 @@ function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, 
 }) {
   return (
     <Animated.View
-      entering={FadeInDown.delay(delay).springify()}
+      entering={enterAnim(delay)}
+      renderToHardwareTextureAndroid={isAndroid}
       style={{
         marginBottom: isWideScreen ? 28 : 20,
         backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
@@ -778,11 +888,13 @@ function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, 
         borderWidth: 1,
         borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
         overflow: 'hidden',
-        shadowColor: accentColor,
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: isDark ? 0.15 : 0.07,
-        shadowRadius: 20,
-        elevation: 6,
+        ...(isAndroid ? { elevation: 2 } : {
+          shadowColor: accentColor,
+          shadowOffset: { width: 0, height: 8 },
+          shadowOpacity: isDark ? 0.15 : 0.07,
+          shadowRadius: 20,
+          elevation: 6,
+        }),
       }}
     >
       <View style={{ height: 3, backgroundColor: accentColor }} />
@@ -821,9 +933,10 @@ function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, 
 /* ─────────────────────────────────────────────────────────────────────────── */
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const { hasPermission } = usePermissions();
   const router = useRouter();
   const { t } = useTranslation();
-  const { data: dashboardData, loading: dashboardLoading } = usePersistedSWR<AdminDashboardStats>({
+  const { data: dashboardData, loading: dashboardLoading, refetch: refetchDashboard } = usePersistedSWR<AdminDashboardStats>({
     cacheKey: 'admin-dashboard-stats',
     userId: user?.userId,
     ttlMs: 60_000,
@@ -850,6 +963,8 @@ export default function AdminDashboard() {
     : windowWidth - CONTAINER_PADDING * 2;
   const headerOffset = insets.top + (isWideScreen ? 64 : 58);
   const mobileHeaderOffset = 74;
+  /** Header overlays scroll content on iOS only (scrollY passed); Android header is in-flow — no top inset. */
+  const mobileListPaddingTop = isAndroid ? 0 : mobileHeaderOffset;
 
   const webGap = isWideScreen ? 48 : 32;
   const leftColWidth = isWideScreen ? Math.floor((contentWidth - webGap) * 0.4) : contentWidth;
@@ -860,8 +975,26 @@ export default function AdminDashboard() {
   const metricCardWidth = Math.floor(((isWideScreen ? rightColWidth : contentWidth) - metricGap * 2) / 3) - 1;
   const actionGridGap = isWideScreen ? 12 : GRID_GAP;
   const actionCardWidth = Math.floor((leftColWidth - actionGridGap * 2) / 3) - 1;
+  const webHeaderCardWidth = Math.min(610, contentWidth * 0.68);
 
-  const { financials, attendance, academics, staff, insights } = useAnalytics();
+  const {
+    financials, attendance, academics, staff, insights, refreshData,
+    loading: analyticsLoading, error: analyticsError,
+  } = useAnalytics();
+
+  // Pull-to-refresh / manual refresh: force both data sources to fetch the
+  // latest values (dashboard stats via SWR + analytics via useAnalytics).
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setManualRefreshing(true);
+    try {
+      await Promise.all([refetchDashboard(), refreshData()]);
+    } catch {
+      // errors are surfaced by each hook's own error state
+    } finally {
+      setManualRefreshing(false);
+    }
+  }, [refetchDashboard, refreshData]);
 
   useEffect(() => { const timer = setInterval(() => setCurrentTime(new Date()), 60000); return () => clearInterval(timer); }, []);
 
@@ -927,7 +1060,7 @@ export default function AdminDashboard() {
     },
   ], [t, loading, dashboardData, financials, staff]);
 
-  const quickActions: ActionItem[] = [
+  const quickActions: ActionItem[] = useMemo(() => [
     { title: t('admin_dashboard_v2.academic_structure', 'Academics'),     icon: 'school-outline',              route: '/admin/academics',                    tier: 'PRIMARY',  gradient: ['#172554', '#2563EB'], category: 'Academic',  badge: dashboardData?.diaryEntriesToday ?? 0 },
     { title: 'Class Diary',                                                                icon: 'book-outline',                route: '/admin/diary/viewer',                 tier: 'PRIMARY',  gradient: ['#0F3A5F', '#0284C7'], category: 'Academic' },
     { title: t('admin_dashboard_v2.timetable_manager', 'Timetable'),      icon: 'calendar-outline',            route: '/admin/timetable',                    tier: 'PRIMARY',  gradient: ['#312E81', '#4F46E5'], category: 'Academic' },
@@ -937,6 +1070,7 @@ export default function AdminDashboard() {
     { title: t('admin_dashboard_v2.expense_tracker', 'Expenses'),         icon: 'receipt-outline',              route: '/admin/expenses',                    tier: 'FINANCE',  gradient: ['#14532D', '#22C55E'], category: 'Finance' },
     { title: t('admin_dashboard_v2.fee_structure', 'Fee Setup'),          icon: 'wallet-outline',              route: '/admin/fees/set-class-fee',         tier: 'FINANCE',  gradient: ['#064E3B', '#14B8A6'], category: 'Finance' },
     { title: 'Fee Adjustments',                                                            icon: 'cut-outline',                 route: '/admin/fees/adjustments',            tier: 'FINANCE',  gradient: ['#365314', '#84CC16'], category: 'Finance' },
+    { title: 'Partial Fee Collection',                                                   icon: 'pie-chart-outline',           route: '/admin/fee-approvals',               tier: 'FINANCE',  gradient: ['#92400E', '#F59E0B'], category: 'Finance' },
     { title: 'UPI Settings',                                                               icon: 'qr-code-outline',             route: '/admin/upi-settings',                tier: 'FINANCE',  gradient: ['#0F766E', '#06B6D4'], category: 'Finance' },
     { title: 'Dashboard Visibility',                                                       icon: 'eye-outline',                 route: '/admin/fees/visibility',             tier: 'FINANCE',  gradient: ['#166534', '#65A30D'], category: 'Finance' },
     { title: 'Payroll',                                                                    icon: 'card-outline',                route: '/admin/payroll',                     tier: 'FINANCE',  gradient: ['#312E81', '#6366F1'], category: 'Finance' },
@@ -947,12 +1081,18 @@ export default function AdminDashboard() {
     { title: t('admin_dashboard_v2.transport', 'Transport'),              icon: 'bus-outline',                 route: '/admin/transport',                   tier: 'OPS',      gradient: ['#92400E', '#EAB308'], category: 'Ops' },
     { title: t('admin_dashboard_v2.leaves', 'Leaves'),                    icon: 'document-text-outline',       route: '/admin/leaves',                      tier: 'OPS',      gradient: ['#9A3412', '#FB923C'], category: 'HR' },
     { title: t('admin_dashboard_v2.manage_staff', 'Staff'),               icon: 'people-outline',              route: '/admin/manage-staff',                tier: 'OPS',      gradient: ['#7C3AED', '#EC4899'], category: 'HR' },
+    { title: t('admin_dashboard_v2.add_staff', 'Add Staff'),              icon: 'person-add-outline',          route: '/admin/addStaff',                    tier: 'OPS',      gradient: ['#6D28D9', '#8B5CF6'], category: 'HR', permission: 'staff.create' },
     { title: t('admin_dashboard_v2.add_accounts_staff', 'Accounts Portal'), icon: 'wallet-outline',              route: '/admin/add-accounts-staff',          tier: 'OPS',      gradient: ['#BE123C', '#F97316'], category: 'HR' },
     { title: 'Access Requests',                                                            icon: 'key-outline',                 route: '/admin/access-requests',             tier: 'ADMIN',    gradient: ['#881337', '#E11D48'], category: 'Security', badge: pendingRequestsCount },
-  ];
+  ], [t, dashboardData?.diaryEntriesToday, pendingRequestsCount]);
+
+  const visibleQuickActions = useMemo(
+    () => quickActions.filter((item) => !item.permission || hasPermission(item.permission)),
+    [quickActions, hasPermission],
+  );
 
   const sidebarItems = useMemo<WebSidebarActionItem[]>(
-    () => quickActions.map((item) => ({
+    () => visibleQuickActions.map((item) => ({
       title: item.title,
       icon: item.icon,
       route: item.route,
@@ -960,20 +1100,73 @@ export default function AdminDashboard() {
       badge: item.badge,
       category: item.category,
     })),
-    [quickActions],
+    [visibleQuickActions],
+  );
+
+  /** ⚡PERF: chunk quick actions into rows so Android only mounts ~2 rows at a time */
+  const actionRows = useMemo(() => {
+    const rows: ActionItem[][] = [];
+    for (let i = 0; i < visibleQuickActions.length; i += GRID_COLS) {
+      rows.push(visibleQuickActions.slice(i, i + GRID_COLS));
+    }
+    return rows;
+  }, [visibleQuickActions]);
+
+  const financialTrendData = useMemo(
+    () => (financials?.trend?.length ? financials.trend.map(t => ({ ...t, value: Number(t.value) })) : [{ value: 0 }]),
+    [financials?.trend],
+  );
+  const attendanceTrendData = useMemo(
+    () => (attendance?.trend?.length ? attendance.trend.map(t => ({ ...t, value: Number(t.value) })) : [{ value: 0 }]),
+    [attendance?.trend],
+  );
+  const academicsTrendData = useMemo(
+    () => (academics?.trend?.length
+      ? academics.trend.map(t => ({ value: Number(t.value), label: t.label, frontColor: '#8B5CF6' }))
+      : [{ value: 0, label: '', frontColor: '#8B5CF6' }]),
+    [academics?.trend],
+  );
+
+  const renderActionRow = useCallback(
+    (row: ActionItem[], rowIndex: number) => (
+      <View
+        style={{
+          flexDirection: 'row',
+          gap: GRID_GAP,
+          marginBottom: rowIndex < actionRows.length - 1 ? GRID_GAP : 26,
+        }}
+      >
+        {row.map((item, colIndex) => (
+          <GridItem
+            key={item.route}
+            item={item}
+            index={rowIndex * GRID_COLS + colIndex}
+            cardWidth={actionCardWidth}
+          />
+        ))}
+        {row.length < GRID_COLS &&
+          Array.from({ length: GRID_COLS - row.length }, (_, i) => (
+            <View key={`pad-${i}`} style={{ width: actionCardWidth }} />
+          ))}
+      </View>
+    ),
+    [actionCardWidth, actionRows.length],
   );
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({ onScroll: (event: any) => { scrollY.value = event.contentOffset.y; } });
-  const greetingAnim = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, 120], [1, 0], Extrapolation.CLAMP),
-    transform: [{ translateY: interpolate(scrollY.value, [0, 120], [0, -22], Extrapolation.CLAMP) }],
-  }));
+  const greetingAnim = useAnimatedStyle(() => {
+    if (isAndroid) return {};
+    return {
+      opacity: interpolate(scrollY.value, [0, 120], [1, 0], Extrapolation.CLAMP),
+      transform: [{ translateY: interpolate(scrollY.value, [0, 120], [0, -22], Extrapolation.CLAMP) }],
+    };
+  });
 
   const carouselRef = React.useRef<FlatList>(null);
   const [activeStatIndex, setActiveStatIndex] = useState(0);
 
-  const matchedNavAction = quickActions.find(
+  const matchedNavAction = visibleQuickActions.find(
     (q) => pathname === q.route || (q.route.length > 1 && pathname.startsWith(`${q.route}/`)),
   );
   const currentHeaderTitle = matchedNavAction?.title ?? t('Dashboard');
@@ -984,357 +1177,391 @@ export default function AdminDashboard() {
     setActiveStatIndex(Math.max(0, Math.min(index, stats.length - 1)));
   };
 
-  /* ─── DASHBOARD BODY ─────────────────────────────────────────────────── */
+  /* ─── RENDER BLOCKS (defined once, reused by web + mobile) ────────────── */
+  const summaryMiniCards = !loading && (
+    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: isWideScreen ? '100%' : '100%' }}>
+      <SummaryMiniCard label="Students" value={dashboardData?.totalStudents ?? 1} icon="people-sharp" color="#2563EB" isDark={isDark} delay={200} />
+      <SummaryMiniCard label="Attendance" value={attendance?.avg_attendance != null ? `${attendance.avg_attendance}%` : '—'} icon="checkmark-circle-sharp" color="#10B981" isDark={isDark} delay={240} />
+      <SummaryMiniCard label="Collected" value={financials?.total_collected ? `₹${(financials.total_collected / 1000).toFixed(1)}K` : '₹0.0K'} icon="wallet-sharp" color="#F59E0B" isDark={isDark} delay={280} />
+      <SummaryMiniCard label="Issues" value={dashboardData?.complaints ?? 0} icon="alert-circle-sharp" color="#EF4444" isDark={isDark} delay={320} />
+    </View>
+  );
+
+  const headerProfileCard = (
+    <AdminHeaderCard
+      compact
+      compactRole
+      displayName={user?.displayName || 'Admin User'}
+      photoUrl={user?.photoUrl}
+      roleLabel={user?.role?.name || 'Admin'}
+      staffCode={user?.staff_code}
+    />
+  );
+
+  const greetingBlock = (
+    <Animated.View style={[styles.greetingBlock, greetingAnim]}>
+      {isWideScreen ? (
+        <>
+          <DashboardHero
+            eyebrow={currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()}
+            greeting={getGreeting()}
+            name={user?.displayName || 'Vijay Kumar Katakam'}
+            subtitle={currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            cardWidth={webHeaderCardWidth}
+            card={headerProfileCard}
+          />
+          {summaryMiniCards && <View style={{ marginTop: 18 }}>{summaryMiniCards}</View>}
+        </>
+      ) : (
+        <>
+          <DashboardHero
+            eyebrow={currentTime.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()}
+            greeting={getGreeting()}
+            name={user?.displayName || 'Vijay Kumar Katakam'}
+            subtitle={currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            stacks
+            card={headerProfileCard}
+          />
+          {summaryMiniCards && <View style={{ marginTop: 24 }}>{summaryMiniCards}</View>}
+        </>
+      )}
+    </Animated.View>
+  );
+
+  const overviewBlock = (
+    <Animated.View entering={enterAnim(240)} style={{ marginBottom: isWideScreen ? 32 : 20 }}>
+      <SectionHeader label={t('dashboard.overview', 'Overview')} delay={220} styles={styles} isDark={isDark} accentColor="#2563EB" />
+      {isWideScreen ? (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 8 }}>
+          {stats.map((item, index) => (
+            <View key={`stat-web-${index}`} style={{ flex: 1, minWidth: 180 }}>
+              <DashboardCard index={index} item={item} onPress={() => router.push(item.route as any)} cardWidth="100%" />
+            </View>
+          ))}
+        </View>
+      ) : (
+        <>
+          <FlatList
+            ref={carouselRef}
+            data={stats}
+            horizontal pagingEnabled={false}
+            snapToInterval={CARD_WIDTH + CARD_MARGIN}
+            snapToAlignment="start"
+            decelerationRate="fast"
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(_, i) => `stat-${i}`}
+            contentContainerStyle={styles.statsContainer}
+            onMomentumScrollEnd={onCarouselMomentumEnd}
+            removeClippedSubviews={isAndroid}
+            initialNumToRender={isAndroid ? 2 : 4}
+            windowSize={isAndroid ? 3 : 5}
+            maxToRenderPerBatch={2}
+            renderItem={({ item, index }) => (
+              <DashboardCard key={`card-${index}`} index={index} item={item} onPress={() => router.push(item.route as any)} />
+            )}
+            getItemLayout={(_, index) => ({ length: CARD_WIDTH + CARD_MARGIN, offset: (CARD_WIDTH + CARD_MARGIN) * index, index })}
+          />
+          <View style={styles.dotTrack}>
+            {stats.map((_, i) => (
+              <TouchableOpacity key={i} onPress={() => { carouselRef.current?.scrollToOffset({ offset: i * (CARD_WIDTH + CARD_MARGIN), animated: true }); setActiveStatIndex(i); Haptics.selectionAsync(); }}>
+                <Animated.View style={[styles.dot, i === activeStatIndex
+                  ? [styles.dotOn, { backgroundColor: isDark ? '#FFFFFF' : '#0F172A', width: 24 }]
+                  : [styles.dotOff, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(15,23,42,0.15)' }]
+                ]} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </>
+      )}
+    </Animated.View>
+  );
+
+  const actionsHeaderBlock = (
+    <>
+      <SectionHeader label={t('dashboard.quick_actions', 'Quick Actions')} delay={310} styles={styles} isDark={isDark} accentColor="#7C3AED" />
+      <TierLegend isDark={isDark} />
+    </>
+  );
+
+  const quickActionsBlock = (
+    <>
+      {actionsHeaderBlock}
+      <View style={styles.grid}>
+        {visibleQuickActions.map((item, index) => (
+          <GridItem key={index} item={item} index={index} cardWidth={actionCardWidth} />
+        ))}
+      </View>
+    </>
+  );
+
+  const statusBlock = (
+    <Animated.View
+      entering={enterAnim(270)}
+      renderToHardwareTextureAndroid={isAndroid}
+      style={{
+        backgroundColor: isDark ? '#141C2E' : '#FFFFFF', borderRadius: 24, borderWidth: 1,
+        borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
+        paddingHorizontal: 24, paddingVertical: 20, marginBottom: isWideScreen ? 32 : 24,
+        ...(isAndroid ? { elevation: 2 } : { shadowColor: '#10B981', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.15 : 0.04, shadowRadius: 20, elevation: 6 }),
+        overflow: 'hidden',
+      }}
+    >
+      {!isAndroid && (
+        <View style={{ position: 'absolute', bottom: -10, left: 0, right: 0, opacity: 0.08 }}>
+          <LineChart data={[{value: 20}, {value: 50}, {value: 30}, {value: 80}, {value: 40}, {value: 90}]} height={60} width={rightColWidth} color="#3B82F6" thickness={3} startFillColor="#3B82F6" endFillColor="transparent" yAxisThickness={0} xAxisThickness={0} hideRules hideDataPoints />
+        </View>
+      )}
+      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: '#10B981' }} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#10B98118', alignItems: 'center', justifyContent: 'center' }}>
+            <PulseIndicator color="#10B981" />
+          </View>
+          <View>
+            <Text style={{ fontSize: 8, fontWeight: '800', letterSpacing: 1.5, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', textTransform: 'uppercase', marginBottom: 2 }}>STATUS</Text>
+            <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A', letterSpacing: -0.2 }}>All Systems Operational</Text>
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: isWideScreen ? 28 : 16 }}>
+          {[
+            { label: 'TOTAL STAFF', value: staff?.total_staff ?? '28', color: '#2563EB' },
+            { label: 'ACTIVE', value: staff?.active_staff ?? '28', color: '#10B981' },
+            { label: 'ALERTS', value: insights.length || '4', color: '#EF4444' },
+          ].map((kpi, i, arr) => (
+            <React.Fragment key={kpi.label}>
+              <View style={{ alignItems: 'center' }}>
+                <Text style={{ fontSize: 9, fontWeight: '800', letterSpacing: 1, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', marginBottom: 4 }}>{kpi.label}</Text>
+                <Text style={{ fontSize: 20, fontWeight: '900', color: kpi.color, letterSpacing: -0.5 }}>{kpi.value}</Text>
+              </View>
+              {i < arr.length - 1 && (<View style={{ width: 1, height: 24, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.10)' }} />)}
+            </React.Fragment>
+          ))}
+        </View>
+      </View>
+    </Animated.View>
+  );
+
+  const finMetricsBlock = (
+    <>
+      <SectionHeader label="Financial Overview" delay={280} styles={styles} isDark={isDark} accentColor="#10B981" />
+      <Animated.View entering={enterAnim(290)}>
+        <View style={styles.metricGrid}>
+          <MetricCard iconName="wallet" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={financials ? `₹${((financials.lifetime_collected ?? financials.total_collected ?? 0) / 1000).toFixed(1)}K` : '₹0.0K'} label="Total Collected" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="today" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={financials ? `₹${((financials.today_collection ?? 0) / 1000).toFixed(1)}K` : '₹0.0K'} label="Today's Collection" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="alert-circle" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={financials ? `₹${(financials.outstanding_dues / 1000).toFixed(1)}K` : '₹6273.0K'} label="Outstanding" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="trending-up" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={financials ? `${financials.collection_efficiency}%` : '0%'} label="Efficiency" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="pricetag" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={financials ? `₹${(financials.discount_given / 1000).toFixed(1)}K` : '₹0.0K'} label="Discounts" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="return-up-back" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={financials ? `₹${(financials.refunds_issued / 1000).toFixed(1)}K` : '₹0.0K'} label="Refunds" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+        </View>
+        <PremiumProgressCard title="Collection Efficiency" pct={financials?.collection_efficiency ?? 0} gradientColors={['#10B981', '#34D399']} pctColor="#10B981" isDark={isDark} isWideScreen={isWideScreen} delay={295} />
+      </Animated.View>
+    </>
+  );
+
+  const revenueChartBlock = (
+    <PremiumChartCard title="Revenue Trend" subtitle="Monthly fee collection" accentColor="#3B82F6" isDark={isDark} isWideScreen={isWideScreen} delay={310}>
+      <LineChart
+        data={financialTrendData}
+        height={isWideScreen ? 200 : 120} width={chartWidth} color="#3B82F6" thickness={2.5}
+        startFillColor="rgba(59,130,246,0.22)" endFillColor="rgba(59,130,246,0.01)"
+        startOpacity={isAndroid ? 0 : 1} endOpacity={0} initialSpacing={12} noOfSections={isAndroid ? 3 : 4}
+        dataPointsColor="#3B82F6" dataPointsRadius={isAndroid ? 0 : 3} hideDataPoints={isAndroid}
+        yAxisThickness={0} xAxisThickness={0}
+        yAxisTextStyle={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)', fontSize: 9 }}
+        xAxisLabelTextStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', fontSize: 9 }}
+        rulesColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
+        curved={!isAndroid} animationDuration={isAndroid ? 0 : 800} isAnimated={!isAndroid}
+      />
+    </PremiumChartCard>
+  );
+
+  // First-load skeletons vs. failed-fetch retry. Once we have any attendance
+  // snapshot (even a cached one), show it and let pull-to-refresh update it.
+  const attLoading = analyticsLoading && !attendance;
+  const attError = !!analyticsError && !attendance;
+  const attState = { loading: attLoading, error: attError, onRetry: refreshData };
+
+  // Null (no data) → "—" + a muted label, NEVER "0%". A true 0 renders as "0".
+  const pctDisplay = (v: number | null | undefined, emptyLabel: string) =>
+    v == null ? { value: '—', subLabel: emptyLabel } : { value: `${v}%`, subLabel: undefined };
+  const countDisplay = (v: number | null | undefined, emptyLabel: string) =>
+    v == null ? { value: '—', subLabel: emptyLabel } : { value: String(v), subLabel: undefined };
+
+  const avgAtt = pctDisplay(attendance?.avg_attendance, 'No data yet');
+  const workingDays = countDisplay(attendance?.total_working_days, 'No data yet');
+  const staffAtt = pctDisplay(attendance?.staff_attendance, 'Not tracked');
+
+  const attMetricsBlock = (
+    <>
+      <SectionHeader label="Attendance Analytics" delay={320} styles={styles} isDark={isDark} accentColor="#10B981" />
+      <Animated.View entering={enterAnim(330)}>
+        <View style={styles.metricGrid}>
+          <MetricCard iconName="people" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={avgAtt.value} subLabel={avgAtt.subLabel} label="Avg Attendance" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} {...attState} />
+          {/* At Risk is a count — 0 is a genuine, good-news value, always shown. */}
+          <MetricCard iconName="warning" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={String(attendance?.chronic_absentees ?? 0)} label="At Risk (<75%)" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} {...attState} />
+          <MetricCard iconName="calendar" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={workingDays.value} subLabel={workingDays.subLabel} label="Working Days" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} {...attState} />
+          <MetricCard iconName="id-card" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={staffAtt.value} subLabel={staffAtt.subLabel} label="Staff Att." width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} {...attState} />
+        </View>
+      </Animated.View>
+    </>
+  );
+
+  const attChartBlock = (
+    <PremiumChartCard title="Attendance Trend" subtitle="Daily attendance percentage" accentColor="#10B981" isDark={isDark} isWideScreen={isWideScreen} delay={340}>
+      <LineChart
+        data={attendanceTrendData}
+        height={isWideScreen ? 200 : 120} width={chartWidth} color="#10B981" thickness={2.5}
+        startFillColor="rgba(16,185,129,0.22)" endFillColor="rgba(16,185,129,0.01)"
+        startOpacity={isAndroid ? 0 : 1} endOpacity={0} initialSpacing={12} noOfSections={isAndroid ? 3 : 4}
+        dataPointsColor="#10B981" dataPointsRadius={isAndroid ? 0 : 3} hideDataPoints={isAndroid}
+        yAxisThickness={0} xAxisThickness={0}
+        yAxisTextStyle={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)', fontSize: 9 }}
+        xAxisLabelTextStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', fontSize: 9 }}
+        rulesColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
+        curved={!isAndroid} animationDuration={isAndroid ? 0 : 800} isAnimated={!isAndroid}
+      />
+    </PremiumChartCard>
+  );
+
+  const acadMetricsBlock = (
+    <>
+      <SectionHeader label="Academic Performance" delay={360} styles={styles} isDark={isDark} accentColor="#8B5CF6" />
+      <Animated.View entering={enterAnim(370)}>
+        <View style={styles.metricGrid}>
+          <MetricCard iconName="ribbon" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={academics ? `${academics.avg_score}%` : '--'} label="Avg Score" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="checkmark-circle" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={academics ? `${academics.pass_rate}%` : '--'} label="Pass Rate" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="trophy" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={academics?.top_subject ?? '--'} label="Top Subject" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="trending-down" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={academics?.weakest_subject ?? '--'} label="Needs Focus" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="document-text" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={academics ? String(academics.exams_conducted) : '--'} label="Exams" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+        </View>
+        <PremiumProgressCard title="Pass Rate" pct={academics?.pass_rate ?? 0} gradientColors={['#8B5CF6', '#A78BFA']} pctColor="#8B5CF6" isDark={isDark} isWideScreen={isWideScreen} delay={375} />
+      </Animated.View>
+    </>
+  );
+
+  const acadChartBlock = (
+    <PremiumChartCard title="Score Trend" subtitle="Exam average over time" accentColor="#8B5CF6" isDark={isDark} isWideScreen={isWideScreen} delay={380}>
+      <BarChart
+        data={academicsTrendData}
+        height={isWideScreen ? 160 : 100} width={chartWidth} barWidth={20} barBorderRadius={4} noOfSections={4} maxValue={100}
+        yAxisThickness={0} xAxisThickness={0}
+        yAxisTextStyle={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)', fontSize: 9 }}
+        xAxisLabelTextStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', fontSize: 9 }}
+        rulesColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
+        showGradient={!isAndroid} gradientColor="rgba(139,92,246,0.2)"
+        animationDuration={isAndroid ? 0 : 800} isAnimated={!isAndroid}
+      />
+    </PremiumChartCard>
+  );
+
+  const staffMetricsBlock = (
+    <>
+      <SectionHeader label="Staff Overview" delay={400} styles={styles} isDark={isDark} accentColor="#F59E0B" />
+      <Animated.View entering={enterAnim(410)}>
+        <View style={styles.metricGrid}>
+          <MetricCard iconName="people-circle" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={staff ? String(staff.total_staff) : '--'} label="Total Staff" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="moon" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={staff ? String(staff.on_leave_today) : '--'} label="On Leave" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="person-add" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={staff ? String(staff.new_joinings) : '--'} label="New Joins" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+          <MetricCard iconName="calendar" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={staff ? `${staff.avg_staff_attendance}%` : '--'} label="Staff Att." width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
+        </View>
+        <PremiumProgressCard title="Staff Attendance Rate" pct={staff?.avg_staff_attendance ?? 0} gradientColors={['#3B82F6', '#60A5FA']} pctColor="#3B82F6" isDark={isDark} isWideScreen={isWideScreen} delay={415} />
+      </Animated.View>
+    </>
+  );
+
+  const alertsBlock = insights.length > 0 ? (
+    <>
+      <SectionHeader label="Active Alerts" delay={430} styles={styles} isDark={isDark} accentColor="#EF4444" />
+      {insights.slice(0, 3).map((ins, idx) => {
+        const sevColor = ins.severity === 'high' ? '#EF4444' : ins.severity === 'medium' ? '#F59E0B' : '#3B82F6';
+        const sevBg = ins.severity === 'high' ? 'rgba(239,68,68,0.10)' : ins.severity === 'medium' ? 'rgba(245,158,11,0.10)' : 'rgba(59,130,246,0.10)';
+        const sevIcon: IconName = ins.severity === 'high' ? 'alert-circle' : ins.severity === 'medium' ? 'warning' : 'information-circle';
+        return (
+          <Animated.View key={ins.id} entering={enterAnim(440 + idx * 60)}
+            style={{
+              backgroundColor: isDark ? '#141C2E' : '#FFFFFF', borderRadius: isWideScreen ? 20 : 18, borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)', marginBottom: isWideScreen ? 14 : 10, overflow: 'hidden',
+              ...(isAndroid ? { elevation: 1 } : { shadowColor: sevColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.15 : 0.07, shadowRadius: 12, elevation: 4 }),
+              flexDirection: 'row',
+            }}>
+            <View style={{ width: 5, backgroundColor: sevColor, borderTopLeftRadius: isWideScreen ? 20 : 18, borderBottomLeftRadius: isWideScreen ? 20 : 18 }} />
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: isWideScreen ? 16 : 14, paddingHorizontal: isWideScreen ? 16 : 12 }}>
+              <View style={{ width: isWideScreen ? 42 : 36, height: isWideScreen ? 42 : 36, borderRadius: isWideScreen ? 12 : 10, backgroundColor: sevBg, alignItems: 'center', justifyContent: 'center', marginRight: isWideScreen ? 14 : 10, flexShrink: 0 }}>
+                <Ionicons name={sevIcon} size={isWideScreen ? 19 : 16} color={sevColor} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                  <View style={{ backgroundColor: sevBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text style={{ fontSize: isWideScreen ? 9 : 8, fontWeight: '800', letterSpacing: 1, color: sevColor }}>{ins.severity.toUpperCase()}</Text>
+                  </View>
+                  <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.05)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text style={{ fontSize: isWideScreen ? 9 : 8, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)', textTransform: 'uppercase' }}>{ins.category}</Text>
+                  </View>
+                </View>
+                <Text style={{ fontSize: isWideScreen ? 14 : 12, fontWeight: '600', color: isDark ? '#FFFFFF' : '#0F172A', lineHeight: isWideScreen ? 20 : 18 }}>{ins.message}</Text>
+              </View>
+            </View>
+          </Animated.View>
+        );
+      })}
+    </>
+  ) : null;
+
+  /* ─── WEB BODY (single ScrollView, unchanged layout) ──────────────────── */
   const dashboardBody = (
     <View>
       <ResponsiveCard maxWidth={isWideScreen ? contentWidth : 1000}>
         <PaymentDueBanner />
-
-        {/* ── HIGH-END LUXURY GREETING BLOCK ── */}
-        <Animated.View style={[styles.greetingBlock, greetingAnim]}>
-          <View style={{ flexDirection: isWideScreen ? 'row' : 'column', justifyContent: 'space-between', alignItems: isWideScreen ? 'center' : 'flex-start', gap: 24 }}>
-            <View>
-              <Animated.View entering={FadeIn.delay(60).duration(600)} style={styles.eyebrowRow}>
-                <Text style={[styles.eyebrowText, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(15,23,42,0.45)' }]}>
-                  {getGreeting()},
-                </Text>
-              </Animated.View>
-              <Animated.View entering={FadeInDown.delay(100).springify().damping(13)}>
-                <Text style={[styles.greetingName, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
-                  {user?.displayName || 'Vijay Kumar Katakam'} 👋
-                </Text>
-              </Animated.View>
-              <Animated.View entering={FadeInDown.delay(160).springify().damping(14)} style={styles.dateRow}>
-                <Text style={[styles.dateText, { color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)' }]}>
-                  {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                </Text>
-                <View style={[styles.dotSep, { backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(15,23,42,0.2)' }]} />
-                <Text style={[styles.timeText, { color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(15,23,42,0.6)' }]}>
-                  {currentTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                </Text>
-              </Animated.View>
-            </View>
-
-            {/* Micro Summary Grid matching Geethanjali UI */}
-            {!loading && (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, width: isWideScreen ? '55%' : '100%' }}>
-                <SummaryMiniCard label="Students" value={dashboardData?.totalStudents ?? 1} icon="people-sharp" color="#2563EB" isDark={isDark} delay={200} />
-                <SummaryMiniCard label="Attendance" value={attendance?.avg_attendance != null ? `${attendance.avg_attendance}%` : '0%'} icon="checkmark-circle-sharp" color="#10B981" isDark={isDark} delay={240} />
-                <SummaryMiniCard label="Collected" value={financials?.total_collected ? `₹${(financials.total_collected / 1000).toFixed(1)}K` : '₹0.0K'} icon="wallet-sharp" color="#F59E0B" isDark={isDark} delay={280} />
-                <SummaryMiniCard label="Issues" value={dashboardData?.complaints ?? 0} icon="alert-circle-sharp" color="#EF4444" isDark={isDark} delay={320} />
-              </View>
-            )}
-          </View>
-        </Animated.View>
-
-        {/* ── MAIN LAYOUT ── */}
+        {greetingBlock}
         <View style={isWideScreen ? styles.webRow : undefined}>
-
-          {/* ── LEFT COLUMN ── */}
           <View style={isWideScreen ? { width: leftColWidth } : undefined}>
-
-            {/* ── HERO STAT CARDS ── */}
-            <Animated.View entering={FadeInDown.delay(240).springify()} style={{ marginBottom: isWideScreen ? 32 : 20 }}>
-              <SectionHeader label={t('dashboard.overview', 'Overview')} delay={220} styles={styles} isDark={isDark} accentColor="#2563EB" />
-              {isWideScreen ? (
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginBottom: 8 }}>
-                  {stats.map((item, index) => (
-                    <View key={`stat-web-${index}`} style={{ flex: 1, minWidth: 180 }}>
-                      <DashboardCard index={index} item={item} onPress={() => router.push(item.route as any)} cardWidth="100%" />
-                    </View>
-                  ))}
-                </View>
-              ) : (
-                <>
-                  <FlatList
-                    ref={carouselRef}
-                    data={stats}
-                    horizontal pagingEnabled={false}
-                    snapToInterval={CARD_WIDTH + CARD_MARGIN}
-                    snapToAlignment="start"
-                    decelerationRate="fast"
-                    showsHorizontalScrollIndicator={false}
-                    keyExtractor={(_, i) => `stat-${i}`}
-                    contentContainerStyle={styles.statsContainer}
-                    onMomentumScrollEnd={onCarouselMomentumEnd}
-                    renderItem={({ item, index }) => (
-                      <DashboardCard key={`card-${index}`} index={index} item={item} onPress={() => router.push(item.route as any)} />
-                    )}
-                    getItemLayout={(_, index) => ({ length: CARD_WIDTH + CARD_MARGIN, offset: (CARD_WIDTH + CARD_MARGIN) * index, index })}
-                  />
-                  <View style={styles.dotTrack}>
-                    {stats.map((_, i) => (
-                      <TouchableOpacity key={i} onPress={() => { carouselRef.current?.scrollToOffset({ offset: i * (CARD_WIDTH + CARD_MARGIN), animated: true }); setActiveStatIndex(i); Haptics.selectionAsync(); }}>
-                        <Animated.View style={[styles.dot, i === activeStatIndex
-                          ? [styles.dotOn, { backgroundColor: isDark ? '#FFFFFF' : '#0F172A', width: 24 }]
-                          : [styles.dotOff, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(15,23,42,0.15)' }]
-                        ]} />
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </>
-              )}
-            </Animated.View>
-
-            {/* ── QUICK ACTIONS — [GRID RENDERING PRESERVED EXCLUSIVELY] ── */}
-            <SectionHeader label={t('dashboard.quick_actions', 'Quick Actions')} delay={310} styles={styles} isDark={isDark} accentColor="#7C3AED" />
-            <TierLegend isDark={isDark} />
-            <View style={styles.grid}>
-              {quickActions.map((item, index) => (
-                <GridItem key={index} item={item} index={index} cardWidth={actionCardWidth} />
-              ))}
-            </View>
-
+            {overviewBlock}
+            {quickActionsBlock}
           </View>
-
-          {/* ── RIGHT COLUMN ── */}
           <View style={isWideScreen ? { width: rightColWidth } : undefined}>
-
-            {/* ══ ULTRA-LUXURY GEETHANJALI STYLE SYSTEM STATUS BAR ══ */}
-            <Animated.View
-              entering={FadeInDown.delay(270).springify()}
-              style={{
-                backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-                borderRadius: 24,
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-                paddingHorizontal: 24,
-                paddingVertical: 20,
-                marginBottom: isWideScreen ? 32 : 24,
-                shadowColor: '#10B981',
-                shadowOffset: { width: 0, height: 10 },
-                shadowOpacity: isDark ? 0.15 : 0.04,
-                shadowRadius: 20,
-                elevation: 6,
-                overflow: 'hidden',
-              }}
-            >
-              {/* Soft background waveform vector simulator */}
-              <View style={{ position: 'absolute', bottom: -10, left: 0, right: 0, opacity: 0.08 }}>
-                <LineChart
-                  data={[{value: 20}, {value: 50}, {value: 30}, {value: 80}, {value: 40}, {value: 90}]}
-                  height={60} width={rightColWidth} color="#3B82F6" thickness={3}
-                  startFillColor="#3B82F6" endFillColor="transparent"
-                  yAxisThickness={0} xAxisThickness={0} hideRules hideDataPoints
-                />
-              </View>
-
-              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: '#10B981' }} />
-
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                  <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#10B98118', alignItems: 'center', justifyContent: 'center' }}>
-                    <PulseIndicator color="#10B981" />
-                  </View>
-                  <View>
-                    <Text style={{ fontSize: 8, fontWeight: '800', letterSpacing: 1.5, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', textTransform: 'uppercase', marginBottom: 2 }}>STATUS</Text>
-                    <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A', letterSpacing: -0.2 }}>All Systems Operational</Text>
-                  </View>
-                </View>
-
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: isWideScreen ? 28 : 16 }}>
-                  {[
-                    { label: 'TOTAL STAFF', value: staff?.total_staff ?? '28', color: '#2563EB' },
-                    { label: 'ACTIVE', value: staff?.active_staff ?? '28', color: '#10B981' },
-                    { label: 'ALERTS', value: insights.length || '4', color: '#EF4444' },
-                  ].map((kpi, i, arr) => (
-                    <React.Fragment key={kpi.label}>
-                      <View style={{ alignItems: 'center' }}>
-                        <Text style={{ fontSize: 9, fontWeight: '800', letterSpacing: 1, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', marginBottom: 4 }}>{kpi.label}</Text>
-                        <Text style={{ fontSize: 20, fontWeight: '900', color: kpi.color, letterSpacing: -0.5 }}>{kpi.value}</Text>
-                      </View>
-                      {i < arr.length - 1 && (
-                        <View style={{ width: 1, height: 24, backgroundColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(15,23,42,0.10)' }} />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </View>
-              </View>
-            </Animated.View>
-
-            {/* ══ FINANCIAL OVERVIEW ══ */}
-            <SectionHeader label="Financial Overview" delay={280} styles={styles} isDark={isDark} accentColor="#10B981" />
-            <Animated.View entering={FadeInDown.delay(290).springify()}>
-              <View style={styles.metricGrid}>
-                <MetricCard iconName="wallet" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={financials ? `₹${(financials.total_collected / 1000).toFixed(1)}K` : '₹0.0K'} label="Collected" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="alert-circle" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={financials ? `₹${(financials.outstanding_dues / 1000).toFixed(1)}K` : '₹6273.0K'} label="Outstanding" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="trending-up" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={financials ? `${financials.collection_efficiency}%` : '0%'} label="Efficiency" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="receipt" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={financials ? `₹${(financials.total_invoiced / 1000).toFixed(1)}K` : '₹6273.0K'} label="Invoiced" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="pricetag" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={financials ? `₹${(financials.discount_given / 1000).toFixed(1)}K` : '₹0.0K'} label="Discounts" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="return-up-back" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={financials ? `₹${(financials.refunds_issued / 1000).toFixed(1)}K` : '₹0.0K'} label="Refunds" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-              </View>
-
-              <PremiumProgressCard
-                title="Collection Efficiency"
-                pct={financials?.collection_efficiency ?? 0}
-                gradientColors={['#10B981', '#34D399']}
-                pctColor="#10B981"
-                isDark={isDark} isWideScreen={isWideScreen} delay={295}
-              />
-            </Animated.View>
-
-            {/* ── REVENUE TREND CHART ── */}
-            <PremiumChartCard title="Revenue Trend" subtitle="Monthly fee collection" accentColor="#3B82F6" isDark={isDark} isWideScreen={isWideScreen} delay={310}>
-              <LineChart
-                data={(financials?.trend?.length ? financials.trend.map(t => ({ ...t, value: Number(t.value) })) : [{ value: 0 }])}
-                height={isWideScreen ? 200 : 120} width={chartWidth}
-                color="#3B82F6" thickness={2.5}
-                startFillColor="rgba(59,130,246,0.22)" endFillColor="rgba(59,130,246,0.01)"
-                startOpacity={1} endOpacity={0} initialSpacing={12} noOfSections={4}
-                dataPointsColor="#3B82F6" dataPointsRadius={3}
-                yAxisThickness={0} xAxisThickness={0}
-                yAxisTextStyle={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)', fontSize: 9 }}
-                xAxisLabelTextStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', fontSize: 9 }}
-                rulesColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
-                curved animationDuration={800} isAnimated
-              />
-            </PremiumChartCard>
-
-            {/* ══ ATTENDANCE ANALYTICS ══ */}
-            <SectionHeader label="Attendance Analytics" delay={320} styles={styles} isDark={isDark} accentColor="#10B981" />
-            <Animated.View entering={FadeInDown.delay(330).springify()}>
-              <View style={styles.metricGrid}>
-                <MetricCard iconName="people" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={attendance ? `${attendance.avg_attendance}%` : '--'} label="Avg Attendance" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="warning" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={attendance ? String(attendance.chronic_absentees) : '--'} label="At Risk (<75%)" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="calendar" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={attendance ? String(attendance.total_working_days) : '--'} label="Working Days" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="id-card" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={attendance ? `${attendance.staff_attendance}%` : '--'} label="Staff Att." width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-              </View>
-            </Animated.View>
-
-            {/* ── ATTENDANCE TREND CHART ── */}
-            <PremiumChartCard title="Attendance Trend" subtitle="Daily attendance percentage" accentColor="#10B981" isDark={isDark} isWideScreen={isWideScreen} delay={340}>
-              <LineChart
-                data={(attendance?.trend?.length ? attendance.trend.map(t => ({ ...t, value: Number(t.value) })) : [{ value: 0 }])}
-                height={isWideScreen ? 200 : 120} width={chartWidth}
-                color="#10B981" thickness={2.5}
-                startFillColor="rgba(16,185,129,0.22)" endFillColor="rgba(16,185,129,0.01)"
-                startOpacity={1} endOpacity={0} initialSpacing={12} noOfSections={4}
-                dataPointsColor="#10B981" dataPointsRadius={3}
-                yAxisThickness={0} xAxisThickness={0}
-                yAxisTextStyle={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)', fontSize: 9 }}
-                xAxisLabelTextStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', fontSize: 9 }}
-                rulesColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
-                curved animationDuration={800} isAnimated
-              />
-            </PremiumChartCard>
-
-            {/* ══ ACADEMIC PERFORMANCE ══ */}
-            <SectionHeader label="Academic Performance" delay={360} styles={styles} isDark={isDark} accentColor="#8B5CF6" />
-            <Animated.View entering={FadeInDown.delay(370).springify()}>
-              <View style={styles.metricGrid}>
-                <MetricCard iconName="ribbon" iconColor="#8B5CF6" iconBg={isDark ? 'rgba(139,92,246,0.15)' : '#F3E8FF'} value={academics ? `${academics.avg_score}%` : '--'} label="Avg Score" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="checkmark-circle" iconColor="#10B981" iconBg={isDark ? 'rgba(16,185,129,0.15)' : '#ECFDF5'} value={academics ? `${academics.pass_rate}%` : '--'} label="Pass Rate" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="trophy" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={academics?.top_subject ?? '--'} label="Top Subject" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="trending-down" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={academics?.weakest_subject ?? '--'} label="Needs Focus" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="document-text" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={academics ? String(academics.exams_conducted) : '--'} label="Exams" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-              </View>
-
-              <PremiumProgressCard
-                title="Pass Rate"
-                pct={academics?.pass_rate ?? 0}
-                gradientColors={['#8B5CF6', '#A78BFA']}
-                pctColor="#8B5CF6"
-                isDark={isDark} isWideScreen={isWideScreen} delay={375}
-              />
-            </Animated.View>
-
-            {/* ── SCORE TREND CHART ── */}
-            <PremiumChartCard title="Score Trend" subtitle="Exam average over time" accentColor="#8B5CF6" isDark={isDark} isWideScreen={isWideScreen} delay={380}>
-              <BarChart
-                data={(academics?.trend?.length ? academics.trend.map(t => ({ value: Number(t.value), label: t.label, frontColor: '#8B5CF6' })) : [{ value: 0, label: '', frontColor: '#8B5CF6' }])}
-                height={isWideScreen ? 160 : 100} width={chartWidth}
-                barWidth={20} barBorderRadius={4} noOfSections={4} maxValue={100}
-                yAxisThickness={0} xAxisThickness={0}
-                yAxisTextStyle={{ color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)', fontSize: 9 }}
-                xAxisLabelTextStyle={{ color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', fontSize: 9 }}
-                rulesColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(15,23,42,0.04)'}
-                showGradient gradientColor="rgba(139,92,246,0.2)"
-                animationDuration={800} isAnimated
-              />
-            </PremiumChartCard>
-
-            {/* ══ STAFF OVERVIEW ══ */}
-            <SectionHeader label="Staff Overview" delay={400} styles={styles} isDark={isDark} accentColor="#F59E0B" />
-            <Animated.View entering={FadeInDown.delay(410).springify()}>
-              <View style={styles.metricGrid}>
-                <MetricCard iconName="people-circle" iconColor="#F59E0B" iconBg={isDark ? 'rgba(245,158,11,0.15)' : '#FFFBEB'} value={staff ? String(staff.total_staff) : '--'} label="Total Staff" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="moon" iconColor="#EF4444" iconBg={isDark ? 'rgba(239,68,68,0.15)' : '#FEF2F2'} value={staff ? String(staff.on_leave_today) : '--'} label="On Leave" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="person-add" iconColor="#06B6D4" iconBg={isDark ? 'rgba(6,182,212,0.15)' : '#ECFEFF'} value={staff ? String(staff.new_joinings) : '--'} label="New Joins" width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-                <MetricCard iconName="calendar" iconColor="#3B82F6" iconBg={isDark ? 'rgba(59,130,246,0.15)' : '#EFF6FF'} value={staff ? `${staff.avg_staff_attendance}%` : '--'} label="Staff Att." width={metricCardWidth} isDark={isDark} isWideScreen={isWideScreen} />
-              </View>
-
-              <PremiumProgressCard
-                title="Staff Attendance Rate"
-                pct={staff?.avg_staff_attendance ?? 0}
-                gradientColors={['#3B82F6', '#60A5FA']}
-                pctColor="#3B82F6"
-                isDark={isDark} isWideScreen={isWideScreen} delay={415}
-              />
-            </Animated.View>
-
-            {/* ══ ACTIVE ALERTS ══ */}
-            {insights.length > 0 && (
-              <>
-                <SectionHeader label="Active Alerts" delay={430} styles={styles} isDark={isDark} accentColor="#EF4444" />
-                {insights.slice(0, 3).map((ins, idx) => {
-                  const sevColor = ins.severity === 'high' ? '#EF4444' : ins.severity === 'medium' ? '#F59E0B' : '#3B82F6';
-                  const sevBg = ins.severity === 'high' ? 'rgba(239,68,68,0.10)' : ins.severity === 'medium' ? 'rgba(245,158,11,0.10)' : 'rgba(59,130,246,0.10)';
-                  const sevIcon: IconName = ins.severity === 'high' ? 'alert-circle' : ins.severity === 'medium' ? 'warning' : 'information-circle';
-                  return (
-                    <Animated.View
-                      key={ins.id}
-                      entering={FadeInDown.delay(440 + idx * 60).springify()}
-                      style={{
-                        backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-                        borderRadius: isWideScreen ? 20 : 18,
-                        borderWidth: 1,
-                        borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-                        marginBottom: isWideScreen ? 14 : 10,
-                        overflow: 'hidden',
-                        shadowColor: sevColor,
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: isDark ? 0.15 : 0.07,
-                        shadowRadius: 12,
-                        elevation: 4,
-                        flexDirection: 'row',
-                      }}
-                    >
-                      <View style={{ width: 5, backgroundColor: sevColor, borderTopLeftRadius: isWideScreen ? 20 : 18, borderBottomLeftRadius: isWideScreen ? 20 : 18 }} />
-                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: isWideScreen ? 16 : 14, paddingHorizontal: isWideScreen ? 16 : 12 }}>
-                        <View style={{
-                          width: isWideScreen ? 42 : 36, height: isWideScreen ? 42 : 36,
-                          borderRadius: isWideScreen ? 12 : 10, backgroundColor: sevBg,
-                          alignItems: 'center', justifyContent: 'center', marginRight: isWideScreen ? 14 : 10, flexShrink: 0,
-                        }}>
-                          <Ionicons name={sevIcon} size={isWideScreen ? 19 : 16} color={sevColor} />
-                        </View>
-                        <View style={{ flex: 1 }}>
-                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                            <View style={{ backgroundColor: sevBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                              <Text style={{ fontSize: isWideScreen ? 9 : 8, fontWeight: '800', letterSpacing: 1, color: sevColor }}>{ins.severity.toUpperCase()}</Text>
-                            </View>
-                            <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.05)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                              <Text style={{ fontSize: isWideScreen ? 9 : 8, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)', textTransform: 'uppercase' }}>{ins.category}</Text>
-                            </View>
-                          </View>
-                          <Text style={{ fontSize: isWideScreen ? 14 : 12, fontWeight: '600', color: isDark ? '#FFFFFF' : '#0F172A', lineHeight: isWideScreen ? 20 : 18 }}>
-                            {ins.message}
-                          </Text>
-                        </View>
-                      </View>
-                    </Animated.View>
-                  );
-                })}
-              </>
-            )}
-
+            {statusBlock}
+            {finMetricsBlock}
+            {revenueChartBlock}
+            {attMetricsBlock}
+            {attChartBlock}
+            {acadMetricsBlock}
+            {acadChartBlock}
+            {staffMetricsBlock}
+            {alertsBlock}
           </View>
         </View>
-
         <View style={{ height: 48 }} />
       </ResponsiveCard>
     </View>
   );
+
+  /* ─── MOBILE SECTIONS (each becomes a virtualized FlatList cell) ──────── */
+  const mobileSections = [
+    { key: 'greeting', node: greetingBlock },
+    { key: 'overview', node: overviewBlock },
+    { key: 'actions-header', node: actionsHeaderBlock },
+    ...(isAndroid
+      ? actionRows.map((row, i) => ({
+          key: `actions-row-${i}`,
+          node: renderActionRow(row, i),
+        }))
+      : [{ key: 'actions', node: (
+          <View style={styles.grid}>
+            {visibleQuickActions.map((item, index) => (
+              <GridItem key={index} item={item} index={index} cardWidth={actionCardWidth} />
+            ))}
+          </View>
+        ) }]),
+    { key: 'status', node: statusBlock },
+    { key: 'fin', node: finMetricsBlock },
+    { key: 'revenue', node: revenueChartBlock },
+    { key: 'attn', node: attMetricsBlock },
+    { key: 'attnChart', node: attChartBlock },
+    { key: 'acad', node: acadMetricsBlock },
+    { key: 'acadChart', node: acadChartBlock },
+    { key: 'staff', node: staffMetricsBlock },
+    ...(alertsBlock ? [{ key: 'alerts', node: alertsBlock }] : []),
+  ];
 
   return (
     <View style={styles.container}>
@@ -1343,7 +1570,7 @@ export default function AdminDashboard() {
       <AdminHeader
         title={currentHeaderTitle}
         showNotification
-        scrollY={scrollY}
+        scrollY={isAndroid ? undefined : scrollY}
         onMenuPress={() => (isWideScreen ? setWebSidebarCollapsed((c) => !c) : setIsMenuOpen(true))}
       />
 
@@ -1356,30 +1583,44 @@ export default function AdminDashboard() {
             showsVerticalScrollIndicator={false}
             onScroll={onScroll}
             scrollEventThrottle={16}
+            {...ANDROID_SCROLL_PROPS}
+            refreshControl={
+              <RefreshControl refreshing={manualRefreshing} onRefresh={onRefresh} tintColor="#3B82F6" colors={['#3B82F6']} />
+            }
           >
             {dashboardBody}
           </Animated.ScrollView>
         </View>
       ) : (
         <>
-          <Animated.ScrollView
-            contentContainerStyle={[styles.content, { paddingTop: mobileHeaderOffset }]}
+          {/* ⚡PERF: virtualized — only sections near the viewport stay mounted */}
+          <AnimatedFlatList
+            data={mobileSections}
+            keyExtractor={(it: any) => it.key}
+            renderItem={({ item }: any) => item.node}
+            ListHeaderComponent={<PaymentDueBanner />}
+            contentContainerStyle={[styles.content, { paddingTop: mobileListPaddingTop }]}
             showsVerticalScrollIndicator={false}
             onScroll={onScroll}
             scrollEventThrottle={16}
-          >
-            {dashboardBody}
-          </Animated.ScrollView>
+            removeClippedSubviews={isAndroid}
+            windowSize={isAndroid ? 5 : 21}
+            initialNumToRender={isAndroid ? 3 : 12}
+            maxToRenderPerBatch={isAndroid ? 2 : 12}
+            updateCellsBatchingPeriod={isAndroid ? 60 : 50}
+            overScrollMode={isAndroid ? 'never' : 'auto'}
+            ListFooterComponent={<View style={{ height: 48 }} />}
+            refreshControl={
+              <RefreshControl refreshing={manualRefreshing} onRefresh={onRefresh} tintColor="#3B82F6" colors={['#3B82F6']} progressViewOffset={mobileHeaderOffset} />
+            }
+          />
 
           <DashboardMenuOverlay
             isOpen={isMenuOpen}
             onClose={() => setIsMenuOpen(false)}
             activeRoute={null}
-            items={quickActions}
-            onItemPress={(route) => {
-              setIsMenuOpen(false);
-              setTimeout(() => router.push(route as any), 300);
-            }}
+            items={visibleQuickActions}
+            onItemPress={(route) => { setIsMenuOpen(false); setTimeout(() => router.push(route as any), 300); }}
           />
         </>
       )}
@@ -1396,7 +1637,7 @@ const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
     content: { paddingHorizontal: isWide ? 24 : CONTAINER_PADDING, paddingBottom: 48 },
     webRow: { flexDirection: 'row', justifyContent: 'space-between', gap: isWide ? 48 : 32 } as any,
 
-    greetingBlock: { marginBottom: 32, paddingTop: 16, paddingHorizontal: 2 },
+    greetingBlock: { marginBottom: 32, paddingTop: isWide ? 16 : 0, paddingHorizontal: 2 },
     eyebrowRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
     eyebrowText: { fontSize: 13, fontWeight: '600', letterSpacing: 0.5 },
     greetingName: { fontSize: isWide ? 32 : 26, fontWeight: '900', letterSpacing: -0.8, marginBottom: 6 },
@@ -1443,9 +1684,11 @@ const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
       color: '#FFFFFF',
       letterSpacing: -0.15,
       lineHeight: isWide ? 18 : 16,
-      textShadowColor: 'rgba(0,0,0,0.25)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 4,
+      ...(isAndroid ? {} : {
+        textShadowColor: 'rgba(0,0,0,0.25)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 4,
+      }),
     },
     gridBadge: {
       position: 'absolute', top: 9, right: 9,

@@ -19,6 +19,9 @@ import NetBalanceTab from '../../src/components/NetBalanceTab';
 import { useTheme } from '../../src/hooks/useTheme';
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
+import ExpenseDateFilterBar from '../../src/components/expenses/ExpenseDateFilterBar';
+import BulkExpenseSheet from '../../src/components/expenses/BulkExpenseSheet';
+import { monthStartInput, todayDateInput } from '../../src/components/expenses/expenseConstants';
 
 // --- CONSTANTS ---
 const CATEGORIES = ['Education', 'Maintenance', 'Sports', 'Utility', 'Events', 'Salary', 'Other'];
@@ -64,13 +67,16 @@ const PulseDot = ({ color }: { color: string }) => {
 export default function AdminExpenses() {
   const { theme, isDark } = useTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
-  const { expenses, loading, fetchExpenses, createExpense, updateStatus } = useExpenses();
+  const { expenses, loading, fetchExpenses, createExpense, createBulkExpenses, updateStatus } = useExpenses();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
+  const [fromDate, setFromDate] = useState(monthStartInput);
+  const [toDate, setToDate] = useState(todayDateInput);
   const [activeTab, setActiveTab] = useState<'list' | 'balance'>('list');
 
   // --- MODAL STATES ---
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
+  const [isBulkModalVisible, setIsBulkModalVisible] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
   // --- DELETE STATE ---
@@ -94,9 +100,19 @@ export default function AdminExpenses() {
   const onFabPressOut = () => RNAnimated.spring(fabScale, { toValue: 1, useNativeDriver: true }).start();
 
   // --- EFFECT ---
+  const fetchOptions = React.useMemo(
+    () => ({ fromDate, toDate }),
+    [fromDate, toDate]
+  );
+
   useEffect(() => {
-    if (activeTab === 'list') fetchExpenses(searchQuery);
-  }, [searchQuery, activeTab]);
+    if (activeTab === 'list') fetchExpenses(searchQuery, fetchOptions);
+  }, [searchQuery, activeTab, fetchOptions]);
+
+  const resetDateFilters = () => {
+    setFromDate(monthStartInput());
+    setToDate(todayDateInput());
+  };
 
   // --- HANDLERS ---
   const handleAddExpense = async () => {
@@ -141,7 +157,7 @@ export default function AdminExpenses() {
     try {
       await PolicyService.deleteWithReason('expenses', selectedExpense.id, deleteReason);
       setIsDeleteModalVisible(false); setSelectedExpense(null); setDeleteReason('');
-      fetchExpenses(searchQuery); alertCompat('Success', 'Expense deleted.');
+      fetchExpenses(searchQuery, fetchOptions); alertCompat('Success', 'Expense deleted.');
     } catch { alertCompat('Error', 'Failed to delete expense.'); }
     finally { setDeleting(false); }
   };
@@ -250,6 +266,14 @@ export default function AdminExpenses() {
             )}
           </View>
 
+          <ExpenseDateFilterBar
+            fromDate={fromDate}
+            toDate={toDate}
+            onFromDateChange={setFromDate}
+            onToDateChange={setToDate}
+            onClear={resetDateFilters}
+          />
+
           {/* ── SUMMARY STRIP ── */}
           {expenses.length > 0 && (
             <Animated.View entering={FadeInDown.duration(400)} style={styles.summaryStrip}>
@@ -296,11 +320,22 @@ export default function AdminExpenses() {
                 </View>
               }
               refreshing={loading}
-              onRefresh={() => fetchExpenses(searchQuery)}
+              onRefresh={() => fetchExpenses(searchQuery, fetchOptions)}
             />
           )}
 
-          {/* ── FAB ── */}
+          {/* ── FABs ── */}
+          <RNAnimated.View style={[styles.fabWrapperSecondary, { transform: [{ scale: fabScale }] }]}>
+            <TouchableOpacity
+              style={styles.fabSecondary}
+              onPress={() => setIsBulkModalVisible(true)}
+              onPressIn={onFabPressIn}
+              onPressOut={onFabPressOut}
+              activeOpacity={1}
+            >
+              <Ionicons name="grid-outline" size={20} color="#6366F1" />
+            </TouchableOpacity>
+          </RNAnimated.View>
           <RNAnimated.View style={[styles.fabWrapper, { transform: [{ scale: fabScale }] }]}>
             <TouchableOpacity
               style={styles.fab}
@@ -411,6 +446,12 @@ export default function AdminExpenses() {
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <BulkExpenseSheet
+        visible={isBulkModalVisible}
+        onClose={() => setIsBulkModalVisible(false)}
+        onSubmit={createBulkExpenses}
+      />
 
       {/* ════════════════════════════════════
           DETAILS MODAL
@@ -663,6 +704,22 @@ const getStyles = (theme: Theme) => StyleSheet.create({
 
   // ── FAB ───────────────────────────────────
   fabWrapper: { position: 'absolute', bottom: 28, right: 18 },
+  fabWrapperSecondary: { position: 'absolute', bottom: 28, right: 168 },
+  fabSecondary: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1.5,
+    borderColor: '#C7D2FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 8,
+    shadowColor: '#6366F1',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 10,
+  },
   fab: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#6366F1',

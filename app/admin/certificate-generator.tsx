@@ -128,7 +128,7 @@ interface StudentData {
   fromYear: string;
   toClass: string;
   toYear: string;
-  aadharNo: string;
+  penNo: string;
   address: string;
   nationality: string;
   category: string;
@@ -405,7 +405,7 @@ function EditModal({
                 <EditField label="Father's / Guardian Name" value={sd.fatherName} onChangeText={v => setSD('fatherName', v)} isDark={isDark} />
                 <EditField label="Mother's Name" value={sd.motherName} onChangeText={v => setSD('motherName', v)} isDark={isDark} />
                 <EditField label="Admission No." value={sd.admissionNo} onChangeText={v => setSD('admissionNo', v)} isDark={isDark} />
-                <EditField label="Aadhar Card No." value={sd.aadharNo} onChangeText={v => setSD('aadharNo', v)} isDark={isDark} />
+                <EditField label="PEN Number" value={sd.penNo} onChangeText={v => setSD('penNo', v)} isDark={isDark} />
                 <EditField label="Class" value={sd.class} onChangeText={v => setSD('class', v)} isDark={isDark} />
                 <EditField label="From Class (Bonafide)" value={sd.fromClass} onChangeText={v => setSD('fromClass', v)} isDark={isDark} />
                 <EditField label="From Year (Bonafide)" value={sd.fromYear} onChangeText={v => setSD('fromYear', v)} isDark={isDark} />
@@ -580,7 +580,7 @@ function BonafideDocument({
 
         <View style={bfStyles.footer}>
           <Text style={bfStyles.footerText}>
-            Aadhar Card No. <Text style={bfStyles.bold}>{line(studentData.aadharNo)}</Text>
+            PEN No. <Text style={bfStyles.bold}>{line(studentData.penNo)}</Text>
           </Text>
           <Text style={bfStyles.footerSign}>{school.principal}</Text>
         </View>
@@ -1135,7 +1135,7 @@ function buildCertificateHTML(
         <p class="bf-dob-words">${line(studentData.dobWords)}</p>
       </div>
       <div class="bf-footer">
-        <span>Aadhar Card No. <strong>${line(studentData.aadharNo)}</strong></span>
+        <span>PEN No. <strong>${line(studentData.penNo)}</strong></span>
         <span>${school.principal}</span>
       </div>
     </div></div>`;
@@ -1306,6 +1306,102 @@ function studentRecordClass(student: Student): string {
   return sec ? `${cls} – ${sec}` : cls;
 }
 
+function dateSortKey(value?: string): number | null {
+  if (!value) return null;
+  const t = new Date(value).getTime();
+  return Number.isNaN(t) ? null : t;
+}
+
+function academicYearSortKey(academicYear?: string): number {
+  const match = String(academicYear || '').match(/(\d{4})/);
+  return match ? Number(match[1]) * 1e10 : Number.MAX_SAFE_INTEGER;
+}
+
+function enrollmentSortKey(enrollment: {
+  academic_year_start_date?: string;
+  start_date?: string;
+  created_at?: string;
+  academic_year?: string;
+  class_sort_order?: number;
+}): number {
+  const primaryDate =
+    dateSortKey(enrollment.academic_year_start_date)
+    ?? dateSortKey(enrollment.start_date)
+    ?? dateSortKey(enrollment.created_at);
+
+  const classOrder = Number.isFinite(Number(enrollment.class_sort_order))
+    ? Number(enrollment.class_sort_order)
+    : 0;
+
+  if (primaryDate !== null) return primaryDate + classOrder;
+  return academicYearSortKey(enrollment.academic_year) + classOrder;
+}
+
+function sortEnrollmentsChronologically<T extends {
+  academic_year_start_date?: string;
+  start_date?: string;
+  created_at?: string;
+  academic_year?: string;
+  class_sort_order?: number;
+}>(
+  enrollments: T[],
+): T[] {
+  return [...enrollments].sort((a, b) => enrollmentSortKey(a) - enrollmentSortKey(b));
+}
+
+function classNameFromEnrollment(enrollment?: { class_name?: string; class_code?: string }): string {
+  return enrollment?.class_name || enrollment?.class_code || '';
+}
+
+function normalizeCertificateValue(value: unknown, fallback = 'N/A'): string {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || fallback;
+  }
+  if (value === null || value === undefined) return fallback;
+  return String(value).trim() || fallback;
+}
+
+function normalizePenNumber(value: unknown): string {
+  return normalizeCertificateValue(value, 'NA');
+}
+
+function admissionYearFallback(admissionDate?: string): string {
+  if (!admissionDate) return '';
+  const d = new Date(admissionDate);
+  if (Number.isNaN(d.getTime())) return '';
+  const year = d.getFullYear();
+  const next = String(year + 1).slice(-2);
+  return `${year}-${next}`;
+}
+
+function resolveBonafideStudyPeriod(
+  enrollments: Array<{
+    class_name?: string;
+    class_code?: string;
+    academic_year?: string;
+    academic_year_start_date?: string;
+    start_date?: string;
+    created_at?: string;
+    class_sort_order?: number;
+  }>,
+  currentEnrollment: { class_name?: string; class_code?: string; academic_year?: string } | undefined,
+  admissionDate?: string,
+) {
+  const currentClass = classNameFromEnrollment(currentEnrollment);
+  const sorted = sortEnrollmentsChronologically(enrollments);
+  const firstEnroll = sorted[0];
+  const lastEnroll = sorted[sorted.length - 1];
+  const admissionYear = admissionYearFallback(admissionDate);
+
+  return {
+    fromClass: classNameFromEnrollment(firstEnroll) || currentClass || 'N/A',
+    fromYear: firstEnroll?.academic_year || currentEnrollment?.academic_year || admissionYear || 'N/A',
+    toClass: classNameFromEnrollment(lastEnroll) || currentClass || 'N/A',
+    toYear: lastEnroll?.academic_year || currentEnrollment?.academic_year || admissionYear || 'N/A',
+  };
+}
+
 function buildStudentDataFromRecord(
   student: any,
   parents: any[],
@@ -1320,12 +1416,7 @@ function buildStudentDataFromRecord(
   const mother = motherObj ? parentDisplayName(motherObj) : 'N/A';
   const rawDob = student.dob || student.person?.dob || '';
   const dobFormatted = rawDob ? new Date(rawDob).toLocaleDateString('en-IN') : 'N/A';
-
-  const sortedEnrollments = [...(enrollments || [])].sort(
-    (a: any, b: any) => new Date(a.start_date || 0).getTime() - new Date(b.start_date || 0).getTime(),
-  );
-  const firstEnroll = sortedEnrollments[0];
-  const lastEnroll = sortedEnrollments[sortedEnrollments.length - 1];
+  const studyPeriod = resolveBonafideStudyPeriod(enrollments, enrollment, student.admission_date);
 
   return {
     id: student.id,
@@ -1339,12 +1430,12 @@ function buildStudentDataFromRecord(
     dob: dobFormatted,
     dobWords: rawDob ? dobToWords(rawDob) : 'N/A',
     admissionNo: student.admission_no,
-    academicYear: enrollment?.academic_year || '2025–2026',
-    fromClass: firstEnroll?.class_name || cls,
-    fromYear: firstEnroll?.academic_year || enrollment?.academic_year || 'N/A',
-    toClass: lastEnroll?.class_name || cls,
-    toYear: lastEnroll?.academic_year || enrollment?.academic_year || 'N/A',
-    aadharNo: '',
+    academicYear: enrollment?.academic_year || studyPeriod.toYear || '2025–2026',
+    fromClass: studyPeriod.fromClass,
+    fromYear: studyPeriod.fromYear,
+    toClass: studyPeriod.toClass,
+    toYear: studyPeriod.toYear,
+    penNo: normalizePenNumber(student.pen_number),
     address: 'Hyderabad',
     nationality: 'Indian',
     category: student.category?.name || 'General',
@@ -1383,11 +1474,12 @@ export default function CertificateGenerator() {
 
   const loadStudentFromRecord = useCallback(async (studentRecord: Student) => {
     const silent = { silent: true } as const;
-    const [parents, enrollments] = await Promise.all([
+    const [fullStudent, parents, enrollments] = await Promise.all([
+      StudentService.getById(studentRecord.id, silent).catch(() => studentRecord),
       StudentService.getParents(studentRecord.id, silent).catch(() => [] as any[]),
       StudentService.getEnrollments(studentRecord.id, silent).catch(() => [] as any[]),
     ]);
-    setStudentData(buildStudentDataFromRecord(studentRecord, parents, enrollments));
+    setStudentData(buildStudentDataFromRecord(fullStudent, parents, enrollments));
     setSearchMatches(null);
   }, []);
 

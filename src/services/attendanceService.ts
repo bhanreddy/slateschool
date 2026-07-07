@@ -1,9 +1,14 @@
 import { api } from './apiClient';
-import type { DailyAttendance, AttendanceStatus } from '../types/schema';
+import type { DailyAttendance, AttendanceStatus, AttendanceSession } from '../types/schema';
+
+/** Default the half-day session from the wall clock: before 1pm = morning. */
+export const currentSession = (): AttendanceSession =>
+    new Date().getHours() < 13 ? 'morning' : 'afternoon';
 
 export interface MarkAttendanceRequest {
     class_section_id: string;
     date: string; // YYYY-MM-DD
+    session: AttendanceSession; // which half-day session is being marked
     records: Array<{
         student_id: string; // Changed from student_enrollment_id to match backend
         status: AttendanceStatus;
@@ -83,13 +88,16 @@ export const AttendanceService = {
      * Get the teacher's auto-detected class with student list and today's attendance.
      * Pass staffId when an admin is viewing another staff member's portal.
      */
-    getMyClass: async (date?: string, staffId?: string): Promise<{
+    getMyClass: async (date?: string, staffId?: string, session?: AttendanceSession): Promise<{
         date: string;
+        session: AttendanceSession;
         class_section_id: string;
         class_name: string;
         section_name: string;
         total_students: number;
         marked_count: number;
+        morning_marked_count: number;
+        afternoon_marked_count: number;
         students: Array<{
             student_id: string;
             admission_no: string;
@@ -98,6 +106,8 @@ export const AttendanceService = {
             enrollment_id: string;
             attendance_id: string | null;
             status: string | null;
+            morning_status: string | null;
+            afternoon_status: string | null;
             marked_at: string | null;
         }>;
     } | null> => {
@@ -105,6 +115,7 @@ export const AttendanceService = {
             const params: Record<string, string> = {};
             if (date) params.date = date;
             if (staffId) params.staff_id = staffId;
+            if (session) params.session = session;
             // "No class assigned" is an expected, common 404 (most staff aren't
             // a homeroom/class teacher) — silent so it doesn't pop the generic
             // error alert, and caught below to resolve to null instead of throwing.

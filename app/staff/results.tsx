@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import AppTextInput from '@/src/components/AppTextInput';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar } from 'react-native';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
@@ -26,8 +27,11 @@ interface ExamCategory {
   icon: any;
   color: string;
   description: string;
+  examPrefix: string;
   subExams?: string[];
 }
+
+const EXTRA_SUB_EXAMS_KEY = 'staffExtraSubExams';
 
 const EXAM_CATEGORIES: ExamCategory[] = [
   {
@@ -36,6 +40,7 @@ const EXAM_CATEGORIES: ExamCategory[] = [
     icon: 'document-text',
     color: '#3B82F6',
     description: 'Weekly slip tests and unit tests',
+    examPrefix: 'ST',
     subExams: ['ST-1', 'ST-2', 'ST-3', 'ST-4', 'ST-5']
   },
   {
@@ -44,6 +49,7 @@ const EXAM_CATEGORIES: ExamCategory[] = [
     icon: 'analytics',
     color: '#10B981',
     description: 'FA-1 to FA-4 Internal Exams',
+    examPrefix: 'FA',
     subExams: ['FA-1', 'FA-2', 'FA-3', 'FA-4']
   },
   {
@@ -52,6 +58,7 @@ const EXAM_CATEGORIES: ExamCategory[] = [
     icon: 'school',
     color: '#F59E0B',
     description: 'Half-yearly and Annual Exams',
+    examPrefix: 'SA',
     subExams: ['SA-1', 'SA-2']
   },
   {
@@ -60,6 +67,7 @@ const EXAM_CATEGORIES: ExamCategory[] = [
     icon: 'star',
     color: '#8B5CF6',
     description: 'Talent tests and special evaluations',
+    examPrefix: 'Special',
     subExams: ['Special-1', 'Special-2']
   },
   {
@@ -68,8 +76,47 @@ const EXAM_CATEGORIES: ExamCategory[] = [
     icon: 'calendar',
     color: '#EC4899',
     description: 'Weekly practice (IIT/NEET)',
+    examPrefix: 'W',
     subExams: ['W-1', 'W-2', 'W-3', 'W-4']
   }];
+
+function parseExamIndex(name: string, prefix: string): number | null {
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = name.match(new RegExp(`^${escaped}-(\\d+)$`));
+  return match ? parseInt(match[1], 10) : null;
+}
+
+function formatExamName(prefix: string, index: number): string {
+  return `${prefix}-${index}`;
+}
+
+function sortSubExams(exams: string[], prefix: string): string[] {
+  return [...exams].sort((a, b) => {
+    const indexA = parseExamIndex(a, prefix);
+    const indexB = parseExamIndex(b, prefix);
+    if (indexA != null && indexB != null) return indexA - indexB;
+    return a.localeCompare(b);
+  });
+}
+
+function mergeSubExams(
+  category: ExamCategory,
+  extra: string[],
+  fromDb: string[]
+): string[] {
+  const base = category.subExams ?? [];
+  const merged = new Set([...base, ...extra, ...fromDb]);
+  return sortSubExams([...merged], category.examPrefix);
+}
+
+function getNextExamName(category: ExamCategory, currentExams: string[]): string {
+  let maxIndex = 0;
+  for (const name of currentExams) {
+    const index = parseExamIndex(name, category.examPrefix);
+    if (index != null && index > maxIndex) maxIndex = index;
+  }
+  return formatExamName(category.examPrefix, maxIndex + 1);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers: derive unique class-sections from flat assignment list
@@ -114,6 +161,8 @@ export default function UploadMarks() {
   const [selectedCategory, setSelectedCategory] = useState<ExamCategory | null>(null);
   const [selectedSubExam, setSelectedSubExam] = useState('');
   const [maxMarks, setMaxMarks] = useState('100');
+  const [extraSubExams, setExtraSubExams] = useState<Record<string, string[]>>({});
+  const [dbSubExams, setDbSubExams] = useState<string[]>([]);
 
   // ── assignment / filter state ────────────────────────────────────────────────
   const [assignments, setAssignments] = useState<TeacherClassAssignment[]>([]);
@@ -160,7 +209,62 @@ export default function UploadMarks() {
 
   const { user } = useAuth();
 
+  const activeSubExams = useMemo(() => {
+    if (!selectedCategory) return [];
+    return mergeSubExams(
+      selectedCategory,
+      extraSubExams[selectedCategory.key] ?? [],
+      dbSubExams
+    );
+  }, [selectedCategory, extraSubExams, dbSubExams]);
+
+  const getDisplaySubExams = useCallback(
+    (cat: ExamCategory) => mergeSubExams(cat, extraSubExams[cat.key] ?? [], []),
+    [extraSubExams]
+  );
+
   // ── effects ───────────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    AsyncStorage.getItem(EXTRA_SUB_EXAMS_KEY).then((raw) => {
+      if (!raw) return;
+      try {
+        setExtraSubExams(JSON.parse(raw));
+      } catch {
+        // ignore corrupt storage
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!selectedCategory) {
+      setDbSubExams([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const exams = await ResultService.getExams();
+        if (cancelled) return;
+        const names = exams
+          .filter((exam) => exam.exam_type === selectedCategory.key)
+          .map((exam) => exam.name);
+        setDbSubExams(names);
+      } catch {
+        if (!cancelled) setDbSubExams([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategory?.key]);
+
+  useEffect(() => {
+    if (!selectedCategory || activeSubExams.length === 0) return;
+    if (!activeSubExams.includes(selectedSubExam)) {
+      setSelectedSubExam(activeSubExams[0]);
+    }
+  }, [activeSubExams, selectedCategory, selectedSubExam]);
 
   // 1. Load assignments on mount
   useEffect(() => {
@@ -271,6 +375,24 @@ export default function UploadMarks() {
     }
   };
 
+  const handleAddSubExam = async () => {
+    if (!selectedCategory) return;
+    const nextExam = getNextExamName(selectedCategory, activeSubExams);
+    const categoryKey = selectedCategory.key;
+    const updatedExtras = {
+      ...extraSubExams,
+      [categoryKey]: [...(extraSubExams[categoryKey] ?? []), nextExam]
+    };
+    setExtraSubExams(updatedExtras);
+    setSelectedSubExam(nextExam);
+    setMarks({});
+    try {
+      await AsyncStorage.setItem(EXTRA_SUB_EXAMS_KEY, JSON.stringify(updatedExtras));
+    } catch {
+      // non-blocking if storage fails
+    }
+  };
+
   const handleSubmit = async () => {
     if (isViewingAsAdmin) {
       alertCompat('Read-only', 'Marks can\'t be uploaded while viewing another staff member\'s portal.');
@@ -338,7 +460,8 @@ export default function UploadMarks() {
               activeOpacity={0.75}
               onPress={() => {
                 setSelectedCategory(cat);
-                if (cat.subExams?.length) setSelectedSubExam(cat.subExams[0]);
+                const exams = getDisplaySubExams(cat);
+                if (exams.length) setSelectedSubExam(exams[0]);
               }}>
 
               <View style={[styles.iconBox, { backgroundColor: cat.color + '18' }]}>
@@ -349,14 +472,14 @@ export default function UploadMarks() {
                 <Text style={styles.cardSubtitle}>{cat.description}</Text>
                 {cat.subExams &&
                   <View style={styles.badgeRow}>
-                    {cat.subExams.slice(0, 4).map((sub) =>
+                    {getDisplaySubExams(cat).slice(0, 4).map((sub) =>
                       <View key={sub} style={[styles.badge, { borderColor: cat.color + '60' }]}>
                         <Text style={[styles.badgeText, { color: cat.color }]}>{sub}</Text>
                       </View>
                     )}
-                    {cat.subExams.length > 4 &&
+                    {getDisplaySubExams(cat).length > 4 &&
                       <Text style={[styles.badgeMore, { color: cat.color }]}>
-                        +{cat.subExams.length - 4}
+                        +{getDisplaySubExams(cat).length - 4}
                       </Text>
                     }
                   </View>
@@ -453,7 +576,7 @@ export default function UploadMarks() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.chipRow}>
 
-            {selectedCategory?.subExams?.map((exam) => {
+            {activeSubExams.map((exam) => {
               const active = selectedSubExam === exam;
               return (
                 <TouchableOpacity
@@ -468,6 +591,14 @@ export default function UploadMarks() {
                 </TouchableOpacity>);
 
             })}
+            <TouchableOpacity
+              style={styles.examTabAdd}
+              onPress={handleAddSubExam}
+              activeOpacity={0.7}
+              accessibilityLabel="Add exam">
+
+              <Ionicons name="add" size={18} color="#8B5CF6" />
+            </TouchableOpacity>
           </ScrollView>
         </View>
       </View>);
@@ -810,6 +941,17 @@ const getStyles = (theme: Theme, isDark: boolean) =>
     },
     examTabTextActive: {
       color: '#F59E0B'
+    },
+    examTabAdd: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.card,
+      borderWidth: 1.5,
+      borderColor: '#8B5CF6',
+      borderStyle: 'dashed',
+      alignItems: 'center',
+      justifyContent: 'center'
     },
     emptyFilterBanner: {
       flexDirection: 'row',

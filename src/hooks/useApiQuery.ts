@@ -18,6 +18,8 @@ export interface UseApiQueryOptions {
   query?: Record<string, string | number | boolean | undefined>;
   persist?: boolean;
   revalidateOnMount?: boolean;
+  /** When true, failed requests do not surface blocking alert dialogs. */
+  silent?: boolean;
 }
 
 /**
@@ -31,7 +33,7 @@ export function useApiQuery<T>(
   userId: string | null | undefined,
   options: UseApiQueryOptions = {}
 ) {
-  const { enabled = true, query, persist = false, revalidateOnMount = false } = options;
+  const { enabled = true, query, persist = false, revalidateOnMount = false, silent = false } = options;
   const queryKey = serializeQuery(query);
   const requestQuery = useMemo(() => {
     if (!queryKey) return undefined;
@@ -46,7 +48,7 @@ export function useApiQuery<T>(
     persist,
     query: queryKey,
     revalidateOnMount,
-    fetcher: () => api.get<T>(endpoint, requestQuery),
+    fetcher: () => api.get<T>(endpoint, requestQuery, { silent }),
   });
 
   return { data, loading, isRefreshing, error, refetch };

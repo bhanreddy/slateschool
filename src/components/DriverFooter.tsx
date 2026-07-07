@@ -12,6 +12,7 @@ import Animated, {
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../hooks/useTheme';
+import { useStaffPortalConfig } from '../hooks/useStaffPortalConfig';
 
 const { width } = Dimensions.get('window');
 
@@ -30,11 +31,16 @@ const ACTIVE_G_END = '#DB2777';
 
 export default function DriverFooter({ state, descriptors, navigation }: MaterialTopTabBarProps) {
     const { theme, isDark } = useTheme();
+    const { payslipsEnabled } = useStaffPortalConfig();
 
-    // Filter and sort routes to only show the main 3 tabs
+    const orderedTabs = payslipsEnabled
+        ? ORDERED_TABS
+        : ORDERED_TABS.filter((tab) => tab !== 'payslip');
+
+    // Filter and sort routes to only show the main tabs
     const visibleRoutes = state.routes
-        .filter(route => ORDERED_TABS.includes(route.name))
-        .sort((a, b) => ORDERED_TABS.indexOf(a.name) - ORDERED_TABS.indexOf(b.name));
+        .filter(route => orderedTabs.includes(route.name))
+        .sort((a, b) => orderedTabs.indexOf(a.name) - orderedTabs.indexOf(b.name));
 
     // Calculate active index relative to visible routes
     const currentRouteName = state.routes[state.index].name;

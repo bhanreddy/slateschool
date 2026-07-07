@@ -8,12 +8,14 @@ import { useRequireRole } from '@/src/hooks/useRequireRole';
 export { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/hooks/useAuth';
+import { useFeatures } from '@/src/hooks/useFeatures';
 
 export default function TabLayout() {
     const insets = useSafeAreaInsets();
     const { t } = useTranslation();
     const { user } = useAuth();
-    useRequireRole('student');
+    const { isEnabled } = useFeatures();
+    useRequireRole('student', 'parent');
 
     return (
         <Tabs
@@ -65,6 +67,9 @@ export default function TabLayout() {
                 name="timetable"
                 options={{
                     headerShown: false,
+                    // href:null removes the tab button when disabled; the route guard
+                    // on the screen still redirects deep-links to Home.
+                    href: isEnabled('nav.time_table') ? undefined : null,
                     tabBarLabel: t('timetable.title', 'TimeTable'),
                     tabBarIcon: ({ focused, color }) => (
                         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -78,6 +83,7 @@ export default function TabLayout() {
                 name="fees"
                 options={{
                     headerShown: false,
+                    href: isEnabled('nav.fees') ? undefined : null,
                     tabBarLabel: t('fees', 'Fees'),
                     tabBarIcon: ({ focused, color }) => (
                         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
@@ -91,6 +97,7 @@ export default function TabLayout() {
                 name="results"
                 options={{
                     headerShown: false,
+                    href: isEnabled('nav.results') ? undefined : null,
                     tabBarLabel: t('menu.results', 'Results'),
                     tabBarIcon: ({ focused, color }) => (
                         <View style={{ alignItems: 'center', justifyContent: 'center' }}>

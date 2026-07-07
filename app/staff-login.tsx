@@ -1,16 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
-  Dimensions,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StatusBar,
-  TextInput,
-  ActivityIndicator,
   Switch,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -21,33 +18,23 @@ import { Ionicons } from '@expo/vector-icons';
 import Animated, {
   FadeInDown,
   FadeInUp,
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withRepeat,
-  withSequence,
-  interpolate,
-  interpolateColor,
-  Easing,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useTheme } from '@/src/hooks/useTheme';
 import { showAlert } from '@/src/components/CustomAlert';
 import { AuthService } from '@/src/services/authService';
 import LogoLoader from '../src/components/LogoLoader';
-import { SCHOOL_NAME } from '@/src/constants/school';
 import { isStaffLoginAllowedRole } from '@/src/utils/roleHelpers';
-
-const { width, height } = Dimensions.get('window');
-
-// ─── Design Tokens ────────────────────────────────────────────────────────────
-
+import AdminHeaderCard from '@/src/components/AdminHeaderCard';
 
 import { useLoginTheme } from '@/src/hooks/useLoginTheme';
-import { DecorRing, FloatingInput, SignInButton } from '@/src/components/auth/LoginShared';
+import {
+  FloatingInput,
+  SignInButton,
+  LoginAmbientBackground,
+  LoginCardHeader,
+} from '@/src/components/auth/LoginShared';
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -56,6 +43,7 @@ const StaffLoginScreen: React.FC = () => {
   const styles = getStyles(C);
   const router = useRouter();
   const { t } = useTranslation();
+  const { toggleTheme } = useTheme();
   const { user, loading: authLoading, signIn } = useAuth();
 
   const [loading, setLoading] = useState(false);
@@ -168,6 +156,7 @@ const StaffLoginScreen: React.FC = () => {
 
   return (
     <View style={styles.root}>
+      <LoginAmbientBackground />
       <StatusBar barStyle={C.isDark ? "light-content" : "dark-content"} backgroundColor="transparent" translucent />
 
       <KeyboardAvoidingView
@@ -175,101 +164,56 @@ const StaffLoginScreen: React.FC = () => {
         style={{ flex: 1, backgroundColor: 'transparent' }}
       >
         <ScrollView
-          contentContainerStyle={{ flexGrow: 1 }}
+          contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
           bounces={false}
           keyboardShouldPersistTaps="handled"
         >
-
-          {/* ── HERO HEADER ─────────────────────────────────────────────── */}
-          <View style={styles.heroWrap}>
-            <LinearGradient
-              colors={[C.bg, C.accentLight, C.accentLight]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.hero}
-            >
-              {/* Decorative rings */}
-              <DecorRing size={320} x={-100} y={-80} color="rgba(6,182,212,0.18)" />
-              <DecorRing size={200} x={-50} y={-30} color="rgba(6,182,212,0.10)" borderWidth={1} />
-              <DecorRing size={260} x={width - 100} y={60} color="rgba(6,182,212,0.14)" />
-              <DecorRing size={160} x={width - 60} y={100} color="rgba(6,182,212,0.08)" borderWidth={1} />
-
-              {/* Solid accent dot — top right */}
-              <View style={styles.heroDot} />
-
-              <SafeAreaView edges={['top']} style={styles.heroContent}>
-                {/* School badge */}
-                <Animated.View
-                  entering={FadeInDown.delay(0).duration(600)}
-                  style={styles.schoolBadge}
-                >
-                  <View style={styles.badgeDot} />
-                  <Text style={styles.badgeText}>STAFF PORTAL</Text>
-                </Animated.View>
-
-                {/* Logo */}
-                <Animated.View
-                  entering={FadeInDown.delay(80).duration(700).springify()}
-                  style={styles.logoRing}
-                >
-                  <LinearGradient
-                    colors={[C.isDark ? C.surface : '#FFFFFF', C.surfaceAlt]}
-                    style={styles.logoRingInner}
-                  >
-                    <LogoLoader size={52} color={C.accentDark} />
-                  </LinearGradient>
-                </Animated.View>
-
-                {/* School name */}
-                <Animated.Text
-                  entering={FadeInDown.delay(160).duration(600)}
-                  style={styles.schoolName}
-                  numberOfLines={2}
-                  adjustsFontSizeToFit
-                >
-                  {SCHOOL_NAME}
-                </Animated.Text>
-
-                <Animated.Text
-                  entering={FadeInDown.delay(220).duration(500)}
-                  style={styles.heroTagline}
-                >
-                  Manage classes, attendance, and student records.
-                </Animated.Text>
-              </SafeAreaView>
-            </LinearGradient>
-
-            {/* Curved bottom mask */}
-            <View style={styles.heroBottomCurve} />
-          </View>
-
-          {/* ── FORM BODY ────────────────────────────────────────────────── */}
-          <View style={styles.body}>
-
-            {/* Form card */}
-            <Animated.View
-              entering={FadeInUp.delay(100).duration(600).springify()}
-              style={styles.card}
-            >
-              {/* Card header */}
-              <View style={styles.cardHeader}>
-                <View>
-                  <Text style={styles.cardTitle}>
-                    {t('login.welcome_staff') || 'Welcome, Staff'}
+          <View style={styles.shell}>
+            <SafeAreaView edges={['top']} style={styles.topArea}>
+              <View style={styles.themeRow}>
+                <View style={styles.themeToggle}>
+                  <Ionicons
+                    name={C.isDark ? 'moon' : 'sunny'}
+                    size={14}
+                    color={C.accent}
+                  />
+                  <Text style={styles.themeToggleText}>
+                    {C.isDark ? 'Dark mode' : 'Light mode'}
                   </Text>
-                  <Text style={styles.cardSubtitle}>
-                    {t('login.signin_staff') || 'Sign in to your account'}
-                  </Text>
-                </View>
-                <View style={styles.accentPill}>
-                  <Ionicons name="shield-checkmark" size={13} color={C.accentDark} />
-                  <Text style={styles.accentPillText}>Secure</Text>
+                  <Switch
+                    value={C.isDark}
+                    onValueChange={toggleTheme}
+                    thumbColor="#FFFFFF"
+                    trackColor={{
+                      false: 'rgba(107,47,160,0.22)',
+                      true: C.accentDark,
+                    }}
+                    style={styles.themeSwitch}
+                  />
                 </View>
               </View>
 
-              {/* Divider */}
-              <View style={styles.cardDivider} />
+              <View style={styles.headerWrap}>
+                <AdminHeaderCard
+                  variant="login"
+                  portalBadge="STAFF"
+                  tagline="Classes · Attendance · Student Records"
+                />
+              </View>
+            </SafeAreaView>
+
+            <View style={styles.body}>
+            <Animated.View
+              entering={FadeInUp.delay(80).duration(600).springify()}
+              style={styles.card}
+            >
+              <LoginCardHeader
+                portalBadge="STAFF"
+                tagline="Manage classes, attendance, and student records."
+                title={t('welcomeBack') || 'Welcome back'}
+                subtitle={t('login.signin_staff') || 'Sign in to your staff account'}
+              />
 
               {/* Email */}
               <View style={styles.fieldGap}>
@@ -358,17 +302,15 @@ const StaffLoginScreen: React.FC = () => {
                 style={styles.trustStrip}
               >
                 <View style={styles.trustItem}>
-                  <Ionicons name="lock-closed" size={11} color={C.inkGhost} />
+                  <Ionicons name="lock-closed" size={12} color={C.accent} />
                   <Text style={styles.trustText}>256-bit encrypted</Text>
                 </View>
-                <View style={styles.trustDot} />
                 <View style={styles.trustItem}>
-                  <Ionicons name="shield-outline" size={11} color={C.inkGhost} />
+                  <Ionicons name="shield-outline" size={12} color={C.accent} />
                   <Text style={styles.trustText}>Secure login</Text>
                 </View>
-                <View style={styles.trustDot} />
                 <View style={styles.trustItem}>
-                  <Ionicons name="server-outline" size={11} color={C.inkGhost} />
+                  <Ionicons name="server-outline" size={12} color={C.accent} />
                   <Text style={styles.trustText}>Data protected</Text>
                 </View>
               </Animated.View>
@@ -399,6 +341,7 @@ const StaffLoginScreen: React.FC = () => {
             </Animated.View>
 
           </View>
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
@@ -420,159 +363,85 @@ const getStyles = (C: ReturnType<typeof useLoginTheme>) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  // ── Hero ──────────────────────────────────────────────────────────────────
-  heroWrap: {
-    position: 'relative',
+  scrollContent: {
+    flexGrow: 1,
+    ...Platform.select({
+      web: {
+        justifyContent: 'center',
+        minHeight: '100%',
+        paddingVertical: 32,
+      } as any,
+    }),
   },
-  hero: {
-    paddingBottom: 70,        // Extra space so curve overlap looks clean
-    overflow: 'hidden',
+  shell: {
+    flex: 1,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingTop: Platform.OS === 'web' ? 8 : 12,
+    paddingBottom: 36,
   },
-  heroDot: {
-    position: 'absolute',
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: C.accent,
-    top: 56,
-    right: 28,
-    opacity: 0.7,
+  topArea: {
+    width: '100%',
   },
-  heroContent: {
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 8,
+  themeRow: {
+    alignItems: 'flex-end',
+    marginBottom: 6,
+    paddingHorizontal: 4,
   },
-  schoolBadge: {
+  themeToggle: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: C.accentGlow,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    marginBottom: 20,
+    gap: 7,
+    minHeight: 34,
+    paddingLeft: 12,
+    paddingRight: 4,
+    borderRadius: 999,
+    backgroundColor: C.isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.78)',
     borderWidth: 1,
-    borderColor: C.accentBorder,
-    gap: 6,
+    borderColor: C.isDark ? 'rgba(255,255,255,0.08)' : 'rgba(107,47,160,0.10)',
   },
-  badgeDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: C.accent,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    color: C.accentDeep,
-  },
-  logoRing: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    borderWidth: 1.5,
-    borderColor: C.accentBorder,
-    marginBottom: 16,
-    ...C.shadow.md,
-    shadowColor: C.shadow.color,
-  },
-  logoRingInner: {
-    flex: 1,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  schoolName: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.ink,
-    letterSpacing: -0.5,
-    textAlign: 'center',
-    marginBottom: 8,
-    paddingHorizontal: 12,
-  },
-  heroTagline: {
+  themeToggleText: {
     fontSize: 12,
-    color: C.inkMid,
-    letterSpacing: 0.4,
-    fontWeight: '500',
+    fontWeight: '700',
+    color: C.inkSoft,
   },
-  heroBottomCurve: {
-    position: 'absolute',
-    bottom: -1,
-    left: 0,
-    right: 0,
-    height: 50,
-    backgroundColor: C.bg,
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
+  themeSwitch: {
+    transform: [{ scale: 0.72 }],
   },
-
-  // ── Body ──────────────────────────────────────────────────────────────────
-  body: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 32,
+  headerWrap: {
+    paddingBottom: 12,
+    width: '100%',
     ...Platform.select({
       web: { alignItems: 'center' } as any,
     }),
   },
 
-  // ── Form Card ─────────────────────────────────────────────────────────────
+  body: {
+    width: '100%',
+    paddingBottom: 28,
+  },
+
   card: {
     backgroundColor: C.surface,
     borderRadius: 24,
     padding: 24,
+    paddingTop: 20,
     borderWidth: 1,
-    borderColor: C.borderNeutral,
+    borderColor: C.isDark ? 'rgba(255,255,255,0.08)' : C.borderNeutral,
+    overflow: 'hidden',
     ...C.shadow.lg,
-    shadowColor: C.shadow.color,
+    shadowColor: C.isDark ? '#000' : C.shadow.color,
     ...Platform.select({
-      web: { width: '100%', maxWidth: 480 } as any,
+      web: {
+        width: '100%',
+        boxShadow: C.isDark
+          ? '0 24px 52px rgba(0,0,0,0.48), 0 0 0 1px rgba(255,255,255,0.05)'
+          : '0 18px 44px rgba(107,47,160,0.12)',
+      } as any,
     }),
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  cardTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.ink,
-    letterSpacing: -0.5,
-    marginBottom: 3,
-  },
-  cardSubtitle: {
-    fontSize: 13,
-    color: C.inkSoft,
-    fontWeight: '400',
-  },
-  accentPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: C.accentGlow,
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: C.accentBorder,
-  },
-  accentPillText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: C.accentDark,
-    letterSpacing: 0.3,
-  },
-  cardDivider: {
-    height: 1,
-    backgroundColor: C.borderNeutral,
-    marginBottom: 24,
   },
 
   // ── Input ─────────────────────────────────────────────────────────────────
@@ -632,6 +501,8 @@ const getStyles = (C: ReturnType<typeof useLoginTheme>) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 12,
     marginBottom: 28,
     marginTop: 4,
   },
@@ -702,25 +573,25 @@ const getStyles = (C: ReturnType<typeof useLoginTheme>) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    flexWrap: 'wrap',
     gap: 8,
   },
   trustItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: C.isDark ? 'rgba(255,255,255,0.07)' : 'rgba(107,47,160,0.10)',
+    backgroundColor: C.isDark ? 'rgba(255,255,255,0.04)' : 'rgba(107,47,160,0.05)',
   },
   trustText: {
-    fontSize: 10,
-    color: C.inkGhost,
-    fontWeight: '500',
+    fontSize: 11,
+    color: C.inkSoft,
+    fontWeight: '700',
     letterSpacing: 0.2,
-  },
-  trustDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: C.inkGhost,
-    opacity: 0.5,
   },
 
   // ── Help + Footer ─────────────────────────────────────────────────────────

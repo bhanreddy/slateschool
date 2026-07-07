@@ -19,6 +19,7 @@ import AdminHeader from '../../src/components/AdminHeader';
 import DashboardMenuOverlay from '../../src/components/DashboardMenuOverlay';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePermissions } from '../../src/hooks/usePermissions';
 import { useApiQuery } from '../../src/hooks/useApiQuery';
 import { usePersistedSWR } from '../../src/hooks/usePersistedSWR';
 import { AnalyticsData } from '../../src/services/analyticsService';
@@ -28,6 +29,8 @@ import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContex
 import LogoLoader from '../../src/components/LogoLoader';
 import { LineChart } from "react-native-gifted-charts";
 import PaymentDueBanner from '../../src/components/PaymentDueBanner';
+import AdminHeaderCard from '../../src/components/AdminHeaderCard';
+import DashboardHero from '../../src/components/DashboardHero';
 import { ACCOUNTS_STAT_KEYS, normalizeAccountsDashboardConfig } from '../../src/utils/constants';
 
 const IS_WEB = Platform.OS === 'web';
@@ -647,11 +650,13 @@ export default function AccountsDashboard() {
   const router = useRouter();
   const { t } = useTranslation();
   const { user, role } = useAuth();
+  const { hasPermission } = usePermissions();
   const { theme, isDark } = useTheme();
   const { shellActive } = useAccountsWebChrome();
   const layout = useLayout(shellActive);
   const { isWeb, contentW, CARD_H_PAD, GRID_COLS, GRID_GAP, GRID_ITEM_W, winW } = layout;
   const styles = useMemo(() => createStyles(theme, isDark, GRID_ITEM_W), [theme, isDark, GRID_ITEM_W]);
+  const webHeroStacks = isWeb && contentW < 760;
 
   const [loading, setLoading] = useState(true);
   const [config, setConfig] = useState<Record<string, boolean>>({});
@@ -780,37 +785,50 @@ export default function AccountsDashboard() {
   const stopTimer = useCallback(() => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } }, []);
   useEffect(() => { if (!isWeb) { startTimer(); return () => stopTimer(); } }, [carouselCards.length, isWeb]);
 
-  const quickActions = [
-    { id: 'collect', title: 'Collect Fees', description: 'Process student payments', icon: 'cash', color: ['#059669', '#10B981'] as [string, string], route: '/accounts/fees', library: Ionicons },
-    { id: 'today_collection', title: "Today's Collection", description: 'Your daily collection report', icon: 'today', color: ['#0E7490', '#06B6D4'] as [string, string], route: '/accounts/fees/today-collection', library: Ionicons },
-    { id: 'upi_qr', title: 'Collect via UPI', description: 'Dynamic UPI QR for payments', icon: 'qr-code-outline', color: ['#B45309', '#F59E0B'] as [string, string], route: '/accounts/collect-fee-qr', library: Ionicons },
-    { id: 'expenses', title: 'Expenses', description: 'Manage school expenditures', icon: 'receipt', color: ['#B91C1C', '#EF4444'] as [string, string], route: '/accounts/expenses', library: Ionicons },
-    { id: 'payroll', title: 'Payroll', description: 'Staff salary & attendance', icon: 'people', color: ['#4338CA', '#6366F1'] as [string, string], route: '/accounts/payroll', library: Ionicons },
+  const quickActions = useMemo(() => [
+    { id: 'collect', title: 'Collect Fees', description: 'Process student payments', icon: 'cash', color: ['#059669', '#10B981'] as [string, string], route: '/accounts/fees', library: Ionicons, permission: 'fees.collect' },
+    { id: 'today_collection', title: "Today's Collection", description: 'Your daily collection report', icon: 'today', color: ['#0E7490', '#06B6D4'] as [string, string], route: '/accounts/fees/today-collection', library: Ionicons, permission: 'fees.collect' },
+    { id: 'upi_qr', title: 'Collect via UPI', description: 'Dynamic UPI QR for payments', icon: 'qr-code-outline', color: ['#B45309', '#F59E0B'] as [string, string], route: '/accounts/collect-fee-qr', library: Ionicons, permission: 'fees.collect' },
+    { id: 'expenses', title: 'Expenses', description: 'Manage school expenditures', icon: 'receipt', color: ['#B91C1C', '#EF4444'] as [string, string], route: '/accounts/expenses', library: Ionicons, permission: 'expenses.view' },
+    { id: 'payroll', title: 'Payroll', description: 'Staff salary & attendance', icon: 'people', color: ['#4338CA', '#6366F1'] as [string, string], route: '/accounts/payroll', library: Ionicons, permission: 'payroll.process' },
     { id: 'invoices', title: 'Invoices', description: 'Generate & track invoices', icon: 'document-text', color: ['#1D4ED8', '#3B82F6'] as [string, string], route: '/accounts/invoices', library: Ionicons },
     { id: 'receipts', title: 'Receipts', description: 'View payment history', icon: 'documents', color: ['#0369A1', '#0EA5E9'] as [string, string], route: '/accounts/receipts', library: Ionicons },
-    { id: 'staff', title: 'Add Staff', description: 'Register new employees', icon: 'person-add', color: ['#6D28D9', '#8B5CF6'] as [string, string], route: '/accounts/addStaff', library: Ionicons },
+    { id: 'staff', title: 'Add Staff', description: 'Register new employees', icon: 'person-add', color: ['#6D28D9', '#8B5CF6'] as [string, string], route: '/accounts/addStaff', library: Ionicons, permission: 'staff.create' },
     { id: 'student', title: 'Add Student', description: 'Enroll new students', icon: 'school', color: ['#BE185D', '#F43F5E'] as [string, string], route: '/accounts/addStudent', library: Ionicons },
     { id: 'pending_enrollments', title: 'Pending Enrolments', description: 'Review new applications', icon: 'person-add-outline', color: ['#7C3AED', '#A78BFA'] as [string, string], route: '/accounts/pending-enrollments', library: Ionicons },
     { id: 'defaulters', title: 'Defaulters', description: 'Previous-year pending fees', icon: 'alert-circle', color: ['#B91C1C', '#EF4444'] as [string, string], route: '/accounts/defaulters', library: Ionicons },
     { id: 'transport_fees', title: 'Transport Fees', description: 'Stop-based bus fee management', icon: 'bus', color: ['#0E7490', '#06B6D4'] as [string, string], route: '/accounts/transport-fees', library: Ionicons },
-  ];
+  ].filter((action) => !action.permission || hasPermission(action.permission)), [hasPermission]);
 
   // ── WEB LAYOUT ──────────────────────────────────────────────────────────────
   if (isWeb) {
     return (
       <View style={{ flex: 1, backgroundColor: theme.colors.background }}>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 28, paddingBottom: 48 }} overScrollMode="never">
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 28, paddingTop: 34, paddingBottom: 48 }} overScrollMode="never">
           <PaymentDueBanner />
 
-          {/* Page header */}
-          <Animated.View entering={FadeInDown.duration(350)} style={{ marginBottom: 24 }}>
-            <Text style={{ fontSize: 24, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: -0.6, marginBottom: 4 }}>
-              Hello, <Text style={{ color: isDark ? '#818CF8' : '#4F46E5' }}>{user?.displayName?.split(' ')[0] || 'Admin'}</Text> 👋
-            </Text>
-            <Text style={{ fontSize: 13, color: theme.colors.textSecondary, fontWeight: '500' }}>
-              {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · Financial Overview
-            </Text>
-          </Animated.View>
+          {/* Page hero */}
+          <View style={{ marginBottom: 28 }}>
+            <DashboardHero
+              eyebrow={new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase()}
+              greeting="Hello"
+              name={user?.displayName?.split(' ')[0] || 'Admin'}
+              subtitle="Financial Overview"
+              cardWidth={Math.min(610, contentW * 0.68)}
+              stacks={webHeroStacks}
+              card={
+                <AdminHeaderCard
+                  compact
+                  compactRole
+                  displayName={user?.displayName || 'User'}
+                  photoUrl={user?.photoUrl}
+                  roleLabel={user?.role?.name || 'Accountant'}
+                  staffCode={user?.staff_code}
+                  portalBadge="ACCOUNTS"
+                />
+              }
+            />
+          </View>
 
           {/* Stats row */}
           <Animated.View entering={FadeInDown.delay(60).duration(400)} style={{ flexDirection: 'row', gap: 16, marginBottom: 28 }}>
@@ -867,15 +885,27 @@ export default function AccountsDashboard() {
           <PaymentDueBanner />
         </View>
 
-        {/* Greeting */}
-        <Animated.View entering={FadeInDown.duration(480)} style={styles.greetingContainer}>
-          <View style={styles.datePill}>
-            <View style={styles.datePillDot} />
-            <Text style={styles.greetingEyebrow}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}</Text>
-          </View>
-          <Text style={styles.greetingText}>Hello, <Text style={styles.greetingName}>{user?.displayName?.split(' ')[0] || 'Admin'}</Text> 👋</Text>
-          <Text style={styles.greetingSubText}>{t('accounts_dashboard.welcome_back', 'Here is your financial overview')}</Text>
-        </Animated.View>
+        {/* Greeting + profile card — one unified panel */}
+        <View style={styles.bannerPad}>
+          <DashboardHero
+            eyebrow={new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+            greeting="Hello"
+            name={user?.displayName?.split(' ')[0] || 'Admin'}
+            subtitle={t('accounts_dashboard.welcome_back', 'Here is your financial overview')}
+            stacks
+            card={
+              <AdminHeaderCard
+                compact
+                compactRole
+                displayName={user?.displayName || 'User'}
+                photoUrl={user?.photoUrl}
+                roleLabel={user?.role?.name || 'Accountant'}
+                staffCode={user?.staff_code}
+                portalBadge="ACCOUNTS"
+              />
+            }
+          />
+        </View>
 
         {/* Carousel */}
         {carouselCards.length > 0 && (

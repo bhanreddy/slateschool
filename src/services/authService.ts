@@ -5,9 +5,17 @@ import { supabase } from './supabaseConfig';
 import { AuthSession, ValidatedUser } from '../types/auth';
 import { api, APIError } from './apiClient';
 import { SCHOOL_NAME, SCHOOL_ID } from '../constants/school';
-import { isPersistentSessionRole, isStudentRole, normalizeLoginEmail } from '../utils/roleHelpers';
+import { isPersistentSessionRole, normalizeLoginEmail } from '../utils/roleHelpers';
 import * as accountVault from './accountVault';
 import type { VaultAccount } from './accountVault';
+import type { AccessContext, PortalContextsPayload } from '../types/context';
+import { refreshAccessTokenStandalone } from './pushFanout';
+
+const TOKEN_SKEW_SECONDS = 60;
+
+function mapRoleCodeForFrontend(code: string): string {
+  return code === 'accounts' ? 'accountant' : code;
+}
 
 /** Single-flight refresh so TOKEN_REFRESHED storms don't stack validate calls */
 let refreshSessionInFlight: Promise<AuthSession | null> | null = null;
@@ -72,7 +80,94 @@ async function persistSessionFromRefresh(
       : Date.now() + 3600000,
   };
   await setSecureItem(STORAGE_KEY, JSON.stringify(authSession));
+  try {
+    await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
+  } catch {
+    // Vault sync is best-effort — never block session persistence.
+  }
   return authSession;
+}
+
+async function syncVaultFromAuthSession(authSession: AuthSession): Promise<void> {
+  await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
+}
+
+/** Persist the live Supabase client's session for the account we're switching away from. */
+async function snapshotLiveAccountToVault(
+  account: VaultAccount,
+  liveSession: Session | null
+): Promise<void> {
+  if (!liveSession?.refresh_token) return;
+  const authSession: AuthSession = {
+    supabaseSession: liveSession,
+    validatedUser: account.validatedUser,
+    tokenExpiresAt: liveSession.expires_at
+      ? liveSession.expires_at * 1000
+      : Date.now() + 3600000,
+  };
+  try {
+    await syncVaultFromAuthSession(authSession);
+  } catch {
+    /* best-effort */
+  }
+}
+
+function mergeRefreshedTokensIntoSession(
+  base: Session,
+  refreshed: { access_token: string; refresh_token: string; expires_at: number }
+): Session {
+  const nowS = Math.floor(Date.now() / 1000);
+  return {
+    ...base,
+    access_token: refreshed.access_token,
+    refresh_token: refreshed.refresh_token,
+    expires_at: refreshed.expires_at,
+    expires_in: Math.max(0, refreshed.expires_at - nowS),
+  };
+}
+
+/**
+ * Resolve usable access + refresh tokens for a vaulted account.
+ * Uses standalone refresh (no live-client mutation) when tokens are missing or stale.
+ */
+async function resolveTargetSessionTokens(
+  target: VaultAccount,
+  userId: string
+): Promise<{ accessToken: string; refreshToken: string; prefetchedSession: Session | null }> {
+  let refreshToken =
+    target.supabaseSession?.refresh_token ??
+    (await accountVault.getBackupRefreshTokenForUser(userId)) ??
+    '';
+  let accessToken = target.supabaseSession?.access_token ?? '';
+  let prefetchedSession: Session | null = null;
+
+  const expiresAt = target.supabaseSession?.expires_at ?? 0;
+  const nowS = Math.floor(Date.now() / 1000);
+  const needsRefresh =
+    !refreshToken || !accessToken || !expiresAt || expiresAt <= nowS + TOKEN_SKEW_SECONDS;
+
+  if (needsRefresh && refreshToken) {
+    const refreshed = await refreshAccessTokenStandalone(refreshToken);
+    if (refreshed) {
+      accessToken = refreshed.access_token;
+      refreshToken = refreshed.refresh_token;
+      prefetchedSession = mergeRefreshedTokensIntoSession(
+        target.supabaseSession ?? ({} as Session),
+        refreshed
+      );
+      try {
+        await syncVaultFromAuthSession({
+          supabaseSession: prefetchedSession,
+          validatedUser: target.validatedUser,
+          tokenExpiresAt: refreshed.expires_at * 1000,
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+
+  return { accessToken, refreshToken, prefetchedSession };
 }
 
 async function restorePreviousLiveSession(
@@ -110,22 +205,26 @@ async function restorePreviousLiveSession(
 function mapSwitchErrorMessage(message?: string): string {
   const raw = message || "Could not restore this account's session";
   const lower = raw.toLowerCase();
-  if (lower.includes('refresh token')) {
-    return 'Automatic login is not available for this saved account yet. Add it once more to enable automatic recovery.';
+  if (lower.includes('refresh token') || lower.includes('invalid') || lower.includes('expired')) {
+    return 'This saved login expired. Remove it from the list, then add it again with email and password.';
+  }
+  if (lower.includes('could not restore')) {
+    return 'This saved login expired. Remove it from the list, then add it again with email and password.';
   }
   return raw;
 }
 
-async function saveParentCredentialsForRecovery(
+/** Encrypted credential backup so vault accounts can recover after token rotation. */
+async function saveVaultLoginCredentials(
   validatedUser: ValidatedUser,
   email: string,
   password: string
 ): Promise<void> {
-  if (!isStudentRole(validatedUser.role?.code)) return;
+  if (!validatedUser?.userId || !email || !password) return;
   try {
     await accountVault.setLoginCredentialsForUser(validatedUser.userId, email, password);
   } catch (e) {
-    if (__DEV__) console.warn('[AuthService] parent credential backup failed:', e);
+    if (__DEV__) console.warn('[AuthService] vault credential backup failed:', e);
   }
 }
 
@@ -169,10 +268,10 @@ async function signInTargetFromStoredCredentials(
   await setSecureItem(STORAGE_KEY, JSON.stringify(authSession));
   await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
   await accountVault.setActiveAccountId(validatedUser.userId);
-  await saveParentCredentialsForRecovery(validatedUser, credentials.email, credentials.password);
+  await saveVaultLoginCredentials(validatedUser, credentials.email, credentials.password);
 
   if (__DEV__) {
-    console.log(`[AuthService] restored parent account ${validatedUser.userId} using stored credentials`);
+    console.log(`[AuthService] restored account ${validatedUser.userId} using stored credentials`);
   }
   return { session: authSession };
 }
@@ -261,23 +360,25 @@ async function doSwitchAccount(
       : null;
   const { data: { session: previousLiveSession } } = await supabase.auth.getSession();
 
-  const accessToken = target.supabaseSession?.access_token ?? '';
-  const refreshToken =
-    target.supabaseSession?.refresh_token ??
-    (await accountVault.getBackupRefreshTokenForUser(userId)) ??
-    '';
+  // Keep the account we're leaving in sync with the live client's latest tokens.
+  if (previousActive && previousLiveSession?.refresh_token) {
+    await snapshotLiveAccountToVault(previousActive, previousLiveSession);
+  }
+
+  const { accessToken, refreshToken, prefetchedSession } = await resolveTargetSessionTokens(
+    target,
+    userId
+  );
   if (!refreshToken) return { error: 'No stored credentials for this account' };
 
   beginInternalSwap();
   try {
-    // The single most important call of this phase. If the access token is
-    // expired, the SDK silently refreshes using refresh_token (emits
-    // TOKEN_REFRESHED — suppressed by the swap guard). No password, ever.
     const { data, error } = await supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: refreshToken,
     });
     if (error || !data?.session) {
+      // Retry credential sign-in (all portals — credentials saved on every login/add).
       const credentialRestore = await signInTargetFromStoredCredentials(target);
       if (credentialRestore.session) return credentialRestore;
 
@@ -285,32 +386,26 @@ async function doSwitchAccount(
       return { error: mapSwitchErrorMessage(credentialRestore.error || error?.message) };
     }
 
-    // Detect whether the SDK rotated tokens (i.e. the stored token was expired).
-    const rotated = data.session.access_token !== target.supabaseSession?.access_token;
-    // Preserve original bytes when nothing rotated (keeps A byte-identical on
-    // round-trips); use the fresh session only when a rotation actually happened.
-    const effectiveSession = rotated ? data.session : target.supabaseSession;
-
     const newActive: AuthSession = {
-      supabaseSession: effectiveSession,
+      supabaseSession: data.session,
       validatedUser: target.validatedUser,
-      tokenExpiresAt: effectiveSession.expires_at
-        ? effectiveSession.expires_at * 1000
+      tokenExpiresAt: data.session.expires_at
+        ? data.session.expires_at * 1000
         : Date.now() + 3600000,
     };
 
-    // Persist as the active account (setItem only — never the destructive path).
     await setSecureItem(STORAGE_KEY, JSON.stringify(newActive));
 
-    // Only rewrite the vault copy when tokens actually rotated (avoid churning
-    // bytes / the single backup for a no-op valid-token switch).
-    if (rotated) {
-      await accountVault.addAccount(accountVault.buildVaultAccount(newActive));
+    // Always refresh the vault copy so the next switch has current tokens.
+    try {
+      await syncVaultFromAuthSession(newActive);
+    } catch {
+      /* best-effort */
     }
     await accountVault.setActiveAccountId(userId);
 
     // Background re-validation (non-blocking, no rotation, no auth events).
-    void revalidateInBackground(userId, effectiveSession.access_token);
+    void revalidateInBackground(userId, data.session.access_token);
 
     return { session: newActive };
   } catch (e: any) {
@@ -360,6 +455,44 @@ export const AuthService = {
       await accountVault.addAccount(accountVault.buildVaultAccount(updated));
     } catch {
       // Vault update is best-effort — never block the photo change on it.
+    }
+    return updated;
+  },
+
+  applyPortalContext: async (
+    activeContext: AccessContext,
+    portalContexts?: PortalContextsPayload | null
+  ): Promise<AuthSession | null> => {
+    const raw = await getSecureItem(STORAGE_KEY);
+    if (!raw) return null;
+    let parsed: AuthSession;
+    try {
+      parsed = JSON.parse(raw) as AuthSession;
+    } catch {
+      return null;
+    }
+    if (!parsed?.validatedUser) return null;
+
+    const primaryRole = activeContext.role_codes[0] || parsed.validatedUser.role?.code || 'student';
+    const roleCode = mapRoleCodeForFrontend(primaryRole);
+
+    const updated: AuthSession = {
+      ...parsed,
+      validatedUser: {
+        ...parsed.validatedUser,
+        role: { code: roleCode, name: roleCode },
+        roles: (activeContext.role_codes || []).map(mapRoleCodeForFrontend),
+        permissions: activeContext.permissions ?? parsed.validatedUser.permissions,
+        staffId: activeContext.staff_id ?? parsed.validatedUser.staffId,
+        portalContexts: portalContexts ?? parsed.validatedUser.portalContexts,
+      },
+    };
+
+    await setSecureItem(STORAGE_KEY, JSON.stringify(updated));
+    try {
+      await accountVault.addAccount(accountVault.buildVaultAccount(updated));
+    } catch {
+      // best-effort
     }
     return updated;
   },
@@ -418,7 +551,7 @@ export const AuthService = {
       try {
         await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
         await accountVault.setActiveAccountId(authSession.validatedUser.userId);
-        await saveParentCredentialsForRecovery(validatedUser, canonicalEmail, password);
+        await saveVaultLoginCredentials(validatedUser, canonicalEmail, password);
       } catch (vaultErr) {
         if (__DEV__) console.warn('[AuthService] vault register (signIn) failed:', vaultErr);
       }
@@ -533,7 +666,7 @@ export const AuthService = {
 
           // Persist the new account into the vault (does not change active yet).
           await accountVault.addAccount(accountVault.buildVaultAccount(authSession));
-          await saveParentCredentialsForRecovery(validatedUser, canonicalEmail, password);
+          await saveVaultLoginCredentials(validatedUser, canonicalEmail, password);
 
           const newUserId = validatedUser.userId;
           if (previousActiveUserId && previousActiveUserId !== newUserId) {

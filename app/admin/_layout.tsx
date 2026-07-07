@@ -10,6 +10,8 @@ export default function AdminLayout() {
             <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent'}, headerShown: false, animation: 'slide_from_right' }}>
                 <Stack.Screen name="dashboard" />
                 <Stack.Screen name="manage-staff" />
+                <Stack.Screen name="addStaff" />
+                <Stack.Screen name="staff-form" />
                 <Stack.Screen name="manage-content" />
                 <Stack.Screen name="academics" />
                 <Stack.Screen name="notices" />

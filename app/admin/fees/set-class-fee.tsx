@@ -47,6 +47,16 @@ export default function SetClassFeeScreen() {
   const [newTypeName, setNewTypeName] = useState('');
   const [newTypeNameTe, setNewTypeNameTe] = useState('');
   const [addingType, setAddingType] = useState(false);
+  const [reorderingTypes, setReorderingTypes] = useState(false);
+
+  const sortedFeeTypes = useMemo(
+    () =>
+      [...feeTypes].sort(
+        (a, b) =>
+          (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name)
+      ),
+    [feeTypes]
+  );
 
   const sectionsForClass = useMemo(() => {
     if (!selectedClassId || !selectedYearId) return [];
@@ -207,6 +217,22 @@ export default function SetClassFeeScreen() {
       alertCompat('Error', error?.message || error?.response?.data?.error || 'Failed to update fee mode');
     } finally {
       setModeSaving(false);
+    }
+  };
+
+  const handleMoveFeeType = async (index: number, direction: 'up' | 'down') => {
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= sortedFeeTypes.length) return;
+    const reordered = [...sortedFeeTypes];
+    [reordered[index], reordered[swapIndex]] = [reordered[swapIndex], reordered[index]];
+    setReorderingTypes(true);
+    try {
+      const updated = await FeeService.reorderFeeTypes(reordered.map((t) => t.id));
+      setFeeTypes(updated);
+    } catch (error: any) {
+      alertCompat('Error', error.message || error?.response?.data?.error || 'Failed to update fee type order');
+    } finally {
+      setReorderingTypes(false);
     }
   };
 
@@ -404,6 +430,58 @@ export default function SetClassFeeScreen() {
         ) : null}
 
         <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Fee Type Order</Text>
+          <Text style={styles.listSubtitle}>
+            Set the display order for fee types in the accounts collection flow. Top items appear first on the fee ledger.
+          </Text>
+          {sortedFeeTypes.length === 0 ? (
+            <Text style={styles.emptyHint}>Add fee types below to configure their order.</Text>
+          ) : (
+            <View style={styles.typeOrderList}>
+              {sortedFeeTypes.map((type, index) => (
+                <View key={type.id} style={styles.typeOrderRow}>
+                  <View style={styles.orderBadge}>
+                    <Text style={styles.orderBadgeText}>{type.sort_order ?? index + 1}</Text>
+                  </View>
+                  <Text style={styles.typeOrderName}>{type.name}</Text>
+                  <View style={styles.orderControls}>
+                    <TouchableOpacity
+                      style={[styles.orderBtn, (index === 0 || reorderingTypes) && styles.orderBtnDisabled]}
+                      onPress={() => handleMoveFeeType(index, 'up')}
+                      disabled={index === 0 || reorderingTypes}
+                    >
+                      <Ionicons
+                        name="chevron-up"
+                        size={20}
+                        color={index === 0 || reorderingTypes ? '#CBD5E1' : ADMIN_THEME.colors.primary}
+                      />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.orderBtn,
+                        (index === sortedFeeTypes.length - 1 || reorderingTypes) && styles.orderBtnDisabled,
+                      ]}
+                      onPress={() => handleMoveFeeType(index, 'down')}
+                      disabled={index === sortedFeeTypes.length - 1 || reorderingTypes}
+                    >
+                      <Ionicons
+                        name="chevron-down"
+                        size={20}
+                        color={
+                          index === sortedFeeTypes.length - 1 || reorderingTypes
+                            ? '#CBD5E1'
+                            : ADMIN_THEME.colors.primary
+                        }
+                      />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.sectionTitle}>Fee Details</Text>
 
           <Text style={styles.label}>Select Class</Text>
@@ -451,7 +529,7 @@ export default function SetClassFeeScreen() {
 
           <Text style={styles.label}>Fee Type</Text>
           <View style={styles.typeGrid}>
-            {feeTypes.map((type) => (
+            {sortedFeeTypes.map((type) => (
               <TouchableOpacity
                 key={type.id}
                 style={[styles.typeChip, feeTypeId === type.id && styles.typeChipActive]}
@@ -906,4 +984,46 @@ const getStyles = (theme: Theme, isDark: boolean) =>
       justifyContent: 'center',
       backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#FEF2F2',
     },
+    typeOrderList: { marginTop: 8, gap: 8 },
+    typeOrderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: isDark ? '#334155' : '#F8FAFC',
+      borderWidth: 1,
+      borderColor: isDark ? '#475569' : '#E2E8F0',
+    },
+    typeOrderName: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '700',
+      color: isDark ? '#F1F5F9' : '#1E293B',
+    },
+    orderBadge: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      backgroundColor: isDark ? 'rgba(99,102,241,0.2)' : '#EEF2FF',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    orderBadgeText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: ADMIN_THEME.colors.primary,
+    },
+    orderControls: { flexDirection: 'row', gap: 4 },
+    orderBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? '#1E293B' : '#fff',
+      borderWidth: 1,
+      borderColor: isDark ? '#475569' : '#E2E8F0',
+    },
+    orderBtnDisabled: { opacity: 0.45 },
   });

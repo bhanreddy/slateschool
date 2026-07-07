@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'expo-router';
 import { useAuth } from './useAuth';
 import * as accountVault from '../services/accountVault';
 import type { VaultAccount } from '../services/accountVault';
+import { getHomeRouteForRole } from '../utils/portalRoutes';
+import { isStudentRole } from '../utils/roleHelpers';
 import * as Haptics from '../utils/haptics';
 
 export function useQuickAccountSwitch(onSwitched?: () => void | Promise<void>) {
   const { user, switchAccount } = useAuth();
+  const router = useRouter();
   const [accounts, setAccounts] = useState<VaultAccount[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -41,15 +45,22 @@ export function useQuickAccountSwitch(onSwitched?: () => void | Promise<void>) {
           return false;
         }
         setActiveId(userId);
+        const roleCode = res.session?.validatedUser?.role?.code;
+        if (roleCode) {
+          router.replace(getHomeRouteForRole(roleCode) as any);
+        }
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        await onSwitched?.();
+        // Only refresh student UI when staying on the parent/student portal.
+        if (isStudentRole(roleCode)) {
+          await onSwitched?.();
+        }
         return true;
       } finally {
         busyRef.current = false;
         setSwitching(false);
       }
     },
-    [activeId, onSwitched, switchAccount]
+    [activeId, onSwitched, router, switchAccount]
   );
 
   const switchToNext = useCallback(async () => {

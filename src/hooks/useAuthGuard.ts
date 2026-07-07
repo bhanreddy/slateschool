@@ -82,7 +82,7 @@ export function useAuthGuard() {
         return;
       }
 
-      if (inTabsGroup && roleCode !== 'student') {
+      if (inTabsGroup && !isStudentRole(roleCode)) {
         router.replace(homeRoute);
         return;
       }
@@ -140,6 +140,8 @@ const getHomeRoute = (role: string) => {
     case 'staff':
     case 'teacher':return '/staff/dashboard';
     case 'driver':return '/driver/dashboard';
+    case 'parent':
+    case 'student':return '/(tabs)/home';
     default:return '/(tabs)/home';
   }
 };

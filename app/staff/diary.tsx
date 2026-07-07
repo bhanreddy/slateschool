@@ -26,6 +26,48 @@ import {
   type DiaryHistoryTabId,
 } from '../../src/components/diary/DiaryHistoryChrome';
 
+/** Staff diary form copy — teachers post homework in Telugu. */
+const TE = {
+  header: 'డైరీ & హోంవర్క్',
+  today: 'ఈరోజు',
+  history: 'చరిత్ర',
+  selectClass: 'తరగతి & విషయం ఎంచుకోండి',
+  cancelEdit: 'సవరణ రద్దు',
+  postNew: 'కొత్త హోంవర్క్ పోస్ట్ చేయండి',
+  modify: 'హోంవర్క్ సవరించండి',
+  existingEntry: 'ఇప్పటికే ఉంది',
+  teluguHint: 'హోంవర్క్‌ను తెలుగులో రాయండి',
+  titleLabel: 'శీర్షిక (ఐచ్ఛికం)',
+  titlePlaceholder: 'ఉదా: 5వ అధ్యాయం సారాంశం',
+  descLabel: 'వివరణ',
+  descPlaceholder: 'తెలుగులో హోంవర్క్ వివరాలు రాయండి…',
+  dueDate: 'గడువు తేదీ',
+  postHomework: 'హోంవర్క్ పోస్ట్ చేయండి',
+  updateHomework: 'హోంవర్క్ నవీకరించండి',
+  todayHomework: 'ఈరోజు హోంవర్క్',
+  historyHomework: 'ఎంచుకున్న రోజు హోంవర్క్',
+  noHomework: 'ఈ రోజు హోంవర్క్ లేదు',
+  due: 'గడువు',
+  posted: 'పోస్ట్',
+  edit: 'సవరించు',
+  errClass: 'దయచేసి తరగతి మరియు విషయం ఎంచుకోండి',
+  errDesc: 'దయచేసి హోంవర్క్ వివరణను తెలుగులో రాయండి',
+  successPost: 'హోంవర్క్ విజయవంతంగా పోస్ట్ అయింది!',
+  successUpdate: 'హోంవర్క్ విజయవంతంగా నవీకరించబడింది!',
+  errSave: 'హోంవర్క్ సేవ్ చేయడం విఫలమైంది',
+  errLoadClass: 'మీ తరగతులు లోడ్ కాలేదు',
+  noticeInactive: 'ఈ అసైన్‌మెంట్ ఇప్పుడు మీ జాబితాలో లేదు',
+  noticeReadOnly: 'మరొక స్టాఫ్ పోర్టల్‌ను చూస్తున్నప్పుడు డైరీ ఎంట్రీలు పోస్ట్ చేయలేరు',
+};
+
+function diaryDisplayTitle(entry: DiaryEntry): string {
+  return entry.title_te?.trim() || entry.title || '';
+}
+
+function diaryDisplayContent(entry: DiaryEntry): string {
+  return entry.content_te?.trim() || entry.content || '';
+}
+
 export default function StaffDiary() {
   const {
     user
@@ -89,7 +131,7 @@ export default function StaffDiary() {
       } catch (e) {
         if (__DEV__) { }
       }
-      alertCompat('Error', 'Could not load your assigned classes.');
+      alertCompat('Error', TE.errLoadClass);
     } finally {
       setLoading(false);
     }
@@ -143,8 +185,8 @@ export default function StaffDiary() {
       const match = data.find((e) => e.subject_id === selectedAssignment.subject_id);
       if (match) {
         setExistingEntry(match);
-        setTitle(match.title || '');
-        setDescription(match.content || '');
+        setTitle(diaryDisplayTitle(match));
+        setDescription(diaryDisplayContent(match));
         if (match.homework_due_date) {
           try {
             setDueDate(parseISO(match.homework_due_date));
@@ -172,8 +214,8 @@ export default function StaffDiary() {
 
       // 3. Populate form
       setExistingEntry(entry);
-      setTitle(entry.title || '');
-      setDescription(entry.content || '');
+      setTitle(diaryDisplayTitle(entry));
+      setDescription(diaryDisplayContent(entry));
       if (entry.homework_due_date) {
         try {
           setDueDate(parseISO(entry.homework_due_date));
@@ -189,12 +231,12 @@ export default function StaffDiary() {
       });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } else {
-      alertCompat("Notice", "This assignment is no longer in your active list.");
+      alertCompat("Notice", TE.noticeInactive);
     }
   };
   const handlePost = async () => {
     if (isViewingAsAdmin) {
-      alertCompat('Read-only', 'Diary entries can\'t be posted while viewing another staff member\'s portal.');
+      alertCompat('చదవడానికి మాత్రమే', TE.noticeReadOnly);
       return;
     }
     try {
@@ -210,11 +252,11 @@ export default function StaffDiary() {
       if (__DEV__) { }
     }
     if (!selectedAssignment) {
-      alertCompat('Error', 'Please select a class and subject');
+      alertCompat('Error', TE.errClass);
       return;
     }
-    if (!description) {
-      alertCompat('Error', 'Please enter homework description');
+    if (!description.trim()) {
+      alertCompat('Error', TE.errDesc);
       return;
     }
     const today = new Date().toISOString().split('T')[0];
@@ -237,17 +279,18 @@ export default function StaffDiary() {
         class_section_id: selectedAssignment.class_section_id,
         entry_date: entryToUpdate?.entry_date || today,
         subject_id: selectedAssignment.subject_id,
-        title: title || `${selectedAssignment.subject_name} Homework`,
-        content: description,
+        title: title.trim() || `${selectedAssignment.subject_name} హోంవర్క్`,
+        content: description.trim(),
         homework_due_date: dueStr,
+        input_language: 'te' as const,
         created_by: user?.userId || ''
       };
       if (entryToUpdate) {
         await DiaryService.update(entryToUpdate.id, payload);
-        alertCompat('Success', 'Homework updated successfully!');
+        alertCompat('Success', TE.successUpdate);
       } else {
-        await DiaryService.create(payload as any);
-        alertCompat('Success', 'Homework posted successfully!');
+        await DiaryService.create(payload);
+        alertCompat('Success', TE.successPost);
       }
       setIsEditing(false);
       fetchDiaryHistory();
@@ -265,7 +308,7 @@ export default function StaffDiary() {
       } catch (e) {
         if (__DEV__) { }
       }
-      alertCompat('Error', 'Failed to save homework');
+      alertCompat('Error', TE.errSave);
     } finally {
       setSubmitting(false);
     }
@@ -282,15 +325,15 @@ export default function StaffDiary() {
     backgroundColor: theme.colors.background
   }]}>
     <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
-    <StaffHeader title="Diary & Homework" showBackButton={true} />
+    <StaffHeader title={TE.header} showBackButton={true} />
     {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
     <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
       <Animated.View entering={FadeInDown.delay(80).duration(500)} style={styles.tabWrap}>
         <DiaryHistoryTabSwitcher
           active={activeTab}
           onChange={setActiveTab}
-          todayLabel="Today"
-          historyLabel="History"
+          todayLabel={TE.today}
+          historyLabel={TE.history}
         />
       </Animated.View>
 
@@ -306,7 +349,7 @@ export default function StaffDiary() {
           }}>
             <Text style={[styles.sectionTitle, {
               color: theme.colors.textStrong
-            }]}>Select Class & Subject</Text>
+            }]}>{TE.selectClass}</Text>
             {isEditing && <TouchableOpacity onPress={() => {
               setIsEditing(false);
               setExistingEntry(null);
@@ -317,7 +360,7 @@ export default function StaffDiary() {
                 color: theme.colors.primary,
                 fontWeight: '600',
                 fontSize: 13
-              }}>Cancel Edit</Text>
+              }}>{TE.cancelEdit}</Text>
             </TouchableOpacity>}
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assignmentsScroll} pointerEvents={isEditing ? 'none' : 'auto'}>
@@ -349,35 +392,39 @@ export default function StaffDiary() {
             <Text style={[styles.cardTitle, {
               color: theme.colors.textStrong
             }]}>
-              {existingEntry ? 'Modify Homework' : 'Post New Homework'}
+              {existingEntry ? TE.modify : TE.postNew}
             </Text>
             {existingEntry && <View style={styles.existingBadge}>
-              <Text style={styles.existingBadgeText}>Existing Entry</Text>
+              <Text style={styles.existingBadgeText}>{TE.existingEntry}</Text>
             </View>}
+          </View>
+          <View style={[styles.teluguHint, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5', borderColor: isDark ? 'rgba(16,185,129,0.25)' : '#A7F3D0' }]}>
+            <Ionicons name="language-outline" size={16} color={isDark ? '#34D399' : '#059669'} />
+            <Text style={[styles.teluguHintText, { color: isDark ? '#6EE7B7' : '#047857' }]}>{TE.teluguHint}</Text>
           </View>
           <View style={styles.inputGroup}>
             <Text style={[styles.label, {
               color: theme.colors.textSecondary
-            }]}>Title (Optional)</Text>
+            }]}>{TE.titleLabel}</Text>
             <AppTextInput style={{
               backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
               borderColor: theme.colors.border,
               color: theme.colors.text
-            }} placeholder="e.g. Chapter 5 Summary" placeholderTextColor="#94A3B8" value={title} onChangeText={setTitle} />
+            }} placeholder={TE.titlePlaceholder} placeholderTextColor="#94A3B8" value={title} onChangeText={setTitle} />
           </View>
           <View style={styles.inputGroup}>
             <Text style={[styles.label, {
               color: theme.colors.textSecondary
-            }]}>Description</Text>
+            }]}>{TE.descLabel}</Text>
             <AppTextInput style={[styles.textArea, {
               backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
               borderColor: theme.colors.border,
               color: theme.colors.text
-            }]} placeholder="Details about the homework..." placeholderTextColor="#94A3B8" multiline numberOfLines={4} value={description} onChangeText={setDescription} textAlignVertical="top" />
+            }]} placeholder={TE.descPlaceholder} placeholderTextColor="#94A3B8" multiline numberOfLines={4} value={description} onChangeText={setDescription} textAlignVertical="top" />
           </View>
           <View style={styles.row}>
             <AppDatePicker
-              label="Due Date"
+              label={TE.dueDate}
               value={format(dueDate, 'yyyy-MM-dd')}
               onChange={(ymd) => setDueDate(parseYMD(ymd))}
               minimumDate={new Date()}
@@ -390,7 +437,7 @@ export default function StaffDiary() {
             opacity: submitting ? 0.7 : 1
           }]} activeOpacity={0.8} onPress={handlePost} disabled={submitting}>
             {submitting ? <LogoLoader color="#fff" /> : <>
-              <Text style={styles.postButtonText}>{existingEntry ? 'Update Homework' : 'Post Homework'}</Text>
+              <Text style={styles.postButtonText}>{existingEntry ? TE.updateHomework : TE.postHomework}</Text>
               <Ionicons name={existingEntry ? "save-outline" : "send"} size={18} color="#fff" style={{
                 marginLeft: 8
               }} />
@@ -411,7 +458,7 @@ export default function StaffDiary() {
         <Text style={[styles.sectionTitle, {
           color: theme.colors.textStrong
         }]}>
-          {activeTab === 'today' ? "Today's homework" : 'Homework for selected day'}
+          {activeTab === 'today' ? TE.todayHomework : TE.historyHomework}
         </Text>
       </View>
       <HomeworkDayList
@@ -420,6 +467,7 @@ export default function StaffDiary() {
         diaryEntries={diaryEntries}
         displayYmd={activeTab === 'today' ? todayYmd : historyDate}
         onEdit={handleEdit}
+        labels={TE}
       />
     </ScrollView>
 
@@ -440,12 +488,14 @@ function HomeworkDayList({
   diaryEntries,
   displayYmd,
   onEdit,
+  labels,
 }: {
   theme: Theme;
   styles: Record<string, object>;
   diaryEntries: DiaryEntry[];
   displayYmd: string;
   onEdit: (entry: DiaryEntry) => void;
+  labels: typeof TE;
 }) {
   const items = diaryEntries.filter((e) => e.entry_date === displayYmd);
   if (items.length === 0) {
@@ -454,7 +504,7 @@ function HomeworkDayList({
         <View style={styles.emptyState}>
           <Ionicons name="book-outline" size={48} color={theme.colors.border} />
           <Text style={[styles.emptyText, { color: theme.colors.textSecondary }]}>
-            No homework for this day
+            {labels.noHomework}
           </Text>
         </View>
       </View>
@@ -501,9 +551,9 @@ function HomeworkDayList({
                     {item.subject_name}
                   </Text>
                 </View>
-                <Text style={[styles.postTitle, { color: theme.colors.textStrong }]}>{item.title}</Text>
+                <Text style={[styles.postTitle, { color: theme.colors.textStrong }]}>{diaryDisplayTitle(item)}</Text>
                 <Text style={[styles.postContent, { color: theme.colors.textSecondary }]} numberOfLines={2}>
-                  {item.content}
+                  {diaryDisplayContent(item)}
                 </Text>
               </View>
             </View>
@@ -511,16 +561,16 @@ function HomeworkDayList({
             <View style={styles.postFooter}>
               <View style={styles.footerInfo}>
                 <Text style={styles.dueText}>
-                  Due: {item.homework_due_date ? format(parseISO(item.homework_due_date), 'MMM d') : 'N/A'}
+                  {labels.due}: {item.homework_due_date ? format(parseISO(item.homework_due_date), 'MMM d') : 'N/A'}
                 </Text>
                 <Text style={[styles.createdText, { color: theme.colors.textSecondary }]}>
-                  Posted: {format(parseISO(item.created_at), 'p')}
+                  {labels.posted}: {format(parseISO(item.created_at), 'p')}
                 </Text>
               </View>
               <TouchableOpacity onPress={() => onEdit(item)}>
                 <View style={styles.editButton}>
                   <Ionicons name="create-outline" size={16} color={theme.colors.primary} />
-                  <Text style={[styles.editText, { color: theme.colors.primary }]}>Edit</Text>
+                  <Text style={[styles.editText, { color: theme.colors.primary }]}>{labels.edit}</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -591,6 +641,21 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     color: '#16A34A',
     fontWeight: 'bold',
     textTransform: 'uppercase'
+  },
+  teluguHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radii.md,
+    borderWidth: 1,
+    marginBottom: Spacing.md,
+  },
+  teluguHintText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
   inputGroup: {
     marginBottom: Spacing.md

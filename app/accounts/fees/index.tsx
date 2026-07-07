@@ -41,6 +41,7 @@ type FeeListStudent = {
   admissionNo: string;
   class: string;
   fatherName?: string;
+  fatherMobile?: string;
   studentGender?: string;
   parentLine?: string;
   status: FeeSummaryStatus;
@@ -740,6 +741,7 @@ export default function AccountsFees() {
 
   const mapFeeSummary = useCallback((d: any): FeeListStudent => {
     const fatherName = d.father_name || '';
+    const fatherMobile = d.father_mobile || '';
     const studentGender = d.student_gender || '';
     return {
       id: d.student_id,
@@ -747,6 +749,7 @@ export default function AccountsFees() {
       admissionNo: d.admission_no || '',
       class: d.class_name || '',
       fatherName,
+      fatherMobile,
       studentGender,
       parentLine: buildParentLine(studentGender, fatherName),
       status: d.status,
@@ -980,7 +983,12 @@ export default function AccountsFees() {
   const handleViewLedger = useCallback((student: any) => {
     router.push({
       pathname: '/accounts/fees/details' as any,
-      params: { studentId: student.id, name: student.name },
+      params: {
+        studentId: student.id,
+        name: student.name,
+        fatherName: student.fatherName,
+        fatherMobile: student.fatherMobile,
+      },
     });
   }, [router]);
 

@@ -2,9 +2,12 @@ import { Stack } from 'expo-router';
 import React from 'react';
 export { ErrorBoundary } from '@/src/components/ErrorBoundary';
 import { useRequireRole } from '../../src/hooks/useRequireRole';
+import { useRouteFeatureGuard } from '../../src/hooks/useFeatures';
+import { GIRL_SAFETY_FEATURE } from '../../src/config/screenFeatureMap';
 
 export default function GirlSafetyLayout() {
-    useRequireRole('admin', 'staff', 'student', 'principal');
+    useRequireRole('admin', 'staff', 'student', 'parent', 'principal');
+    useRouteFeatureGuard({ '/girl-safety': GIRL_SAFETY_FEATURE }, { prefix: '/girl-safety' });
 
     return (
         <Stack screenOptions={{ contentStyle: { backgroundColor: 'transparent'}, headerShown: true }}>

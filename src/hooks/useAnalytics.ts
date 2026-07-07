@@ -5,6 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   AnalyticsService,
   AnalyticsData,
@@ -78,6 +79,8 @@ export function useAnalytics(): UseAnalyticsReturn {
   // Abort controller to cancel in-flight requests on unmount/range change
   const abortRef = useRef<AbortController | null>(null);
 
+  const isFocused = useIsFocused();
+
   // ── Core fetch ─────────────────────────────────────────────────────────────
   const fetchData = useCallback(
     async (selectedRange: TimeRange, isRefresh = false) => {
@@ -134,6 +137,16 @@ export function useAnalytics(): UseAnalyticsReturn {
     fetchData(range);
     return () => { abortRef.current?.abort(); };
   }, [range]);
+
+  // ── Effect: revalidate stale data whenever the screen regains focus ──────────
+  // Without this, the module-level cache freezes values for CACHE_TTL_MS and
+  // never refreshes while the app stays open — so two admins (or a returning
+  // user) see divergent, stale numbers. fetchData respects the cache, so this
+  // only hits the network when the cached snapshot is actually stale.
+  useEffect(() => {
+    if (!isFocused) return;
+    fetchData(range);
+  }, [isFocused, range, fetchData]);
 
   // ── Pull-to-refresh ────────────────────────────────────────────────────────
   const refreshData = useCallback(async () => {

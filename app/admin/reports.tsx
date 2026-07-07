@@ -452,7 +452,7 @@ export default function AdminReports() {
             sub={financials ? `${financials.collection_efficiency}% efficiency` : undefined}
             color={C.green} delay={60} />
           <HeroKPI label="Avg Attendance"
-            value={attendance ? `${attendance.avg_attendance}%` : '--'}
+            value={attendance?.avg_attendance != null ? `${attendance.avg_attendance}%` : '—'}
             sub={attendance ? `${attendance.chronic_absentees} at-risk` : undefined}
             color={C.blue} delay={110} />
           <HeroKPI label="Avg Score"
@@ -540,7 +540,7 @@ export default function AdminReports() {
             <SHeader label="Attendance" accent={C.blue} icon="people-outline" delay={120} />
             <View style={S.row2}>
               <StatCard icon="people-outline" color={C.blue} delay={150}
-                label="Avg Attendance" value={attendance ? `${attendance.avg_attendance}%` : '--'} />
+                label="Avg Attendance" value={attendance?.avg_attendance != null ? `${attendance.avg_attendance}%` : '—'} />
               <StatCard icon="warning-outline" color={C.amber} delay={180}
                 label="At Risk" value={attendance ? String(attendance.chronic_absentees) : '--'} />
             </View>
@@ -665,16 +665,16 @@ export default function AdminReports() {
           <>
             <SHeader label="Attendance Summary" accent={C.blue} icon="people-outline" delay={0} />
             <StatCard icon="people-outline" color={C.blue} delay={40}
-              label="Avg Student Attendance" value={attendance ? `${attendance.avg_attendance}%` : '--'}
+              label="Avg Student Attendance" value={attendance?.avg_attendance != null ? `${attendance.avg_attendance}%` : '—'}
               delta="+1.4%" deltaPos />
             <StatCard icon="warning-outline" color={C.amber} delay={70}
               label="Chronic Absentees" value={attendance ? String(attendance.chronic_absentees) : '--'}
               sub="Below 75%" />
             <StatCard icon="calendar-outline" color={C.cyan} delay={100}
-              label="Working Days" value={attendance ? String(attendance.total_working_days) : '--'}
+              label="Working Days" value={attendance?.total_working_days != null ? String(attendance.total_working_days) : '—'}
               sub={attendance ? `${attendance.total_present_days} student-days present` : undefined} />
             <StatCard icon="id-card-outline" color={C.violet} delay={130}
-              label="Staff Attendance" value={attendance ? `${attendance.staff_attendance}%` : '--'} />
+              label="Staff Attendance" value={attendance?.staff_attendance != null ? `${attendance.staff_attendance}%` : '—'} />
 
             <ChartCard title="Attendance Trend" subtitle="Day-by-day presence %"
               accentColor={C.blue} delay={160} loading={loading}>

@@ -17,21 +17,30 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import StaffHeader from '../../src/components/StaffHeader';
 import SwipeableStudentCard from '../../src/components/SwipeableStudentCard';
 import { useAuth } from '../../src/hooks/useAuth';
-import { AttendanceService } from '../../src/services/attendanceService';
-import { AttendanceStatus } from '../../src/types/schema';
+import { AttendanceService, currentSession } from '../../src/services/attendanceService';
+import { AttendanceStatus, AttendanceSession } from '../../src/types/schema';
 import { useTheme } from '../../src/hooks/useTheme';
 import type { SchoolTheme } from '../../src/theme/types';
 import LogoLoader from '../../src/components/LogoLoader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 
+type SessionStatus = 'present' | 'absent' | 'unmarked';
+
 interface StudentUI {
   id: string;
   enrollmentId?: string;
   name: string;
   rollNo: string;
-  status: 'present' | 'absent' | 'unmarked';
+  // Each half-day session is marked independently; overall day = morning + afternoon.
+  morningStatus: SessionStatus;
+  afternoonStatus: SessionStatus;
 }
+
+// Normalize a server session status ('present'/'absent'/'late'/'half_day'/null)
+// into the card's tri-state. 'late' still counts as attended for the session.
+const toSessionStatus = (raw: string | null | undefined): SessionStatus =>
+  raw === 'present' || raw === 'late' ? 'present' : raw === 'absent' ? 'absent' : 'unmarked';
 
 const ACCENT = {
   emerald: '#10B981',
@@ -158,31 +167,52 @@ export default function ManageStudents() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [detectedClassId, setDetectedClassId] = useState<string | null>(null);
+  const [detectedClassLabel, setDetectedClassLabel] = useState<string | null>(null);
+  // Which half-day session is being marked. Defaults from the wall clock.
+  const [session, setSession] = useState<AttendanceSession>(currentSession());
 
-  const present = students.filter((s) => s.status === 'present').length;
-  const absent = students.filter((s) => s.status === 'absent').length;
-  const unmarked = students.filter((s) => s.status === 'unmarked').length;
+  // Status of the currently-selected session for a given student.
+  const statusOf = useCallback(
+    (s: StudentUI): SessionStatus => (session === 'morning' ? s.morningStatus : s.afternoonStatus),
+    [session]
+  );
+
+  const present = students.filter((s) => statusOf(s) === 'present').length;
+  const absent = students.filter((s) => statusOf(s) === 'absent').length;
+  const unmarked = students.filter((s) => statusOf(s) === 'unmarked').length;
   const total = students.length;
   const completionPct = total > 0 ? Math.round(((present + absent) / total) * 100) : 0;
   const canSubmit = total > 0 && unmarked === 0;
 
+  // How many students already have the OTHER session marked (contextual hint).
+  const otherSessionMarked = students.filter((s) =>
+    (session === 'morning' ? s.afternoonStatus : s.morningStatus) !== 'unmarked'
+  ).length;
+
   const loadStudents = useCallback(async () => {
     if (!user) return;
     try {
-      const myClass = await AttendanceService.getMyClass(undefined, staffId);
+      // The class is session-specific: morning resolves to the teacher's first
+      // period, afternoon to their first period after lunch (may differ).
+      const myClass = await AttendanceService.getMyClass(undefined, staffId, session);
       if (!myClass) {
         setStudents([]);
         setDetectedClassId(null);
+        setDetectedClassLabel(null);
         setLoading(false);
         return;
       }
       setDetectedClassId(myClass.class_section_id);
+      setDetectedClassLabel(
+        [myClass.class_name, myClass.section_name].filter(Boolean).join(' - ') || null
+      );
       const formatted = myClass.students.map((s) => ({
         id: s.student_id,
         enrollmentId: s.enrollment_id,
         name: s.student_name,
         rollNo: s.admission_no,
-        status: (s.status === 'present' || s.status === 'absent' ? s.status : 'unmarked') as StudentUI['status'],
+        morningStatus: toSessionStatus(s.morning_status),
+        afternoonStatus: toSessionStatus(s.afternoon_status),
       }));
       setStudents(formatted);
     } catch {
@@ -190,7 +220,7 @@ export default function ManageStudents() {
     } finally {
       setLoading(false);
     }
-  }, [user, staffId]);
+  }, [user, staffId, session]);
 
   // Reload every time the Attendance tab regains focus so that class-teacher /
   // timetable edits made in the admin timetable manager are reflected here without
@@ -201,9 +231,22 @@ export default function ManageStudents() {
     }, [loadStudents])
   );
 
-  const handleStatusChange = useCallback((id: string, newStatus: StudentUI['status']) => {
-    setStudents((prev) => prev.map((s) => (s.id === id ? { ...s, status: newStatus } : s)));
-  }, []);
+  const handleStatusChange = useCallback((id: string, newStatus: SessionStatus) => {
+    setStudents((prev) =>
+      prev.map((s) =>
+        s.id === id
+          ? { ...s, [session === 'morning' ? 'morningStatus' : 'afternoonStatus']: newStatus }
+          : s
+      )
+    );
+  }, [session]);
+
+  // Bulk-set the currently-selected session for every student.
+  const setAllForSession = useCallback((value: SessionStatus) => {
+    setStudents((prev) =>
+      prev.map((s) => ({ ...s, [session === 'morning' ? 'morningStatus' : 'afternoonStatus']: value }))
+    );
+  }, [session]);
 
   const handleSubmit = async () => {
     if (students.length === 0) {
@@ -224,11 +267,13 @@ export default function ManageStudents() {
       await AttendanceService.markAttendance({
         class_section_id: detectedClassId,
         date,
+        session,
         records: students
           .filter((s) => s.enrollmentId)
-          .map((s) => ({ student_id: s.id, status: s.status as AttendanceStatus })),
+          .map((s) => ({ student_id: s.id, status: statusOf(s) as AttendanceStatus })),
       });
-      alertCompat('Submitted!', `Present: ${present}   Absent: ${absent}`);
+      const sessionLabel = session === 'morning' ? 'Morning' : 'Afternoon';
+      alertCompat(`${sessionLabel} attendance submitted!`, `Present: ${present}   Absent: ${absent}`);
       router.back();
     } catch (error: any) {
       alertCompat('Error', 'Failed to submit attendance: ' + (error?.message || JSON.stringify(error)));
@@ -236,6 +281,42 @@ export default function ManageStudents() {
       setSubmitting(false);
     }
   };
+
+  const SessionTab = ({ value, label, icon }: { value: AttendanceSession; label: string; icon: React.ComponentProps<typeof Ionicons>['name'] }) => {
+    const active = session === value;
+    const marked = students.filter((s) => (value === 'morning' ? s.morningStatus : s.afternoonStatus) !== 'unmarked').length;
+    const done = total > 0 && marked === total;
+    return (
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={() => setSession(value)}
+        style={[styles.sessionTab, active && styles.sessionTabActive, IS_WEB && ({ cursor: 'pointer' } as object)]}
+      >
+        <Ionicons name={icon} size={16} color={active ? '#fff' : theme.colors.textSecondary} />
+        <Text style={[styles.sessionTabText, { color: active ? '#fff' : theme.colors.textSecondary }]}>{label}</Text>
+        {done && <Ionicons name="checkmark-circle" size={14} color={active ? '#fff' : ACCENT.emerald} style={{ marginLeft: 2 }} />}
+      </TouchableOpacity>
+    );
+  };
+
+  // Always-visible session switch so the teacher can flip Morning/Afternoon even
+  // when the current session's class is empty or unassigned.
+  const renderSessionSwitch = () => (
+    <>
+      <View style={styles.sessionSwitch}>
+        <SessionTab value="morning" label="Morning" icon="sunny-outline" />
+        <SessionTab value="afternoon" label="Afternoon" icon="partly-sunny-outline" />
+      </View>
+      {otherSessionMarked > 0 && (
+        <View style={styles.sessionHint}>
+          <Ionicons name="information-circle-outline" size={13} color={theme.colors.textSecondary} />
+          <Text style={styles.sessionHintText}>
+            {otherSessionMarked}/{total} already marked for the {session === 'morning' ? 'afternoon' : 'morning'} session · half + half = full day
+          </Text>
+        </View>
+      )}
+    </>
+  );
 
   const renderHeader = () => (
     <View style={styles.statsOuter}>
@@ -321,6 +402,9 @@ export default function ManageStudents() {
         />
         {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
 
+        {/* Session switch stays visible in every state so the teacher can always flip. */}
+        {!loading && renderSessionSwitch()}
+
         {loading ? (
           <View style={styles.loadingState}>
             <View style={styles.loadingGlow}>
@@ -336,10 +420,25 @@ export default function ManageStudents() {
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
             >
-              <Ionicons name="people-outline" size={44} color={ACCENT.violet} />
+              <Ionicons name={detectedClassId ? 'people-outline' : 'link-outline'} size={44} color={ACCENT.violet} />
             </LinearGradient>
-            <Text style={styles.emptyTitle}>No class assigned</Text>
-            <Text style={styles.emptySubtitle}>Ask your admin to link a class section to your profile, then return to this screen.</Text>
+            {detectedClassId ? (
+              <>
+                <Text style={styles.emptyTitle}>No students yet</Text>
+                <Text style={styles.emptySubtitle}>
+                  {detectedClassLabel ? `${detectedClassLabel} has no ` : 'This class has no '}
+                  enrolled students for the {session} session. Add students to this class, or switch sessions above.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyTitle}>No class assigned</Text>
+                <Text style={styles.emptySubtitle}>
+                  You aren't assigned a class for the {session} session
+                  {session === 'afternoon' ? ' (first period after lunch)' : ' (first period)'}. Ask your admin to update the timetable, or switch sessions above.
+                </Text>
+              </>
+            )}
           </View>
         ) : (
           <FlatList
@@ -369,7 +468,12 @@ export default function ManageStudents() {
                 </View>
               </>
             }
-            renderItem={({ item }) => <SwipeableStudentCard student={item} onStatusChange={handleStatusChange} />}
+            renderItem={({ item }) => (
+              <SwipeableStudentCard
+                student={{ id: item.id, name: item.name, rollNo: item.rollNo, status: statusOf(item) }}
+                onStatusChange={handleStatusChange}
+              />
+            )}
             contentContainerStyle={styles.listContent}
             showsVerticalScrollIndicator={false}
           />
@@ -382,7 +486,7 @@ export default function ManageStudents() {
                 <TouchableOpacity
                   style={[styles.quickBtn, styles.quickBtnPresent, IS_WEB && { cursor: 'pointer' }]}
                   activeOpacity={0.88}
-                  onPress={() => setStudents((prev) => prev.map((s) => ({ ...s, status: 'present' })))}
+                  onPress={() => setAllForSession('present')}
                 >
                   <View style={styles.quickBtnIcon}>
                     <Ionicons name="checkmark-done" size={16} color={ACCENT.emerald} />
@@ -392,7 +496,7 @@ export default function ManageStudents() {
                 <TouchableOpacity
                   style={[styles.quickBtn, styles.quickBtnReset, IS_WEB && { cursor: 'pointer' }]}
                   activeOpacity={0.88}
-                  onPress={() => setStudents((prev) => prev.map((s) => ({ ...s, status: 'unmarked' })))}
+                  onPress={() => setAllForSession('unmarked')}
                 >
                   <View style={[styles.quickBtnIcon, styles.quickBtnIconMuted]}>
                     <Ionicons name="refresh" size={16} color={theme.colors.textSecondary} />
@@ -428,7 +532,7 @@ export default function ManageStudents() {
                   ) : (
                     <>
                       <Text style={styles.submitText}>
-                        {canSubmit ? 'Submit attendance' : `${unmarked} student${unmarked !== 1 ? 's' : ''} still pending`}
+                        {canSubmit ? `Submit ${session} attendance` : `${unmarked} student${unmarked !== 1 ? 's' : ''} still pending`}
                       </Text>
                       <Ionicons name="cloud-upload-outline" size={22} color="#fff" style={{ marginLeft: 10 }} />
                     </>
@@ -497,6 +601,53 @@ const getStyles = (theme: SchoolTheme, isDark: boolean) =>
       textAlign: 'center',
       lineHeight: 22,
       fontWeight: '500',
+    },
+
+    // Session (morning / afternoon) switch
+    sessionSwitch: {
+      flexDirection: 'row',
+      marginHorizontal: 16,
+      marginTop: 12,
+      padding: 4,
+      borderRadius: 16,
+      backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)',
+      gap: 4,
+    },
+    sessionTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 11,
+      borderRadius: 12,
+    },
+    sessionTabActive: {
+      backgroundColor: ACCENT.violet,
+      ...Platform.select({
+        web: { boxShadow: '0 6px 16px -6px rgba(108,99,255,0.6)' },
+        ios: { shadowColor: ACCENT.violet, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.35, shadowRadius: 10 },
+        default: { elevation: 4 },
+      }),
+    },
+    sessionTabText: {
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+    },
+    sessionHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginHorizontal: 20,
+      marginTop: 10,
+    },
+    sessionHintText: {
+      flex: 1,
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      letterSpacing: 0.1,
     },
 
     // Stats hero

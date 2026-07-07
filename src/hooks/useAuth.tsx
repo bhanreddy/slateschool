@@ -9,10 +9,27 @@ import { isStudentRole, isPersistentSessionRole } from '../utils/roleHelpers';
 import { getBackupRefreshToken, clearBackupRefreshToken } from '../services/secureTokenStore';
 import { SessionPolicy } from '../services/sessionPolicyService';
 import { notificationManager } from '../services/notificationManager';
+import { fetchFeatures, resetFeatures } from '../services/featuresStore';
 import * as accountVault from '../services/accountVault';
 import { invalidateApiQueryCache } from './useApiQuery';
 import { persistentQueryCache } from '../services/persistentQueryCache';
 import { StorageService } from '../services/storageService';
+import type { PortalContextsPayload } from '../types/context';
+import {
+  fetchPortalContexts,
+  switchPortalContext as switchPortalContextApi,
+} from '../services/contextService';
+import {
+  clearActiveContextStore,
+  getCachedPortalContexts,
+} from '../services/activeContextStore';
+
+/** Synchronous session read for role guards during account switch (RN has no flushSync). */
+const authSessionSnapshotRef = { current: null as AuthSession | null };
+
+export function getAuthSessionSnapshot(): AuthSession | null {
+  return authSessionSnapshotRef.current;
+}
 
 interface AuthContextType {
   session: AuthSession | null;
@@ -31,6 +48,10 @@ interface AuthContextType {
   switchAccount: (userId: string) => Promise<{ session?: AuthSession; error?: string }>;
   /** Phase 1/2 — add another account to the vault; active account stays unchanged. */
   addAccount: (email: string, password: string) => Promise<{ session?: AuthSession; error?: string }>;
+  /** Portal switcher — contexts available under this login. */
+  portalContexts: PortalContextsPayload | null;
+  refreshPortalContexts: () => Promise<PortalContextsPayload>;
+  switchPortalContext: (contextId: string) => Promise<PortalContextsPayload>;
   authChecked: boolean;
   isAppLocked?: boolean;
 }
@@ -49,6 +70,9 @@ const AuthContext = createContext<AuthContextType>({
   updateUserPhoto: async () => {},
   switchAccount: async () => ({ error: 'Not initialized' }),
   addAccount: async () => ({ error: 'Not initialized' }),
+  portalContexts: null,
+  refreshPortalContexts: async () => ({ activeContextId: null, activeContext: null, groups: [], total: 0 }),
+  switchPortalContext: async () => ({ activeContextId: null, activeContext: null, groups: [], total: 0 }),
   authChecked: false,
   isAppLocked: false,
 });
@@ -57,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
+  const [portalContexts, setPortalContexts] = useState<PortalContextsPayload | null>(null);
 
   const backoffDelay = useRef(1000); // Start at 1s
   const justSignedIn = useRef(false); // Guard against TOKEN_REFRESHED race after sign-in
@@ -66,11 +91,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const manualSignOut = useRef(false);
   const sessionRef = useRef<AuthSession | null>(null);
   sessionRef.current = session;
+  authSessionSnapshotRef.current = session;
 
   const user = session?.validatedUser || null;
   const role = user?.role?.code || null;
   const isStudent = isStudentRole(role);
   const schoolId = user ? SCHOOL_ID : null;
+
+  // Load per-school feature flags once auth is ready (useFeatures also fetches on mount).
+  useEffect(() => {
+    if (!session?.supabaseSession?.access_token || !isStudent) return;
+    fetchFeatures({ force: true }).catch(() => {});
+  }, [session?.supabaseSession?.access_token, isStudent]);
 
   const signOut = async () => {
     console.log('[AUTH_OUT]', 'manual_logout', new Date().toISOString());
@@ -80,6 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     manualSignOut.current = true;
     setTimeout(() => { manualSignOut.current = false; }, 5000);
     setLoading(true);
+    // Clear cached feature flags so the next account doesn't inherit them.
+    resetFeatures().catch(() => {});
     // Capture the signing-out account's userId BEFORE the session is cleared —
     // this is the exact key the vault is stored under (buildVaultAccount uses
     // validatedUser.userId). sessionRef.current is always the latest session
@@ -121,6 +155,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       invalidateApiQueryCache();
     } catch (e) {
       if (__DEV__) console.warn('[useAuth] query cache purge on sign-out failed (non-fatal):', e);
+    }
+    try {
+      await clearActiveContextStore();
+      setPortalContexts(null);
+    } catch (e) {
+      if (__DEV__) console.warn('[useAuth] active context clear on sign-out failed (non-fatal):', e);
     }
     if (signingOutUserId) {
       try {
@@ -420,10 +460,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const switchAccount = async (userId: string) => {
     const result = await AuthService.switchAccount(userId);
     if (result.session) {
+      try {
+        await clearActiveContextStore();
+        setPortalContexts(null);
+      } catch {
+        // non-fatal — vault switch uses its own JWT, not server context
+      }
+      // Update snapshot before React state so layout role guards see the new
+      // account before AccountSwitcherSheet navigates (flushSync unavailable on RN).
+      authSessionSnapshotRef.current = result.session;
+      sessionRef.current = result.session;
       setSession(result.session);
       const roleCode = result.session.validatedUser?.role?.code;
       if (roleCode) {
         await SessionPolicy.startSession(roleCode as any);
+      }
+      try {
+        invalidateApiQueryCache();
+      } catch {
+        // non-fatal
       }
     }
     // NOTE: cold start / login / switch already re-trigger push fan-out via
@@ -444,8 +499,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return result;
   };
 
+  const refreshPortalContexts = async (): Promise<PortalContextsPayload> => {
+    const payload = await fetchPortalContexts();
+    setPortalContexts(payload);
+    if (payload.activeContext && sessionRef.current) {
+      const updated = await AuthService.applyPortalContext(payload.activeContext, payload);
+      if (updated) setSession(updated);
+    }
+    return payload;
+  };
+
+  const switchPortalContext = async (contextId: string): Promise<PortalContextsPayload> => {
+    const payload = await switchPortalContextApi(contextId);
+    setPortalContexts(payload);
+    if (payload.activeContext) {
+      const updated = await AuthService.applyPortalContext(payload.activeContext, payload);
+      if (updated) {
+        setSession(updated);
+        const roleCode = updated.validatedUser?.role?.code;
+        if (roleCode) {
+          await SessionPolicy.startSession(roleCode as any);
+        }
+      }
+    }
+    try {
+      invalidateApiQueryCache();
+    } catch {
+      // non-fatal
+    }
+    return payload;
+  };
+
+  useEffect(() => {
+    if (!session) {
+      setPortalContexts(null);
+      return;
+    }
+    void (async () => {
+      const cached = await getCachedPortalContexts();
+      if (cached) setPortalContexts(cached);
+      if (session.validatedUser?.portalContexts) {
+        setPortalContexts(session.validatedUser.portalContexts);
+      }
+    })();
+  }, [session?.validatedUser?.userId]);
+
   return (
-    <AuthContext.Provider value={{ session, loading, authChecked, isAppLocked: false, user, role, isStudent, schoolId, signIn, signOut, refreshSession, updateUserPhoto, switchAccount, addAccount }}>
+    <AuthContext.Provider value={{
+      session, loading, authChecked, isAppLocked: false, user, role, isStudent, schoolId,
+      signIn, signOut, refreshSession, updateUserPhoto, switchAccount, addAccount,
+      portalContexts, refreshPortalContexts, switchPortalContext,
+    }}>
       {children}
     </AuthContext.Provider>
   );

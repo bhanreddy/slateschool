@@ -12,6 +12,7 @@ import { ResultService, ExamSummary } from '../../src/services/resultService';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useTheme, type SchoolTheme } from '../../src/hooks/useTheme';
 import LogoLoader from '../../src/components/LogoLoader';
+import { useFeatureGuard } from '../../src/hooks/useFeatures';
 
 // Config for visual styling based on exam type
 const EXAM_TYPE_CONFIG: Record<string, {
@@ -58,6 +59,7 @@ const EXAM_TYPE_CONFIG: Record<string, {
   }
 };
 const ResultsScreen = () => {
+  useFeatureGuard('nav.results'); // deep-link guard
   const { theme } = useTheme();
   const styles = React.useMemo(() => getStyles(theme), [theme]);
   const {

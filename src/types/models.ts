@@ -67,9 +67,17 @@ export interface StudentEnrollment {
     readonly class_code: string;
     readonly class_name?: string;
     readonly class_id: string;
+    readonly class_sort_order?: number;
     readonly section_name: string;
     readonly section_id: string;
+    readonly academic_year_id?: string;
     readonly academic_year: string;
+    readonly academic_year_start_date?: string;
+    readonly academic_year_end_date?: string;
+    readonly start_date?: string;
+    readonly end_date?: string | null;
+    readonly created_at?: string;
+    readonly status?: string;
     readonly class_teacher?: string;
 }
 
@@ -192,11 +200,14 @@ export interface FeeTransaction {
     readonly paid_at: string;
     readonly payment_method: 'cash' | 'card' | 'upi' | 'bank_transfer' | 'cheque' | 'online';
     readonly transaction_ref?: string;
+    /** Serial receipt number (e.g. RCT-20260707-1001) generated on ledger post */
+    readonly receipt_no?: string;
     readonly remarks?: string;
     readonly received_by?: string;
     readonly received_by_id?: string;
     readonly student_name?: string;
     readonly father_name?: string;
+    readonly father_mobile?: string;
     readonly admission_no?: string;
     readonly class_name?: string;
     readonly section_name?: string;
@@ -252,6 +263,7 @@ export interface FeeType {
     readonly description?: string;
     readonly frequency?: string;
     readonly is_active?: boolean;
+    readonly sort_order?: number;
 }
 
 export interface StudentFee {
@@ -262,8 +274,10 @@ export interface StudentFee {
     readonly discount: number;
     readonly status: 'pending' | 'partial' | 'paid' | 'overdue' | 'waived';
     readonly due_date: string;
+    readonly fee_type_id?: string;
     readonly fee_type: string;
     readonly fee_type_te?: string;
+    readonly fee_type_sort_order?: number;
     readonly fee_code?: string;
     readonly period_month?: number;
     readonly period_year?: number;
@@ -279,6 +293,8 @@ export interface FeeReceipt {
     readonly issued_at: string;
     readonly issued_by_name?: string;
     readonly student_name: string;
+    readonly father_name?: string;
+    readonly father_mobile?: string;
     readonly admission_no: string;
     readonly class_name?: string;
     readonly section_name?: string;
@@ -333,6 +349,9 @@ export interface FeeResponse {
         readonly display_name: string;
         readonly class_name?: string;
         readonly section_name?: string;
+        readonly father_name?: string;
+        readonly father_mobile?: string;
+        readonly parents?: Parent[];
     };
     readonly summary: FeeSummary;
     readonly fees: StudentFee[];

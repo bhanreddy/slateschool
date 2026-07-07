@@ -12,6 +12,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import MenuOverlay from './MenuOverlay';
 import { Shadows, Radii, Spacing } from '../theme/themes';
 import { useTheme } from '../hooks/useTheme';
+import { useFeatures } from '../hooks/useFeatures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SCHOOL_NAME } from '../constants/school';
 
@@ -32,6 +33,7 @@ const isWeb = Platform.OS === 'web';
 const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, title?: string, showSettingsButton?: boolean }> = ({ onMenuPress, showBackButton = false, title, showSettingsButton = true, scrollY, menuUserType = 'student', style: containerStyleOverride, titleStyle: titleStyleOverride }) => {
     const router = useRouter();
     const { theme, isDark } = useTheme();
+    const { isEnabled } = useFeatures();
     const { t, i18n } = useTranslation();
     const [isTeluguLang, setIsTeluguLang] = useState(isTeluguCheck(i18n.language));
     const [menuVisible, setMenuVisible] = useState(false);
@@ -198,6 +200,7 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
                             {t('schoolRibbon.brandName', { defaultValue: SCHOOL_NAME })}
                         </Animated.Text>
                         <View style={styles.tabsContainer}>
+                            {isEnabled('topbar.diary') && (
                             <Pressable
                                 onPress={() => handleTabPress('Diary')}
                                 style={Platform.OS === 'web' && { cursor: 'pointer' }}
@@ -209,7 +212,9 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
                                     <Animated.Text style={[styles.tabText, fontColorStyle]}>{t('diary', 'Diary')}</Animated.Text>
                                 </Animated.View>
                             </Pressable>
+                            )}
 
+                            {isEnabled('topbar.lms') && (
                             <Pressable
                                 onPress={() => handleTabPress('LMS')}
                                 style={Platform.OS === 'web' && { cursor: 'pointer' }}
@@ -221,6 +226,7 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
                                     <Animated.Text style={[styles.tabText, fontColorStyle]}>{t('lMS', 'LMS')}</Animated.Text>
                                 </Animated.View>
                             </Pressable>
+                            )}
                         </View>
                     </View>
                 ) : null}

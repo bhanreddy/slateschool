@@ -1,8 +1,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'expo-router';
-import { useAuth } from './useAuth';
-import { Role } from '../types/models';
-import { ValidatedUser } from '../types/auth';
+import { useAuth, getAuthSessionSnapshot } from './useAuth';
+import { getHomeRouteForRole } from '../utils/portalRoutes';
 
 /**
  * useRequireRole
@@ -15,21 +14,31 @@ import { ValidatedUser } from '../types/auth';
 export function useRequireRole(...allowedRoles: string[]) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const allowedKey = allowedRoles.join(',');
 
   useEffect(() => {
     if (loading) return;
 
-    if (!user) {
+    const snapshotUser = getAuthSessionSnapshot()?.validatedUser;
+    const effectiveUser = snapshotUser ?? user;
+
+    if (!effectiveUser) {
       router.replace('/welcome');
       return;
     }
 
     // Handle user.role being either a string or an object { code: string, name: string }
-    const roleCode = typeof user.role === 'object' && user.role !== null ? (user.role as any).code : user.role;
+    const roleCode =
+      typeof effectiveUser.role === 'object' && effectiveUser.role !== null
+        ? (effectiveUser.role as any).code
+        : effectiveUser.role;
 
     if (!allowedRoles.includes(roleCode)) {
-      // Unauthorized — redirect to the unauthorized screen
-      router.replace('/unauthorized' as any);
+      // Send the user to their own portal home (matches useAuthGuard). Avoids
+      // a brief "Access Denied" flash when account switching navigates before
+      // React state catches up, and is friendlier than /unauthorized for
+      // cross-portal deep links.
+      router.replace(getHomeRouteForRole(roleCode) as any);
     }
-  }, [user, loading]);
+  }, [user, loading, router, allowedKey]);
 }

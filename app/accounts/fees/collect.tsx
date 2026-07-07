@@ -154,6 +154,8 @@ export default function CollectFeesScreen() {
     const admissionNo = params.admissionNo as string;
     const className = params.className as string | undefined;
     const sectionName = params.sectionName as string | undefined;
+    const fatherName = params.fatherName as string | undefined;
+    const fatherMobile = params.fatherMobile as string | undefined;
     const feeType = params.feeType as string;
     const dueAmount = params.due as string;
 
@@ -270,6 +272,7 @@ export default function CollectFeesScreen() {
     const remaining = Math.max(0, dueNum - amountNum);
     const isOverpay = amountNum > dueNum && dueNum > 0;
     const isReady = amountNum > 0 && !isOverpay;
+    const isPartialPayment = isReady && dueNum > 0 && amountNum < dueNum;
     const inrAmountStr = parseInrAmount(amount);
     const upiPayUri =
         mode === 'UPI' && inrAmountStr && schoolUpiId && schoolPayeeName
@@ -277,37 +280,55 @@ export default function CollectFeesScreen() {
             : '';
     const upiQrReady = mode === 'UPI' && isReady && !!upiPayUri && !upiLoading && !upiLoadError;
 
-    const recordPayment = async () => {
+    const recordPayment = async (requestApproval = false) => {
         const result = await FeesService.collectFee({
             student_fee_id: feeId,
             amount: amountNum,
             payment_method: mode.toLowerCase() as 'cash' | 'upi' | 'cheque',
             transaction_ref: generateUUID(),
             remarks,
+            request_approval: requestApproval || undefined,
         });
+
+        if (result.status === 'pending_approval') {
+            setPaymentError(null);
+            const msg = `${result.message}\n\nNo ledger entry was created. An admin must approve this partial payment first.`;
+            const title = requestApproval ? 'Request Sent' : 'Pending Approval';
+            if (Platform.OS === 'web') {
+                await showSuccess(title, msg, [{ text: 'OK', onPress: () => router.back() }]);
+                return;
+            }
+            alertCompat(title, msg, [{ text: 'OK', onPress: () => router.back() }]);
+            return;
+        }
+
+        const payment = result.transaction;
         setPaymentError(null);
         if (Platform.OS === 'web') {
             await showSuccess(
                 '✓ Payment Recorded',
-                `Ref: ${result.transaction_ref || (result as any).id}\n\nLedger updated successfully.`,
+                `Receipt: ${payment.receipt_no || 'pending'}\n\nLedger updated successfully.`,
                 [
                     {
                         text: 'Print Receipt',
                         onPress: async () => {
                             await generateReceiptPDF({
-                                ...result,
-                                student_id: result.student_id || studentId,
+                                ...payment,
+                                receipt_no: payment.receipt_no,
+                                student_id: payment.student_id || studentId,
                                 student_name: studentName,
                                 admission_no: admissionNo,
-                                class_name: result.class_name || className,
-                                section_name: result.section_name || sectionName,
+                                class_name: payment.class_name || className,
+                                section_name: payment.section_name || sectionName,
+                                father_name: payment.father_name || fatherName,
+                                father_mobile: payment.father_mobile || fatherMobile,
                                 fee_type: feeType,
-                                academic_year: result.academic_year || (result as any).academicYear,
+                                academic_year: payment.academic_year || (payment as any).academicYear,
                                 paid_at: new Date().toISOString(),
-                                balance_due: result.balance_due ?? remaining,
-                                amount_due: result.amount_due,
-                                total_paid: result.total_paid,
-                                discount: result.discount,
+                                balance_due: payment.balance_due ?? remaining,
+                                amount_due: payment.amount_due,
+                                total_paid: payment.total_paid,
+                                discount: payment.discount,
                             });
                         },
                     },
@@ -319,25 +340,28 @@ export default function CollectFeesScreen() {
         }
         alertCompat(
             '✓ Payment Recorded',
-            `Ref: ${result.transaction_ref || (result as any).id}\n\nLedger updated successfully.`,
+            `Receipt: ${payment.receipt_no || 'pending'}\n\nLedger updated successfully.`,
             [
                 {
                     text: 'Print Receipt',
                     onPress: async () => {
                         await generateReceiptPDF({
-                            ...result,
-                            student_id: result.student_id || studentId,
+                            ...payment,
+                            receipt_no: payment.receipt_no,
+                            student_id: payment.student_id || studentId,
                             student_name: studentName,
                             admission_no: admissionNo,
-                            class_name: result.class_name || className,
-                            section_name: result.section_name || sectionName,
+                            class_name: payment.class_name || className,
+                            section_name: payment.section_name || sectionName,
+                            father_name: payment.father_name || fatherName,
+                            father_mobile: payment.father_mobile || fatherMobile,
                             fee_type: feeType,
-                            academic_year: result.academic_year || (result as any).academicYear,
+                            academic_year: payment.academic_year || (payment as any).academicYear,
                             paid_at: new Date().toISOString(),
-                            balance_due: result.balance_due ?? remaining,
-                            amount_due: result.amount_due,
-                            total_paid: result.total_paid,
-                            discount: result.discount,
+                            balance_due: payment.balance_due ?? remaining,
+                            amount_due: payment.amount_due,
+                            total_paid: payment.total_paid,
+                            discount: payment.discount,
                         });
                         router.back();
                     },
@@ -426,6 +450,31 @@ export default function CollectFeesScreen() {
                     ? 'Could not process payment. Check network and permissions (fees.collect).'
                     : 'Could not process payment. Check backend logs.');
             setPaymentError(msg);
+            const canRequestPartial =
+                isPartialPayment &&
+                error instanceof APIError &&
+                (error.code === 'PARTIAL_FEE_PAYMENT_DISABLED' ||
+                    msg.includes('Partial fee payments are disabled'));
+
+            if (canRequestPartial) {
+                const shouldRequest = await showConfirm({
+                    title: 'Partial Payment Disabled',
+                    message: `${msg}\n\nSend this partial payment to admin for approval? It will appear on the Partial Fee Collection page.`,
+                    confirmText: 'Request Admin Approval',
+                    cancelText: 'Cancel',
+                    type: 'warning',
+                });
+                if (shouldRequest) {
+                    try {
+                        await recordPayment(true);
+                    } catch (requestError: any) {
+                        const requestMsg = requestError?.message || 'Could not send partial payment request.';
+                        setPaymentError(requestMsg);
+                        await showError('Request Failed', requestMsg);
+                    }
+                }
+                return;
+            }
             await showError('Payment Failed', msg);
         } finally {
             setLoading(false);

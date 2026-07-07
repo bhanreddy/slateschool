@@ -301,6 +301,8 @@ export default function StudentFeeLedger() {
   const params = useLocalSearchParams();
   const studentId = params.studentId as string;
   const studentName = params.name as string;
+  const fatherNameParam = params.fatherName as string | undefined;
+  const fatherMobileParam = params.fatherMobile as string | undefined;
 
   const [loading, setLoading] = useState(true);
   const [feeData, setFeeData] = useState<FeeResponse | null>(null);
@@ -350,6 +352,8 @@ export default function StudentFeeLedger() {
         admissionNo: feeData?.student.admission_no,
         className: feeData?.student.class_name,
         sectionName: feeData?.student.section_name,
+        fatherName: feeData?.student.father_name || fatherNameParam,
+        fatherMobile: feeData?.student.father_mobile || fatherMobileParam,
         feeType: fee.fee_type,
         due: (fee.amount_due - fee.discount - fee.amount_paid).toString(),
       },
@@ -490,9 +494,7 @@ export default function StudentFeeLedger() {
         {/* ── Fee Cards ── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>FEE BREAKDOWN</Text>
-          <Text style={styles.sectionCount}>
-            {ledgerItems.length} items
-          </Text>
+          <Text style={styles.sectionCount}>{ledgerItems.length} items</Text>
         </View>
 
         {ledgerItems.map((fee, index) => (

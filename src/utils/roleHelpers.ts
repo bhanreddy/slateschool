@@ -45,9 +45,10 @@ export function resolveRoleFromDesignation(designationName: string | null | unde
 /**
  * Check if a role code represents a student/parent account.
  * Student accounts are the parent-facing login used by families.
+ * The explicit `parent` role is used by the unified portal switcher.
  */
 export function isStudentRole(roleCode: string | null | undefined): boolean {
-  return roleCode === 'student' || roleCode === 'students';
+  return roleCode === 'student' || roleCode === 'students' || roleCode === 'parent';
 }
 
 /**

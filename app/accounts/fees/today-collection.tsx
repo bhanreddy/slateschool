@@ -470,7 +470,7 @@ export default function TodayCollectionScreen() {
         const names = types
           .map((t) => t.name?.trim())
           .filter((name): name is string => Boolean(name));
-        setSchoolFeeTypes(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b)));
+        setSchoolFeeTypes(Array.from(new Set(names)));
       })
       .catch(() => setSchoolFeeTypes([]));
   }, []);

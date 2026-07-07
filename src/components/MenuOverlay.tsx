@@ -25,6 +25,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../hooks/useAuth';
+import { useFeatures } from '../hooks/useFeatures';
+import type { FeatureKey } from '../config/featureFlags';
 import { AuthService } from '../services/authService';
 import * as Haptics from '../utils/haptics';
 
@@ -72,6 +74,8 @@ interface MenuItem {
     icon: keyof typeof Ionicons.glyphMap;
     link: string;
     accent?: string;
+    /** Feature-flag key gating this drawer item (student items only). */
+    feature?: FeatureKey;
 }
 
 /* ─── Individual Menu Item with press animation ─── */
@@ -113,11 +117,11 @@ const MenuOverlay: React.FC<Props> = ({ visible, onClose, userType = 'student' }
 
     /* ── Menu items ── */
     const studentMenuItems: MenuItem[] = [
-        { key: 'dcgd', label: 'DCGD', icon: 'ribbon-outline', link: '/Screen/dcgd', accent: '#0D9488' },
-        { key: 'ai_doubt', label: 'AI Doubt Assist', icon: 'chatbubble-ellipses-outline', link: '/Screen/aiChat', accent: '#6366F1' },
-        { key: 'insurance', label: 'Insurance', icon: 'shield-checkmark-outline', link: '/Screen/insurance', accent: '#10B981' },
-        { key: 'money_science', label: 'Money Science', icon: 'cash-outline', link: '/Screen/moneyScience', accent: '#8B5CF6' },
-        { key: 'girl_safety', label: 'Girl Safety', icon: 'shield-checkmark-outline', link: '/girl-safety', accent: '#7C3AED' },
+        { key: 'dcgd', label: 'DCGD', icon: 'ribbon-outline', link: '/Screen/dcgd', accent: '#0D9488', feature: 'menu.dcgd' },
+        { key: 'ai_doubt', label: 'AI Doubt Assist', icon: 'chatbubble-ellipses-outline', link: '/Screen/aiChat', accent: '#6366F1', feature: 'menu.ai_doubt_assist' },
+        { key: 'insurance', label: 'Insurance', icon: 'shield-checkmark-outline', link: '/Screen/insurance', accent: '#10B981', feature: 'menu.insurance' },
+        { key: 'money_science', label: 'Money Science', icon: 'cash-outline', link: '/Screen/moneyScience', accent: '#8B5CF6', feature: 'menu.money_science' },
+        { key: 'girl_safety', label: 'Girl Safety', icon: 'shield-checkmark-outline', link: '/girl-safety', accent: '#7C3AED', feature: 'menu.girl_safety' },
     ];
 
     const staffMenuItems: MenuItem[] = [
@@ -134,7 +138,10 @@ const MenuOverlay: React.FC<Props> = ({ visible, onClose, userType = 'student' }
         { key: 'profile', label: 'Driver Profile', icon: 'person-outline', link: '/driver/profile', accent: '#10B981' },
     ];
 
-    const itemsToRender = userType === 'driver' ? driverMenuItems : userType === 'staff' ? staffMenuItems : studentMenuItems;
+    const { isEnabled } = useFeatures();
+    const baseItems = userType === 'driver' ? driverMenuItems : userType === 'staff' ? staffMenuItems : studentMenuItems;
+    // Feature flags apply to student items only (staff/driver items carry no `feature`).
+    const itemsToRender = baseItems.filter((it) => !it.feature || isEnabled(it.feature));
 
     /* ── Animations ── */
     useEffect(() => {

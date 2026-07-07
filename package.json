@@ -1,7 +1,7 @@
 {
   "name": "samskruthe-school",
   "main": "expo-router/entry",
-  "version": "2.0.0",
+  "version": "1.5.0",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -32,6 +32,7 @@
     "@react-navigation/material-top-tabs": "^7.4.13",
     "@react-navigation/native": "^7.1.8",
     "axios": "^1.13.6",
+    "brew": "^0.0.8",
     "date-fns": "^4.1.0",
     "expo": "~54.0.31",
     "expo-application": "~7.0.8",
@@ -64,6 +65,7 @@
     "expo-system-ui": "~6.0.9",
     "expo-updates": "~29.0.16",
     "expo-web-browser": "~15.0.10",
+    "gh": "^2.8.9",
     "html2canvas": "^1.4.1",
     "i18next": "^25.7.3",
     "jspdf": "^4.2.1",

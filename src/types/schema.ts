@@ -41,6 +41,9 @@ export interface Country {
 export type ContactType = 'email' | 'phone' | 'address';
 export type AccountStatus = 'active' | 'locked' | 'disabled';
 export type AttendanceStatus = 'present' | 'absent' | 'late' | 'half_day';
+
+/** Half-day attendance sessions: morning (first period) & afternoon (post-lunch). */
+export type AttendanceSession = 'morning' | 'afternoon';
 export type EnrollmentStatus = 'active' | 'completed' | 'withdrawn';
 
 export interface StudentStatus {
@@ -203,7 +206,9 @@ export interface DailyAttendance {
     id: string; // UUID
     student_enrollment_id: string;
     attendance_date: string; // ISO date
-    status: AttendanceStatus;
+    status: AttendanceStatus; // derived overall day status (both sessions combined)
+    morning_status?: AttendanceStatus | null; // first-period (half-day) session
+    afternoon_status?: AttendanceStatus | null; // post-lunch (half-day) session
     marked_by?: string | null; // User ID
     marked_at?: string | null;
     updated_at: string;

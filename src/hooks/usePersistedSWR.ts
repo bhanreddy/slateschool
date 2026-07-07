@@ -76,6 +76,13 @@ export function usePersistedSWR<T>({
     hydratedRef.current = false;
   }, [memoryKey, enabled, userId]);
 
+  // Cancel in-flight fetches when this hook becomes disabled (e.g. portal switch).
+  useEffect(() => {
+    if (!enabled) {
+      fetchGeneration.set(memoryKey, (fetchGeneration.get(memoryKey) ?? 0) + 1);
+    }
+  }, [enabled, memoryKey]);
+
   const runFetch = useCallback(
     async (opts: { force?: boolean; background?: boolean } = {}) => {
       const { force = false, background = false } = opts;
@@ -141,8 +148,17 @@ export function usePersistedSWR<T>({
     let cancelled = false;
     (async () => {
       const diskHit = await persistentQueryCache.read<T>(userId, cacheKey, queryKey);
-      if (cancelled || !diskHit) {
+      if (cancelled) return;
+      if (!diskHit) {
         hydratedRef.current = true;
+        // No persisted copy on disk (e.g. a cold web reload with an empty
+        // cache). The focus-gated effect already bailed out waiting for
+        // hydration and won't re-run on its own now that hydration is done,
+        // so kick off the initial network fetch here. We do NOT gate this on
+        // isFocused: an enabled hook with no data at all always needs to load
+        // (isFocused can report false on web), otherwise the cards stay stuck
+        // on their loading placeholder ("—") forever.
+        void runFetch({ force: false, background: false });
         return;
       }
 

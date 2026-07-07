@@ -17,6 +17,14 @@ export interface CreateComplaintRequest {
     raised_for_student_id?: string;
 }
 
+export interface BulkCreateComplaintRequest {
+    title: string;
+    description: string;
+    category?: string;
+    priority?: string;
+    raised_for_student_ids: string[];
+}
+
 export const ComplaintService = {
     getAll: async (params?: { status?: string }): Promise<Complaint[]> => {
         return api.get<Complaint[]>('/complaints', params);
@@ -44,6 +52,10 @@ export const ComplaintService = {
 
     create: async (data: CreateComplaintRequest): Promise<Complaint> => {
         return api.post<Complaint>('/complaints', data);
+    },
+
+    createBulk: async (data: BulkCreateComplaintRequest): Promise<{ count: number; complaints: Complaint[] }> => {
+        return api.post<{ count: number; complaints: Complaint[] }>('/complaints/bulk', data);
     },
 
     update: async (id: string, data: Partial<Complaint>): Promise<Complaint> => {
@@ -197,6 +209,10 @@ export interface DiaryEntry {
     updated_at?: string;
 }
 
+export type DiaryWritePayload = Partial<Omit<DiaryEntry, 'id' | 'created_at'>> & {
+    input_language?: 'te' | 'en';
+};
+
 export const DiaryService = {
     getAll: async (params: {
         class_section_id?: string;
@@ -210,11 +226,11 @@ export const DiaryService = {
         return api.get<DiaryEntry[]>('/diary', params);
     },
 
-    create: async (data: Omit<DiaryEntry, 'id' | 'created_at'>): Promise<DiaryEntry> => {
+    create: async (data: Omit<DiaryEntry, 'id' | 'created_at'> & { input_language?: 'te' | 'en' }): Promise<DiaryEntry> => {
         return api.post<DiaryEntry>('/diary', data);
     },
 
-    update: async (id: string, data: Partial<DiaryEntry>): Promise<DiaryEntry> => {
+    update: async (id: string, data: DiaryWritePayload): Promise<DiaryEntry> => {
         return api.put<DiaryEntry>(`/diary/${id}`, data);
     },
 

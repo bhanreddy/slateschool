@@ -10,14 +10,16 @@ import { FeeService } from '../../src/services/feeService';
 import { StudentFee, FeeReceipt } from '../../src/types/models';
 import { useAuth } from '../../src/hooks/useAuth';
 import * as Haptics from '@/src/utils/haptics';
-import { printHtmlOnWeb } from '../../src/utils/pdfGenerator';
+import { escapeHtml, printHtmlOnWeb } from '../../src/utils/pdfGenerator';
 import { useTheme, type SchoolTheme } from '../../src/hooks/useTheme';
 import { SchoolSettingsService, SchoolSettings } from '../../src/services/schoolSettingsService';
 import LogoLoader from '../../src/components/LogoLoader';
 import { useTranslation } from 'react-i18next';
 import { t_field } from '../../src/utils/lang';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
+import { useFeatureGuard } from '../../src/hooks/useFeatures';
 export default function FeesScreen() {
+  useFeatureGuard('nav.fees'); // deep-link guard: redirect Home if Fees is disabled
   const {
     theme,
     isDark
@@ -174,6 +176,14 @@ export default function FeesScreen() {
               <div class="detail-col">
                 <div class="label">Student Name</div>
                 <div class="value">${receipt.student_name || 'Student'}</div>
+                ${receipt.father_name ? `
+                <div class="label">Father's Name</div>
+                <div class="value">${escapeHtml(receipt.father_name)}</div>
+                ` : ''}
+                ${receipt.father_mobile ? `
+                <div class="label">Father Mobile</div>
+                <div class="value">${escapeHtml(receipt.father_mobile)}</div>
+                ` : ''}
                 <div class="label">Admission No</div>
                 <div class="value">${receipt.admission_no || 'N/A'}</div>
                 ${receipt.class_name || receipt.section_name ? `

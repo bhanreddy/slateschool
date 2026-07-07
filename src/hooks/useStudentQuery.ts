@@ -1,10 +1,13 @@
 import { useApiQuery, UseApiQueryOptions } from './useApiQuery';
+import { useAuth } from './useAuth';
+import { isStudentRole } from '../utils/roleHelpers';
 
 export type UseStudentQueryOptions = UseApiQueryOptions;
 
 /**
- * Student-screen GET cache — thin wrapper over useApiQuery so query params
- * are included in the cache key (fixes same-suffix/different-query collisions).
+ * Student-screen GET cache — only runs for parent/student portal roles.
+ * Uses silent API mode so a stale in-flight request after account switch
+ * never pops a blocking "Access Denied" dialog on another portal.
  */
 export function useStudentQuery<T>(
   endpoint: string,
@@ -13,5 +16,13 @@ export function useStudentQuery<T>(
   userId: string | null | undefined,
   options: UseStudentQueryOptions = {}
 ) {
-  return useApiQuery<T>(endpoint, cacheKeySuffix, ttlMs, userId, options);
+  const { role } = useAuth();
+  const portalEligible = isStudentRole(role);
+  const enabled = (options.enabled ?? true) && portalEligible && !!userId;
+
+  return useApiQuery<T>(endpoint, cacheKeySuffix, ttlMs, userId, {
+    ...options,
+    enabled,
+    silent: options.silent ?? true,
+  });
 }

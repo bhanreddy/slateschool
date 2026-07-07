@@ -21,6 +21,7 @@ import { useAuthGuard } from '../src/hooks/useAuthGuard';
 import { useNotificationObserver } from '../src/hooks/useNotificationObserver';
 import { AuthGate } from '../src/components/AuthGate';
 import SchoolRibbon, {
+  MOBILE_RIBBON_CONTENT_HEIGHT,
   SCHOOL_RIBBON_OVERLAP,
 } from '../src/components/SchoolRibbon';
 import { useSchoolHeader } from '../src/hooks/useSchoolHeader';
@@ -152,9 +153,8 @@ function ThemeSyncWrapper() {
   const insets = useSafeAreaInsets();
 
   // Content row + small bottom pad; overlap pulls page under the wave cutout.
-  const ribbonBodyHeight = 80;
   const stackTopInset =
-    insets.top + ribbonBodyHeight - SCHOOL_RIBBON_OVERLAP;
+    insets.top + MOBILE_RIBBON_CONTENT_HEIGHT - SCHOOL_RIBBON_OVERLAP;
 
   // Convert our custom SchoolTheme to React Navigation theme format
   const baseNavTheme = isDark ? DarkTheme : DefaultTheme;
