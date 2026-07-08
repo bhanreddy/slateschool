@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Switch, Image, Linking } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Switch, Linking } from 'react-native';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
 import StaffHeader from '../../src/components/StaffHeader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import AccountSwitcherSheet from '../../src/components/AccountSwitcherSheet';
+import Avatar from '../../src/components/Avatar';
+import AvatarUploader, { AvatarUploaderHandle } from '../../src/components/AvatarUploader';
 import { useRouter } from 'expo-router';
 import Constants from 'expo-constants';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -13,6 +15,7 @@ import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useBiometric } from '../../src/hooks/useBiometric';
 import { ThemeColors } from '../../src/theme/themes';
+import { Staff, StaffService } from '../../src/services/staffService';
 
 /** Returns the first human-readable ID (not a UUID) from the user object */
 function getHumanId(user: any): string {
@@ -143,7 +146,17 @@ export default function StaffSettings() {
     const [updating, setUpdating] = useState(false);
     const [switcherOpen, setSwitcherOpen] = useState(false);
     const { isBiometricAvailable, isBiometricEnabled, isLoading: biometricLoading, toggleBiometric } = useBiometric();
-    const { isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
+    const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
+    const avatarUploaderRef = useRef<AvatarUploaderHandle>(null);
+    const [viewedStaff, setViewedStaff] = useState<Staff | null>(null);
+
+    React.useEffect(() => {
+        if (!isViewingAsAdmin || !staffId) { setViewedStaff(null); return; }
+        StaffService.getById(staffId).then(setViewedStaff).catch(() => setViewedStaff(null));
+    }, [isViewingAsAdmin, staffId]);
+
+    const displayName = (isViewingAsAdmin ? (viewedStaff?.display_name || viewAsName) : user?.displayName) || 'Staff Member';
+    const photoUrl = isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl;
 
     const soon = (item: string) => alertCompat(item, 'Coming in the next update.');
 
@@ -186,29 +199,50 @@ export default function StaffSettings() {
                     {/* Top row */}
                     <View style={styles.profileTop}>
                         <Animated.View entering={ZoomIn.delay(200).duration(400)} style={styles.avatarWrap}>
-                            <Image
-                                source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }}
-                                style={styles.avatar}
-                            />
+                            {isViewingAsAdmin ? (
+                                <Avatar
+                                    photoUrl={photoUrl}
+                                    name={displayName}
+                                    size={62}
+                                    borderRadius={18}
+                                    ringColor={theme.colors.border}
+                                    ringWidth={2}
+                                />
+                            ) : (
+                                <AvatarUploader
+                                    ref={avatarUploaderRef}
+                                    photoUrl={photoUrl}
+                                    name={displayName}
+                                    size={62}
+                                    borderRadius={18}
+                                    ringColor={theme.colors.border}
+                                    ringWidth={2}
+                                    accentColor="#6366F1"
+                                />
+                            )}
                             <View style={styles.onlineDot} />
                         </Animated.View>
 
                         <View style={styles.profileMeta}>
-                            <Text style={styles.profileName}>
-                                {(isViewingAsAdmin ? viewAsName : user?.displayName) || 'Staff Member'}
-                            </Text>
+                            <Text style={styles.profileName}>{displayName}</Text>
                             <View style={styles.roleRow}>
                                 <FontAwesome5 name="id-badge" size={10} color="#6366F1" />
                                 <Text style={styles.roleText}>
-                                    {getHumanId(user)}
+                                    {isViewingAsAdmin ? (viewedStaff?.staff_code || 'N/A') : getHumanId(user)}
                                 </Text>
                             </View>
                         </View>
 
-                        <TouchableOpacity style={styles.editChip} onPress={() => soon('Edit Profile')} activeOpacity={0.7}>
-                            <Ionicons name="pencil" size={11} color="#6366F1" />
-                            <Text style={styles.editChipText}>Edit</Text>
-                        </TouchableOpacity>
+                        {!isViewingAsAdmin && (
+                            <TouchableOpacity
+                                style={styles.editChip}
+                                onPress={() => avatarUploaderRef.current?.open()}
+                                activeOpacity={0.7}
+                            >
+                                <Ionicons name="camera" size={11} color="#6366F1" />
+                                <Text style={styles.editChipText}>Change Photo</Text>
+                            </TouchableOpacity>
+                        )}
                     </View>
 
 

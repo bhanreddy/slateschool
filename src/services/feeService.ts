@@ -50,6 +50,36 @@ export type CollectFeeResult =
     | { status: 'posted'; transaction: FeeTransaction }
     | { status: 'pending_approval'; message: string; approval_request: { id: string; type: string; payload: Record<string, unknown> } };
 
+export interface CollectMultiFeeItem {
+    student_fee_id: string;
+    amount: number;
+}
+
+export interface CollectMultiFeeRequest {
+    payment_method: 'cash' | 'card' | 'upi' | 'bank_transfer' | 'cheque' | 'online';
+    transaction_ref: string;
+    remarks?: string;
+    items: CollectMultiFeeItem[];
+}
+
+/** One combined receipt line (a single fee type paid within the combined receipt). */
+export interface CombinedReceiptLine {
+    fee_type: string;
+    fee_type_te?: string;
+    academic_year?: string;
+    amount: number;
+}
+
+export interface CollectMultiFeeResult {
+    message: string;
+    receipt: { id: string; receipt_no: string; total_amount: number | string } | null;
+    /** Combined transaction shaped for receipt printing (carries line_items). */
+    transaction: FeeTransaction & {
+        line_items?: CombinedReceiptLine[];
+        paid_fee_ids?: string[];
+    };
+}
+
 export interface AdjustFeeRequest {
     student_fee_id: string;
     amount: number;
@@ -233,6 +263,25 @@ export const FeeService = {
         }
 
         return { status: 'posted', transaction: response.transaction! };
+    },
+
+    /**
+     * Collect several fee types in one action and generate a SINGLE receipt.
+     * Each fee type still posts its own ledger transaction (balances stay
+     * accurate) but they roll up into one receipt_no.
+     */
+    collectMultipleFees: async (data: CollectMultiFeeRequest): Promise<CollectMultiFeeResult> => {
+        const response = await api.post<{
+            message?: string;
+            receipt?: { id: string; receipt_no: string; total_amount: number | string } | null;
+            transaction?: FeeTransaction & { line_items?: CombinedReceiptLine[]; paid_fee_ids?: string[] };
+        }>('/fees/collect-multi', data, { silent: true });
+
+        return {
+            message: response?.message || 'Combined payment collected successfully',
+            receipt: response?.receipt ?? null,
+            transaction: response!.transaction!,
+        };
     },
 
     /**

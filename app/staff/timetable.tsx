@@ -25,6 +25,56 @@ import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
 const { width, height } = Dimensions.get('window');
 const FONT_FAMILY = Platform.OS === 'ios' ? 'SF Pro Display' : 'sans-serif';
 
+// ─── Clay Helpers ──────────────────────────────────────────────────
+function clay(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
+  const spread = raised === 'lg' ? 24 : raised === 'sm' ? 12 : 18;
+  const dy = raised === 'lg' ? 12 : raised === 'sm' ? 6 : 9;
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(0,0,0,0.60)' : 'rgba(166,180,200,0.55)';
+    const light = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,1)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.9)';
+    const innerLo = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(166,180,200,0.35)';
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${drop}, ` +
+        `-${dy}px -${dy}px ${spread}px ${light}, ` +
+        `inset 3px 3px 6px ${innerHi}, ` +
+        `inset -3px -3px 6px ${innerLo}`,
+    };
+  }
+  return {
+    shadowColor: isDark ? '#000000' : '#94A3B8',
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: isDark ? 0.45 : 0.26,
+    shadowRadius: spread,
+    elevation: raised === 'lg' ? 10 : raised === 'sm' ? 4 : 7,
+  };
+}
+
+function clayInset(isDark: boolean): any {
+  if (Platform.OS === 'web') {
+    const innerLo = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(166,180,200,0.45)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)';
+    return {
+      boxShadow: `inset 4px 4px 8px ${innerLo}, inset -4px -4px 8px ${innerHi}`,
+    };
+  }
+  return {
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(0,0,0,0.22)' : 'rgba(148,163,184,0.20)',
+  };
+}
+
+function clayCard(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
+  return {
+    backgroundColor: isDark ? '#1A2332' : '#EFF2F9',
+    borderRadius: raised === 'lg' ? 30 : 24,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.7)',
+    ...clay(isDark, raised),
+  };
+}
+
 // ─── Dynamic Gradient By Time of Day ───────────────────────────────
 const getTimeGradient = (hour: number, isDark: boolean): string[] => {
   if (isDark) return ['#070512', '#110D2A', '#0A0818'];
@@ -377,11 +427,10 @@ const SlotItem = ({ item, index, currentTime, isDark, totalSlots
         } />
         }
 
-        <BlurView
-          intensity={isActive ? 55 : 32}
-          tint={isDark ? 'dark' : 'light'}
+        <View
           style={[
           styles.cardBlur,
+          clayCard(isDark, isActive ? 'lg' : 'md'),
           {
             borderColor: isActive ?
             subjectTheme.accent + '28' :
@@ -391,22 +440,12 @@ const SlotItem = ({ item, index, currentTime, isDark, totalSlots
           }]
           }>
 
-          {/* Top highlight shimmer */}
-          <View style={[
-          styles.cardTopShimmer,
-          {
-            backgroundColor: isDark ?
-            'rgba(255,255,255,0.035)' :
-            'rgba(255,255,255,0.70)'
-          }]
-          } />
-
           <View style={[
           styles.cardContent,
           {
             backgroundColor: isDark ?
-            isActive ? 'rgba(22,18,60,0.65)' : 'rgba(10,16,32,0.52)' :
-            isActive ? 'rgba(255,255,255,0.76)' : 'rgba(255,255,255,0.58)'
+            isActive ? 'rgba(22,18,60,0.65)' : 'transparent' :
+            isActive ? 'rgba(255,255,255,0.76)' : 'transparent'
           }]
           }>
             {/* Accent bar — wider, pill-shaped */}
@@ -472,7 +511,7 @@ const SlotItem = ({ item, index, currentTime, isDark, totalSlots
               </Animated.View>
             }
           </View>
-        </BlurView>
+        </View>
       </AnimatedPressable>
     </Animated.View>);
 
@@ -524,16 +563,10 @@ const StatsCapsule = ({ completed, total, isDark }: {completed: number;total: nu
       {/* Soft ambient glow */}
       <View style={[capsuleStyles.ambientGlow, { backgroundColor: accent + (isDark ? '28' : '18') }]} />
 
-      <BlurView intensity={isDark ? 55 : 80} tint={isDark ? 'dark' : 'light'}
-      style={[capsuleStyles.blurWrap, { borderColor }]}>
-
-        {/* Top glass shimmer */}
-        <View style={[capsuleStyles.topShimmer, {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.90)'
-        }]} />
+      <View style={[capsuleStyles.blurWrap, clayCard(isDark, 'sm'), { borderColor }]}>
 
         <View style={[capsuleStyles.inner, {
-          backgroundColor: isDark ? 'rgba(15,10,40,0.55)' : 'rgba(255,255,255,0.65)'
+          backgroundColor: isDark ? 'transparent' : 'transparent'
         }]}>
 
           {/* ── LEFT: arc ring + done ── */}
@@ -590,7 +623,7 @@ const StatsCapsule = ({ completed, total, isDark }: {completed: number;total: nu
           </View>
 
         </View>
-      </BlurView>
+      </View>
     </Animated.View>);
 
 };
@@ -764,22 +797,10 @@ const TimeTableScreen = () => {
   const activePeriod = slots.find((s) => getPeriodStatus(s.start_time, s.end_time, currentTime) === 'active');
 
   return (
-    <View style={styles.container}>
-      {/* Dynamic Gradient Background */}
-      <LinearGradient
-        colors={gradientColors as any}
-        style={StyleSheet.absoluteFillObject}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.6, y: 1 }} />
-
-      {/* Subtle noise-like overlay for depth */}
-      <View style={[styles.noiseOverlay, {
-        backgroundColor: isDark ? 'rgba(10,6,30,0.18)' : 'rgba(240,244,255,0.10)'
-      }]} />
-
+    <View style={[styles.container, { backgroundColor: isDark ? '#0B1020' : '#EFF2F9' }]}>
       {/* Background Sparkles */}
-      <FloatingElement delay={0} top={height * 0.11} left={width * 0.76} size={42} color={isDark ? '#6366F1' : '#BFCFFE'} opacity={0.10} />
-      <FloatingElement delay={900} top={height * 0.54} left={width * 0.07} size={52} color={isDark ? '#A855F7' : '#DDD6FE'} opacity={0.07} />
+      <FloatingElement delay={0} top={height * 0.11} left={width * 0.76} size={42} color={isDark ? '#6366F1' : '#BFCFFE'} opacity={0.30} />
+      <FloatingElement delay={900} top={height * 0.54} left={width * 0.07} size={52} color={isDark ? '#A855F7' : '#DDD6FE'} opacity={0.20} />
 
       <Animated.ScrollView
         onScroll={scrollHandler}

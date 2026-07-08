@@ -16,6 +16,7 @@ import { GENDERS, BLOOD_GROUPS, RELIGIONS, STUDENT_CATEGORIES, STUDENT_STATUSES 
 import { useTheme } from '../../src/hooks/useTheme';
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
+import ClayPasswordToggle from '../../src/components/ClayPasswordToggle';
 import AdmissionSuccessModal from '../../src/components/AdmissionSuccessModal';
 import { buildAdmissionFormData, AdmissionFormData } from '../../src/utils/admissionFormPdf';
 
@@ -58,6 +59,77 @@ function mapParentByRelation(
   };
 }
 
+// ─── Form palette (brand-aligned clay) ────────────────────────────────────────
+const FORM = {
+  brand: ADMIN_THEME.colors.primary,
+  violet: '#7C6FFF',
+  coral: ADMIN_THEME.colors.secondary,
+  sage: '#5BAA9A',
+  surface: (isDark: boolean) => (isDark ? '#1A1726' : '#FDFCFF'),
+  field: (isDark: boolean) => (isDark ? '#221F30' : '#F3EFF8'),
+  border: (isDark: boolean) => (isDark ? 'rgba(124, 111, 255, 0.18)' : 'rgba(102, 89, 144, 0.14)'),
+  label: (isDark: boolean) => (isDark ? '#A89EC4' : '#6B6280'),
+  text: (isDark: boolean) => (isDark ? '#EDE8F5' : '#2D2640'),
+  muted: (isDark: boolean) => (isDark ? '#7A718F' : '#9B92AD'),
+};
+
+// ─── Claymorphism helpers ─────────────────────────────────────────────────────
+function clayField(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(45, 30, 70, 0.55)' : 'rgba(102, 89, 144, 0.20)';
+    const light = isDark ? 'rgba(124, 111, 255, 0.07)' : 'rgba(255, 255, 255, 0.92)';
+    const innerHi = isDark ? 'rgba(124, 111, 255, 0.10)' : 'rgba(255, 255, 255, 0.80)';
+    const innerLo = isDark ? 'rgba(20, 15, 35, 0.35)' : 'rgba(102, 89, 144, 0.12)';
+    return {
+      boxShadow:
+        `5px 5px 14px ${drop}, -4px -4px 11px ${light}, ` +
+        `inset 1.5px 1.5px 2px ${innerHi}, inset -1.5px -1.5px 2px ${innerLo}`,
+    } as any;
+  }
+  return {
+    shadowColor: isDark ? '#3D2858' : '#665990',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: isDark ? 0.38 : 0.18,
+    shadowRadius: 11,
+    elevation: 4,
+  } as any;
+}
+
+function clayCard(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(35, 22, 55, 0.58)' : 'rgba(102, 89, 144, 0.22)';
+    const light = isDark ? 'rgba(124, 111, 255, 0.06)' : 'rgba(255, 255, 255, 0.96)';
+    return { boxShadow: `8px 8px 22px ${drop}, -6px -6px 18px ${light}` } as any;
+  }
+  return {
+    shadowColor: isDark ? '#3D2858' : '#665990',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: isDark ? 0.42 : 0.16,
+    shadowRadius: 15,
+    elevation: 6,
+  } as any;
+}
+
+type AutofillMode = 'off' | 'password' | 'tel';
+
+function fieldAutofill(fieldKey: string, mode: AutofillMode = 'off') {
+  const base: Record<string, unknown> = {
+    autoComplete: mode === 'password' ? 'new-password' : 'off',
+    textContentType: mode === 'password' ? 'newPassword' : 'none',
+    autoCorrect: false,
+  };
+  if (Platform.OS !== 'web') return base;
+  return {
+    ...base,
+    nativeID: fieldKey,
+    id: fieldKey,
+    name: fieldKey,
+    'data-1p-ignore': 'true',
+    'data-lpignore': 'true',
+    'data-form-type': 'other',
+  };
+}
+
 // Reusable Components
 const InputField = ({
   label,
@@ -67,22 +139,52 @@ const InputField = ({
   keyboardType = 'default',
   icon,
   required = false,
-  secureTextEntry = false
+  secureTextEntry = false,
+  editable = true,
+  fieldKey,
+  autofillMode = 'off',
+  ...rest
 }: any) => {
   const {
     theme,
     isDark
   } = useTheme();
-  const styles = React.useMemo(() => getStyles(theme), [theme]);
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const [showPassword, setShowPassword] = useState(false);
+  const [webReadOnly, setWebReadOnly] = useState(Platform.OS === 'web');
+  const isPassword = !!secureTextEntry;
+  const autofill = fieldKey ? fieldAutofill(fieldKey, autofillMode) : fieldAutofill('ims-stu-field', autofillMode);
+
   return <View style={styles.inputGroup}>
     <Text style={styles.label}>
       {label} {required && <Text style={{
         color: ADMIN_THEME.colors.danger
       }}>*</Text>}
     </Text>
-    <View style={styles.inputWrapper}>
-      <Ionicons name={icon} size={20} color={ADMIN_THEME.colors.text.muted} style={styles.inputIcon} />
-      <AppTextInput style={styles.input} placeholder={placeholder} placeholderTextColor={ADMIN_THEME.colors.text.muted} value={value} onChangeText={onChangeText} keyboardType={keyboardType as any} secureTextEntry={secureTextEntry} />
+    <View style={[styles.inputWrapper, !editable && { opacity: 0.65 }]}>
+      <Ionicons name={icon} size={20} color={FORM.muted(isDark)} style={styles.inputIcon} />
+      <AppTextInput
+        style={[styles.input, { color: FORM.text(isDark) }]}
+        placeholder={placeholder}
+        placeholderTextColor={FORM.muted(isDark)}
+        value={value}
+        onChangeText={onChangeText}
+        keyboardType={keyboardType as any}
+        secureTextEntry={isPassword && !showPassword}
+        editable={editable}
+        readOnly={editable ? webReadOnly : undefined}
+        onFocus={() => { if (webReadOnly) setWebReadOnly(false); }}
+        {...autofill}
+        {...rest}
+      />
+      {isPassword && editable && (
+        <ClayPasswordToggle
+          visible={showPassword}
+          onToggle={() => setShowPassword(v => !v)}
+          isDark={isDark}
+          accentColor={FORM.brand}
+        />
+      )}
     </View>
   </View>;
 };
@@ -100,7 +202,7 @@ const SelectField = ({
     theme,
     isDark
   } = useTheme();
-  const styles = React.useMemo(() => getStyles(theme), [theme]);
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const [modalVisible, setModalVisible] = useState(false);
   const selectedOption = options.find((opt: any) => opt.id.toString() === value?.toString());
   return <View style={styles.inputGroup}>
@@ -162,7 +264,7 @@ export default function AddStudentScreen() {
     theme,
     isDark
   } = useTheme();
-  const styles = React.useMemo(() => getStyles(theme), [theme]);
+  const styles = React.useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const router = useRouter();
   const {
     id
@@ -459,19 +561,19 @@ export default function AddStudentScreen() {
               <InputField label="First Name" placeholder="John" value={formData.first_name} onChangeText={(t: string) => setFormData({
                 ...formData,
                 first_name: t
-              })} icon="person-outline" required={true} />
+              })} icon="person-outline" required={true} fieldKey="ims-stu-given-name" />
             </View>
             <View style={styles.halfInput}>
               <InputField label="Last Name" placeholder="Last Name (optional)" value={formData.last_name} onChangeText={(t: string) => setFormData({
                 ...formData,
                 last_name: t
-              })} icon="person-outline" />
+              })} icon="person-outline" fieldKey="ims-stu-family-name" />
             </View>
           </View>
           <InputField label="Middle Name" placeholder="Optional" value={formData.middle_name} onChangeText={(t: string) => setFormData({
             ...formData,
             middle_name: t
-          })} icon="person-outline" />
+          })} icon="person-outline" fieldKey="ims-stu-middle-name" />
           <SelectField label="Gender" value={formData.gender_id} options={GENDERS} onSelect={(id: number) => setFormData({
             ...formData,
             gender_id: id
@@ -490,17 +592,17 @@ export default function AddStudentScreen() {
           <InputField label="Admission Number" placeholder="ADM2024001" value={formData.admission_no} onChangeText={(t: string) => setFormData({
             ...formData,
             admission_no: t
-          })} icon="card-outline" required={true} />
+          })} icon="card-outline" required={true} fieldKey="ims-stu-adm-code" />
           <InputField label="APAR Number" placeholder="Enter APAR number (optional)" value={formData.apar_number || ''} onChangeText={(t: string) => setFormData({
             ...formData,
             apar_number: t
-          })} icon="document-text-outline" />
+          })} icon="document-text-outline" fieldKey="ims-stu-apar-code" />
           <InputField label="PEN Number" placeholder="PEN2025001 (optional)" value={formData.pen_number || ''} onChangeText={(t: string) => setFormData({
             ...formData,
             pen_number: t
-          })} icon="id-card-outline" autoCapitalize="characters" />
+          })} icon="id-card-outline" autoCapitalize="characters" fieldKey="ims-stu-pen-code" />
           {/* 🆕 Roll Number Field */}
-          <InputField label="Roll Number" placeholder="Auto-generated" value={(formData as any).roll_number ? String((formData as any).roll_number) : 'Auto-generated'} editable={false} icon="list-outline" />
+          <InputField label="Roll Number" placeholder="Auto-generated" value={(formData as any).roll_number ? String((formData as any).roll_number) : 'Auto-generated'} editable={false} icon="list-outline" fieldKey="ims-stu-roll-num" />
           <AppDatePicker
             label="Admission Date"
             value={formData.admission_date || ''}
@@ -541,23 +643,23 @@ export default function AddStudentScreen() {
               <InputField label="First Name" placeholder="Father Name" value={father.first_name} onChangeText={(t: string) => setFather({
                 ...father,
                 first_name: t
-              })} icon="person-outline" />
+              })} icon="person-outline" fieldKey="ims-stu-father-given" />
             </View>
             <View style={styles.halfInput}>
               <InputField label="Last Name" placeholder="Surname" value={father.last_name} onChangeText={(t: string) => setFather({
                 ...father,
                 last_name: t
-              })} icon="person-outline" />
+              })} icon="person-outline" fieldKey="ims-stu-father-family" />
             </View>
           </View>
           <InputField label="Phone" placeholder="Mobile Number" value={father.phone} onChangeText={(t: string) => setFather({
             ...father,
             phone: t
-          })} keyboardType="phone-pad" icon="call-outline" />
+          })} keyboardType="phone-pad" icon="call-outline" fieldKey="ims-stu-father-mobile" autofillMode="tel" />
           <InputField label="Occupation" placeholder="Designation" value={father.occupation} onChangeText={(t: string) => setFather({
             ...father,
             occupation: t
-          })} icon="briefcase-outline" />
+          })} icon="briefcase-outline" fieldKey="ims-stu-father-job" />
           {/* Mother */}
           <Text style={[styles.label, {
             marginTop: 20,
@@ -568,23 +670,23 @@ export default function AddStudentScreen() {
               <InputField label="First Name" placeholder="Mother Name" value={mother.first_name} onChangeText={(t: string) => setMother({
                 ...mother,
                 first_name: t
-              })} icon="person-outline" />
+              })} icon="person-outline" fieldKey="ims-stu-mother-given" />
             </View>
             <View style={styles.halfInput}>
               <InputField label="Last Name" placeholder="Surname" value={mother.last_name} onChangeText={(t: string) => setMother({
                 ...mother,
                 last_name: t
-              })} icon="person-outline" />
+              })} icon="person-outline" fieldKey="ims-stu-mother-family" />
             </View>
           </View>
           <InputField label="Phone" placeholder="Mobile Number" value={mother.phone} onChangeText={(t: string) => setMother({
             ...mother,
             phone: t
-          })} keyboardType="phone-pad" icon="call-outline" />
+          })} keyboardType="phone-pad" icon="call-outline" fieldKey="ims-stu-mother-mobile" autofillMode="tel" />
           <InputField label="Occupation" placeholder="Designation" value={mother.occupation} onChangeText={(t: string) => setMother({
             ...mother,
             occupation: t
-          })} icon="briefcase-outline" />
+          })} icon="briefcase-outline" fieldKey="ims-stu-mother-job" />
         </Animated.View>
         {/* Section: Additional Details */}
         <Animated.View entering={FadeInDown.delay(300).duration(500)} style={styles.section}>
@@ -608,15 +710,15 @@ export default function AddStudentScreen() {
           <InputField label="Email Address (Login ID)" placeholder="student@example.com" value={formData.email} onChangeText={(t: string) => setFormData({
             ...formData,
             email: t
-          })} keyboardType="email-address" icon="mail-outline" />
+          })} keyboardType="email-address" icon="mail-outline" fieldKey="ims-stu-contact-addr" autoCapitalize="none" />
           <InputField label="Phone Number" placeholder="+91 9876543210" value={formData.phone} onChangeText={(t: string) => setFormData({
             ...formData,
             phone: t
-          })} keyboardType="phone-pad" icon="call-outline" />
+          })} keyboardType="phone-pad" icon="call-outline" fieldKey="ims-stu-mobile-line" autofillMode="tel" />
           {!isEditMode && <InputField label="Initial Password" placeholder="Min 6 characters" value={formData.password} onChangeText={(t: string) => setFormData({
             ...formData,
             password: t
-          })} icon="lock-closed-outline" required={true} secureTextEntry={true} />}
+          })} icon="lock-closed-outline" required={true} secureTextEntry={true} fieldKey="ims-stu-portal-secret" autofillMode="password" />}
         </Animated.View>
         {/* Submit Button */}
         <TouchableOpacity style={[styles.saveButton, loading && styles.saveButtonDisabled]} activeOpacity={0.8} onPress={handleSave} disabled={loading}>
@@ -639,7 +741,7 @@ export default function AddStudentScreen() {
     />
   </View>;
 }
-const getStyles = (theme: Theme) => StyleSheet.create({
+const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: 'transparent'
@@ -678,19 +780,21 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     textAlign: 'center'
   },
   section: {
-    backgroundColor: theme.colors.background,
-    borderRadius: 20,
+    backgroundColor: FORM.surface(isDark),
+    borderRadius: 24,
     padding: 20,
     marginBottom: 20,
-    ...ADMIN_THEME.shadows.sm
+    borderWidth: 1,
+    borderColor: FORM.border(isDark),
+    ...clayCard(isDark),
   },
   sectionHeader: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: ADMIN_THEME.colors.text.primary,
+    color: FORM.brand,
     marginBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: ADMIN_THEME.colors.border,
+    borderBottomColor: FORM.border(isDark),
     paddingBottom: 8
   },
   row: {
@@ -706,18 +810,19 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '600',
-    color: ADMIN_THEME.colors.text.secondary,
+    color: FORM.label(isDark),
     marginBottom: 8
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: ADMIN_THEME.colors.background.subtle,
-    borderRadius: 12,
+    backgroundColor: FORM.field(isDark),
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: ADMIN_THEME.colors.border,
+    borderColor: FORM.border(isDark),
     paddingHorizontal: 15,
-    height: 50
+    height: 50,
+    ...clayField(isDark),
   },
   inputIcon: {
     marginRight: 10
@@ -725,17 +830,21 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 15,
-    color: ADMIN_THEME.colors.text.primary
+    color: FORM.text(isDark)
   },
   saveButton: {
     backgroundColor: ADMIN_THEME.colors.primary,
-    borderRadius: 15,
+    borderRadius: 18,
     height: 56,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 20,
-    ...ADMIN_THEME.shadows.md
+    shadowColor: '#665990',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.32,
+    shadowRadius: 16,
+    elevation: 8,
   },
   saveButtonDisabled: {
     opacity: 0.7
@@ -752,7 +861,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     justifyContent: 'flex-end'
   },
   modalContent: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: FORM.surface(isDark),
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     padding: 20,
@@ -768,7 +877,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: ADMIN_THEME.colors.text.primary
+    color: FORM.text(isDark)
   },
   optionItem: {
     flexDirection: 'row',
@@ -776,17 +885,17 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 15,
     borderBottomWidth: 1,
-    borderBottomColor: ADMIN_THEME.colors.border
+    borderBottomColor: FORM.border(isDark)
   },
   selectedOption: {
-    backgroundColor: ADMIN_THEME.colors.background.subtle
+    backgroundColor: isDark ? '#221F30' : '#F3EFF8'
   },
   optionText: {
     fontSize: 16,
-    color: ADMIN_THEME.colors.text.secondary
+    color: FORM.label(isDark)
   },
   selectedOptionText: {
-    color: ADMIN_THEME.colors.primary,
+    color: FORM.brand,
     fontWeight: '600'
   }
 });

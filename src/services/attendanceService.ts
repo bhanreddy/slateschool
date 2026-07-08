@@ -101,6 +101,7 @@ export const AttendanceService = {
         students: Array<{
             student_id: string;
             admission_no: string;
+            roll_number?: number | null;
             student_name: string;
             photo_url: string | null;
             enrollment_id: string;

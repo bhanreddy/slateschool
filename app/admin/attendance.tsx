@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   RefreshControl,
   Dimensions,
+  Modal,
+  Pressable,
+  Platform,
 } from 'react-native';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { useTranslation } from 'react-i18next';
@@ -17,19 +20,67 @@ import { useTheme } from '../../src/hooks/useTheme';
 import AdminHeader from '../../src/components/AdminHeader';
 import LogoLoader from '../../src/components/LogoLoader';
 import Animated, {
+  FadeIn,
   FadeInDown,
-  FadeInUp,
-  ZoomIn,
   useSharedValue,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   withSpring,
-  withTiming,
-  withSequence,
 } from 'react-native-reanimated';
 import { api } from '../../src/services/apiClient';
+import AppDatePicker, { toYMD } from '../../src/components/AppDatePicker';
 
 const { width: SW } = Dimensions.get('window');
+
+// ─── Claymorphism shadow helpers ──────────────────────────────────────────────
+// Soft, puffy "clay" depth: a diffuse drop shadow paired with a light top-left
+// highlight. Web gets true layered box-shadows (incl. inner highlight); native
+// falls back to a single soft elevation shadow.
+function clay(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md') {
+  const spread = raised === 'lg' ? 22 : raised === 'sm' ? 10 : 16;
+  const dy = raised === 'lg' ? 12 : raised === 'sm' ? 5 : 8;
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(0,0,0,0.50)' : 'rgba(148,163,184,0.40)';
+    const light = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.70)';
+    const innerLo = isDark ? 'rgba(0,0,0,0.30)' : 'rgba(148,163,184,0.20)';
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${drop}, ` +
+        `-${dy}px -${dy}px ${spread}px ${light}, ` +
+        `inset 1.5px 1.5px 2px ${innerHi}, ` +
+        `inset -1.5px -1.5px 2px ${innerLo}`,
+    } as any;
+  }
+  return {
+    shadowColor: isDark ? '#000000' : '#94A3B8',
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: isDark ? 0.45 : 0.28,
+    shadowRadius: spread,
+    elevation: raised === 'lg' ? 10 : raised === 'sm' ? 4 : 7,
+  } as any;
+}
+
+// Colored clay glow for tinted elements (avatars, CTA, stat icons).
+function clayGlow(color: string, raised: 'sm' | 'md' = 'md') {
+  const dy = raised === 'sm' ? 4 : 7;
+  const spread = raised === 'sm' ? 10 : 16;
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${color}55, ` +
+        `inset 1.5px 1.5px 2px rgba(255,255,255,0.35), ` +
+        `inset -1.5px -1.5px 2px rgba(0,0,0,0.15)`,
+    } as any;
+  }
+  return {
+    shadowColor: color,
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: 0.4,
+    shadowRadius: spread,
+    elevation: raised === 'sm' ? 5 : 8,
+  } as any;
+}
 
 // ─── Status cycling order & config ───────────────────────────────────────────
 const STATUS_CYCLE: Record<string, string> = {
@@ -91,7 +142,7 @@ function StatusBadge({ status, isDark }: { status: string; isDark: boolean }) {
   const textClr = isDark ? meta.darkText : meta.lightText;
 
   return (
-    <View style={[styles.statusBadge, { backgroundColor: pillBg }]}>
+    <View style={[styles.statusBadge, { backgroundColor: pillBg }, clayGlow(meta.dot, 'sm')]}>
       <Ionicons name={meta.icon as any} size={13} color={textClr} style={{ marginRight: 5 }} />
       <Text style={[styles.statusBadgeText, { color: textClr }]}>{meta.label}</Text>
     </View>
@@ -146,8 +197,8 @@ function StatChip({
   const labelColor = isDark ? 'rgba(255,255,255,0.40)' : 'rgba(0,0,0,0.42)';
 
   return (
-    <View style={[styles.statChip, { backgroundColor: chipBg, borderColor: chipBorder }]}>
-      <View style={[styles.statIcon, { backgroundColor: `${color}22` }]}>
+    <View style={[styles.statChip, { backgroundColor: chipBg, borderColor: chipBorder }, clay(isDark, 'sm')]}>
+      <View style={[styles.statIcon, { backgroundColor: `${color}22` }, clayGlow(color, 'sm')]}>
         <Ionicons name={icon as any} size={14} color={color} />
       </View>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
@@ -171,18 +222,11 @@ function StaffCard({
     transform: [{ scale: pressScale.value }],
   }));
 
-  const handlePressIn = () => { pressScale.value = withSpring(0.968, { damping: 18 }); };
-  const handlePressOut = () => { pressScale.value = withSpring(1, { damping: 14 }); };
+  // Subtle press feedback only — no bounce/overshoot.
+  const handlePressIn = () => { pressScale.value = withSpring(0.985, { damping: 20, stiffness: 260 }); };
+  const handlePressOut = () => { pressScale.value = withSpring(1, { damping: 20, stiffness: 260 }); };
 
-  const handlePress = () => {
-    // Bounce pop feedback on toggle
-    pressScale.value = withSequence(
-      withSpring(0.96, { damping: 14 }),
-      withSpring(1.025, { damping: 10 }),
-      withSpring(1, { damping: 14 })
-    );
-    onToggle();
-  };
+  const handlePress = () => { onToggle(); };
 
   const initials = (staff.staff_name || '?')
     .split(' ')
@@ -193,23 +237,21 @@ function StaffCard({
 
   return (
     <Animated.View
-      entering={FadeInUp.delay(index * 55).duration(450).springify().damping(13)}
+      entering={FadeIn.delay(Math.min(index, 8) * 28).duration(220)}
       style={cardAnim}
     >
       <TouchableOpacity
-        activeOpacity={1}
+        activeOpacity={0.9}
         onPress={handlePress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }]}
+        style={[styles.card, { backgroundColor: cardBg, borderColor: cardBorder }, clay(isDark, 'sm')]}
       >
-        {isDark && <View style={styles.cardShimmer} />}
-
         <View style={styles.cardRow}>
           {/* Avatar — colour reflects current status */}
           <LinearGradient
             colors={isDark ? meta.darkColors : meta.lightColors}
-            style={styles.avatar}
+            style={[styles.avatar, clayGlow(meta.dot, 'sm')]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
           >
@@ -240,6 +282,77 @@ function StaffCard({
   );
 }
 
+// ─── Filter dropdown chip ─────────────────────────────────────────────────────
+function FilterChip({
+  label, active, isDark, filterBg, filterBorder, filterText, onPress,
+}: {
+  label: string; active: boolean; isDark: boolean;
+  filterBg: string; filterBorder: string; filterText: string; onPress: () => void;
+}) {
+  const activeText = '#7C6FFF';
+  return (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      onPress={onPress}
+      style={[
+        styles.filterChip,
+        {
+          backgroundColor: active ? (isDark ? 'rgba(124,111,255,0.18)' : 'rgba(124,111,255,0.10)') : filterBg,
+          borderColor: active ? 'rgba(124,111,255,0.55)' : filterBorder,
+        },
+        active ? clayGlow('#7C6FFF', 'sm') : clay(isDark, 'sm'),
+      ]}
+    >
+      <Text style={[styles.filterChipText, { color: active ? activeText : filterText }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Ionicons name="chevron-down" size={13} color={active ? activeText : filterText} style={{ marginLeft: 4 }} />
+    </TouchableOpacity>
+  );
+}
+
+// ─── Filter option menu (cross-platform dropdown) ─────────────────────────────
+function FilterMenu({
+  visible, title, options, selected, isDark, onSelect, onClose,
+}: {
+  visible: boolean; title: string;
+  options: { label: string; value: string | null }[];
+  selected: string | null; isDark: boolean;
+  onSelect: (v: string | null) => void; onClose: () => void;
+}) {
+  const menuBg = isDark ? '#1A1B2A' : '#FFFFFF';
+  const menuBorder = isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.08)';
+  const titleColor = isDark ? 'rgba(255,255,255,0.42)' : 'rgba(0,0,0,0.42)';
+  const rowText = isDark ? '#FFFFFF' : '#111827';
+
+  return (
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <Pressable style={styles.menuBackdrop} onPress={onClose}>
+        <Pressable style={[styles.menuCard, { backgroundColor: menuBg, borderColor: menuBorder }, clay(isDark, 'lg')]}>
+          <Text style={[styles.menuTitle, { color: titleColor }]}>{title}</Text>
+          {options.map((opt) => {
+            const isSel = selected === opt.value;
+            return (
+              <TouchableOpacity
+                key={opt.label}
+                activeOpacity={0.7}
+                style={[
+                  styles.menuRow,
+                  isSel && { backgroundColor: isDark ? 'rgba(124,111,255,0.16)' : 'rgba(124,111,255,0.09)' },
+                ]}
+                onPress={() => { onSelect(opt.value); onClose(); }}
+              >
+                <Text style={[styles.menuRowText, { color: isSel ? '#7C6FFF' : rowText }]}>{opt.label}</Text>
+                {isSel && <Ionicons name="checkmark" size={17} color="#7C6FFF" />}
+              </TouchableOpacity>
+            );
+          })}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function AdminAttendanceScreen() {
   const { theme, isDark } = useTheme();
@@ -250,6 +363,13 @@ export default function AdminAttendanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState<any[]>([]);
+
+  // ── Filters ─────────────────────────────────────────────────────────────────
+  const todayYMD = toYMD(new Date());
+  const [selectedDate, setSelectedDate] = useState(todayYMD);
+  const [deptFilter, setDeptFilter] = useState<string | null>(null);      // null → all designations
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);  // null → all statuses
+  const [openMenu, setOpenMenu] = useState<'dept' | 'status' | null>(null);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
@@ -277,8 +397,7 @@ export default function AdminAttendanceScreen() {
   const fetchAttendance = async () => {
     try {
       setLoading(true);
-      const dateStr = new Date().toISOString().split('T')[0];
-      const data = await api.get<any[]>('/attendance/staff', { date: dateStr });
+      const data = await api.get<any[]>('/attendance/staff', { date: selectedDate });
       setStaffList(data || []);
     } catch { }
     finally {
@@ -287,7 +406,8 @@ export default function AdminAttendanceScreen() {
     }
   };
 
-  useEffect(() => { fetchAttendance(); }, []);
+  // Refetch whenever the viewed day changes (also covers initial mount).
+  useEffect(() => { fetchAttendance(); }, [selectedDate]);
 
   const onRefresh = () => { setRefreshing(true); fetchAttendance(); };
 
@@ -303,9 +423,8 @@ export default function AdminAttendanceScreen() {
 
   const submitAttendance = async () => {
     try {
-      const dateStr = new Date().toISOString().split('T')[0];
       const records = staffList.map((s) => ({ staff_id: s.staff_id, status: s.status || 'absent' }));
-      await api.post('/attendance/staff', { date: dateStr, attendance: records });
+      await api.post('/attendance/staff', { date: selectedDate, attendance: records });
       alertCompat('✓ Saved', 'Attendance marked successfully.');
     } catch {
       alertCompat('Error', 'Failed to save attendance.');
@@ -323,8 +442,40 @@ export default function AdminAttendanceScreen() {
     return { present, absent, half, total: staffList.length };
   }, [staffList]);
 
-  // ── Today label ─────────────────────────────────────────────────────────────
-  const todayStr = new Date().toLocaleDateString('en-US', {
+  // ── Distinct designations for the department filter ───────────────────────────
+  const deptOptions = useMemo(() => {
+    const set = new Set<string>();
+    staffList.forEach((s) => { if (s.designation) set.add(s.designation); });
+    return [
+      { label: 'All Departments', value: null as string | null },
+      ...Array.from(set).sort().map((d) => ({ label: d, value: d })),
+    ];
+  }, [staffList]);
+
+  const statusOptions: { label: string; value: string | null }[] = [
+    { label: 'All Statuses', value: null },
+    { label: 'Present', value: 'present' },
+    { label: 'Absent', value: 'absent' },
+    { label: 'Half-Day', value: 'half_day' },
+  ];
+
+  // ── Apply department + status filters to the visible list ─────────────────────
+  const filteredStaff = useMemo(() => {
+    return staffList.filter((s) => {
+      const st = s.status || 'absent';
+      if (deptFilter && s.designation !== deptFilter) return false;
+      if (statusFilter && st !== statusFilter) return false;
+      return true;
+    });
+  }, [staffList, deptFilter, statusFilter]);
+
+  // ── Date label ────────────────────────────────────────────────────────────────
+  const isToday = selectedDate === todayYMD;
+  const selectedDateObj = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  }, [selectedDate]);
+  const todayStr = selectedDateObj.toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 
@@ -367,11 +518,9 @@ export default function AdminAttendanceScreen() {
 
           {/* ── Overview card ─────────────────────────────────────────────── */}
           <Animated.View
-            entering={FadeInDown.delay(0).duration(500).springify()}
-            style={[styles.summaryCard, { backgroundColor: summaryBg, borderColor: summaryBorder }]}
+            entering={FadeInDown.duration(280)}
+            style={[styles.summaryCard, { backgroundColor: summaryBg, borderColor: summaryBorder }, clay(isDark, 'lg')]}
           >
-            {isDark && <View style={styles.summaryShimmer} />}
-
             <View style={styles.summaryTop}>
               {/* Left: title + date */}
               <View style={{ flex: 1 }}>
@@ -382,7 +531,7 @@ export default function AdminAttendanceScreen() {
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
                   />
-                  <Text style={[styles.overviewLabel, { color: sectionColor }]}>TODAY'S OVERVIEW</Text>
+                  <Text style={[styles.overviewLabel, { color: sectionColor }]}>{isToday ? "TODAY'S OVERVIEW" : 'DAY OVERVIEW'}</Text>
                 </View>
                 <Text style={[styles.dateTitle, { color: titleColor }]}>Attendance</Text>
                 <Text style={[styles.dateSub, { color: subColor }]}>{todayStr}</Text>
@@ -400,23 +549,59 @@ export default function AdminAttendanceScreen() {
             </View>
           </Animated.View>
 
-          {/* ── Filter chips ───────────────────────────────────────────────── */}
-          <Animated.View entering={FadeInDown.delay(80).duration(400)} style={styles.filterRow}>
-            {['All Depts', 'Status', 'Today'].map((label) => (
-              <TouchableOpacity
-                key={label}
-                activeOpacity={0.75}
-                style={[styles.filterChip, { backgroundColor: filterBg, borderColor: filterBorder }]}
-              >
-                <Text style={[styles.filterChipText, { color: filterText }]}>{label}</Text>
-                <Ionicons name="chevron-down" size={13} color={filterText} style={{ marginLeft: 4 }} />
-              </TouchableOpacity>
-            ))}
+          {/* ── Filters: department · status · date ─────────────────────────── */}
+          <Animated.View entering={FadeIn.duration(200)} style={styles.filterRow}>
+            <FilterChip
+              label={deptFilter ?? 'All Depts'}
+              active={!!deptFilter}
+              isDark={isDark}
+              filterBg={filterBg}
+              filterBorder={filterBorder}
+              filterText={filterText}
+              onPress={() => setOpenMenu('dept')}
+            />
+            <FilterChip
+              label={statusFilter ? (STATUS_META[statusFilter]?.label ?? 'Status') : 'Status'}
+              active={!!statusFilter}
+              isDark={isDark}
+              filterBg={filterBg}
+              filterBorder={filterBorder}
+              filterText={filterText}
+              onPress={() => setOpenMenu('status')}
+            />
+            <AppDatePicker
+              value={selectedDate}
+              onChange={setSelectedDate}
+              maximumDate={todayYMD}
+              variant="compact"
+              isDark={isDark}
+              accentColor="#7C6FFF"
+              containerStyle={styles.datePickerContainer}
+            />
           </Animated.View>
+
+          <FilterMenu
+            visible={openMenu === 'dept'}
+            title="Filter by department"
+            options={deptOptions}
+            selected={deptFilter}
+            isDark={isDark}
+            onSelect={setDeptFilter}
+            onClose={() => setOpenMenu(null)}
+          />
+          <FilterMenu
+            visible={openMenu === 'status'}
+            title="Filter by status"
+            options={statusOptions}
+            selected={statusFilter}
+            isDark={isDark}
+            onSelect={setStatusFilter}
+            onClose={() => setOpenMenu(null)}
+          />
 
           {/* ── Section header ─────────────────────────────────────────────── */}
           <Animated.View
-            entering={FadeInDown.delay(120).duration(400)}
+            entering={FadeIn.duration(200)}
             style={styles.listHeader}
           >
             <View style={styles.sectionAccentRow}>
@@ -428,27 +613,31 @@ export default function AdminAttendanceScreen() {
               />
               <Text style={[styles.sectionTitle, { color: sectionColor }]}>STAFF LIST</Text>
             </View>
-            <View style={[styles.countBadge, { backgroundColor: isDark ? 'rgba(124,111,255,0.18)' : 'rgba(124,111,255,0.12)' }]}>
-              <Text style={styles.countBadgeText}>{staffList.length}</Text>
+            <View style={[styles.countBadge, { backgroundColor: isDark ? 'rgba(124,111,255,0.18)' : 'rgba(124,111,255,0.12)' }, clayGlow('#7C6FFF', 'sm')]}>
+              <Text style={styles.countBadgeText}>{filteredStaff.length}</Text>
             </View>
           </Animated.View>
 
           {/* ── Staff cards ────────────────────────────────────────────────── */}
-          {staffList.length === 0 ? (
-            <Animated.View entering={ZoomIn.duration(400)} style={styles.emptyBox}>
+          {filteredStaff.length === 0 ? (
+            <Animated.View entering={FadeIn.duration(240)} style={styles.emptyBox}>
               <LinearGradient
                 colors={['rgba(124,111,255,0.15)', 'rgba(124,111,255,0.04)']}
-                style={styles.emptyIcon}
+                style={[styles.emptyIcon, clay(isDark, 'md')]}
               >
-                <Ionicons name="people-outline" size={36} color="rgba(124,111,255,0.6)" />
+                <Ionicons name={staffList.length === 0 ? 'people-outline' : 'filter-outline'} size={36} color="rgba(124,111,255,0.6)" />
               </LinearGradient>
-              <Text style={[styles.emptyTitle, { color: titleColor }]}>No Staff Found</Text>
+              <Text style={[styles.emptyTitle, { color: titleColor }]}>
+                {staffList.length === 0 ? 'No Staff Found' : 'No Matches'}
+              </Text>
               <Text style={[styles.emptySub, { color: subColor }]}>
-                Pull down to refresh the list
+                {staffList.length === 0
+                  ? 'Pull down to refresh the list'
+                  : 'No staff match the selected filters'}
               </Text>
             </Animated.View>
           ) : (
-            staffList.map((staff, index) => (
+            filteredStaff.map((staff, index) => (
               <StaffCard
                 key={staff.staff_id}
                 staff={staff}
@@ -464,14 +653,14 @@ export default function AdminAttendanceScreen() {
       )}
 
       {/* ── Footer CTA ──────────────────────────────────────────────────────── */}
-      <View style={[styles.footer, { backgroundColor: footerBg, borderTopColor: footerBorder }]}>
+      <View style={[styles.footer, { backgroundColor: footerBg, borderTopColor: footerBorder }, clay(isDark, 'lg')]}>
         <View style={styles.footerMeta}>
           <Text style={[styles.footerCount, { color: titleColor }]}>
             {stats.present}
             <Text style={[styles.footerTotal, { color: subColor }]}> / {stats.total} present</Text>
           </Text>
         </View>
-        <TouchableOpacity onPress={submitAttendance} activeOpacity={0.85} style={styles.submitBtn}>
+        <TouchableOpacity onPress={submitAttendance} activeOpacity={0.85} style={[styles.submitBtn, clayGlow('#7C6FFF', 'md')]}>
           <LinearGradient
             colors={['#7C6FFF', '#5A4FE0']}
             style={styles.submitGrad}
@@ -504,12 +693,8 @@ const styles = StyleSheet.create({
 
   // Summary card
   summaryCard: {
-    borderRadius: 22, padding: 20, marginBottom: 18,
-    borderWidth: 1, overflow: 'hidden',
-  },
-  summaryShimmer: {
-    position: 'absolute', top: 0, left: 28, right: 28, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.13)', borderRadius: 1,
+    borderRadius: 28, padding: 22, marginBottom: 22,
+    borderWidth: 1,
   },
   summaryTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 18 },
 
@@ -544,11 +729,11 @@ const styles = StyleSheet.create({
   // Stat chips
   statChipsRow: { flexDirection: 'row', gap: 10 },
   statChip: {
-    flex: 1, alignItems: 'center', padding: 12,
-    borderRadius: 14, borderWidth: 1, gap: 5,
+    flex: 1, alignItems: 'center', padding: 14,
+    borderRadius: 20, borderWidth: 1, gap: 5,
   },
   statIcon: {
-    width: 28, height: 28, borderRadius: 8,
+    width: 30, height: 30, borderRadius: 12,
     alignItems: 'center', justifyContent: 'center', marginBottom: 2,
   },
   statValue: { fontSize: 22, fontWeight: '800', letterSpacing: -0.5 },
@@ -558,25 +743,49 @@ const styles = StyleSheet.create({
   filterRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
   filterChip: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 20, borderWidth: 1,
+    paddingHorizontal: 15, paddingVertical: 11,
+    borderRadius: 16, borderWidth: 1,
   },
-  filterChipText: { fontSize: 12, fontWeight: '600' },
+  filterChipText: { fontSize: 12, fontWeight: '600', maxWidth: 120 },
+  datePickerContainer: { flex: 1 },
+
+  // Filter dropdown menu
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  menuCard: {
+    width: '100%',
+    maxWidth: 340,
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+  },
+  menuTitle: {
+    fontSize: 11, fontWeight: '700', letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    paddingHorizontal: 12, paddingTop: 6, paddingBottom: 8,
+  },
+  menuRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 13, paddingHorizontal: 12, borderRadius: 11,
+  },
+  menuRowText: { fontSize: 15, fontWeight: '600' },
 
   // List header
   listHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
   sectionTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 2.2 },
-  countBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10 },
+  countBadge: { paddingHorizontal: 11, paddingVertical: 5, borderRadius: 13 },
   countBadgeText: { fontSize: 12, fontWeight: '700', color: '#7C6FFF' },
 
   // Staff card
   card: {
-    borderRadius: 18, padding: 14, marginBottom: 10,
-    borderWidth: 1, overflow: 'hidden',
-  },
-  cardShimmer: {
-    position: 'absolute', top: 0, left: 20, right: 20, height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 1,
+    borderRadius: 22, padding: 15, marginBottom: 13,
+    borderWidth: 1,
   },
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   avatar: {
@@ -591,7 +800,7 @@ const styles = StyleSheet.create({
   // Status badge
   statusBadge: {
     flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 14,
   },
   statusBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
 
@@ -615,12 +824,10 @@ const styles = StyleSheet.create({
   footerMeta: { justifyContent: 'center' },
   footerCount: { fontSize: 18, fontWeight: '800', letterSpacing: -0.4 },
   footerTotal: { fontSize: 14, fontWeight: '500' },
-  submitBtn: { flex: 1, borderRadius: 14, overflow: 'hidden' },
+  submitBtn: { flex: 1, borderRadius: 18 },
   submitGrad: {
-    flexDirection: 'row', height: 50,
-    alignItems: 'center', justifyContent: 'center', borderRadius: 14,
-    shadowColor: '#7C6FFF', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 10, elevation: 6,
+    flexDirection: 'row', height: 52,
+    alignItems: 'center', justifyContent: 'center', borderRadius: 18,
   },
   submitText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.2 },
 });

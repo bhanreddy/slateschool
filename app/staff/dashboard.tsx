@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, Dimensions, Platform,
   StatusBar, BackHandler, TouchableOpacity, Pressable, ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Defs, LinearGradient as SvgGradient, Stop, Path, Ellipse } from 'react-native-svg';
 import Animated, {
   FadeInDown, FadeInUp, FadeIn, ZoomIn,
-  useAnimatedStyle, useSharedValue,
+  useAnimatedStyle, useSharedValue, useAnimatedProps,
   withSpring, withTiming, withSequence, withRepeat, withDelay,
   useAnimatedScrollHandler, interpolate, Extrapolate,
   runOnJS,
@@ -18,12 +19,16 @@ import { useAuth } from '@/src/hooks/useAuth';
 import { AttendanceService } from '@/src/services/attendanceService';
 import { LeaveService } from '@/src/services/commonServices';
 import { useTheme } from '@/src/hooks/useTheme';
+import * as Haptics from '@/src/utils/haptics';
 import StaffHeader from '@/src/components/StaffHeader';
+import AdminHeaderCard from '@/src/components/AdminHeaderCard';
 import DashboardHero from '@/src/components/DashboardHero';
 import ViewAsBanner from '@/src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '@/src/hooks/useEffectiveStaffId';
 import { usePersistedSWR } from '@/src/hooks/usePersistedSWR';
 import { useStaffPortalConfig } from '@/src/hooks/useStaffPortalConfig';
+import { Staff, StaffService } from '@/src/services/staffService';
+import { clayTokens } from '@/src/styles/clayTokens';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 const MENU_GAP = 16;
@@ -122,133 +127,424 @@ function BgOrbs({ isDark }: { isDark: boolean }) {
   );
 }
 
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+// ─── Premium Claymorphic Graphics ─────────────────────────────────────────────
+function ClayGraphic({ type, size, style, isDark }: { type: 'clock' | 'book' | 'pencil' | 'cap'; size: number; style?: any; isDark: boolean }) {
+  if (type === 'clock') {
+    return (
+      <View style={[{ width: size, height: size, position: 'absolute', zIndex: 1 }, style]}>
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Defs>
+            <SvgGradient id="clockGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor="#818CF8" />
+              <Stop offset="100%" stopColor="#4F46E5" />
+            </SvgGradient>
+          </Defs>
+          {/* Shadow */}
+          <Circle cx="12" cy="13.5" r="10" fill="rgba(79, 70, 229, 0.25)" />
+          {/* Base */}
+          <Circle cx="12" cy="12" r="10" fill="url(#clockGrad)" />
+          {/* Dial face */}
+          <Circle cx="12" cy="12" r="7.5" fill={isDark ? '#1F2937' : '#FFFFFF'} />
+          {/* Highlight on rim */}
+          <Circle cx="11" cy="11" r="9" fill="none" stroke="rgba(255, 255, 255, 0.4)" strokeWidth="1.2" />
+          {/* Hands */}
+          <Path d="M12 7 V12 H15.5" stroke="#4F46E5" strokeWidth="2" strokeLinecap="round" />
+          <Circle cx="12" cy="12" r="1.5" fill="#4F46E5" />
+        </Svg>
+      </View>
+    );
+  }
+
+  if (type === 'book') {
+    return (
+      <View style={[{ width: size, height: size, position: 'absolute', zIndex: 1 }, style]}>
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Defs>
+            <SvgGradient id="bookGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor="#EC4899" />
+              <Stop offset="100%" stopColor="#BE185D" />
+            </SvgGradient>
+          </Defs>
+          {/* Book Shadow */}
+          <Path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20v3H6.5a2.5 2.5 0 0 1-2.5-2.5z" fill="rgba(190, 24, 93, 0.2)" transform="translate(1, 1)" />
+          <Path d="M6 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5v-15A3 3 0 0 1 6.5 2z" fill="rgba(190, 24, 93, 0.2)" transform="translate(1, 1)" />
+          {/* Book cover base */}
+          <Path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v15H6.5A2.5 2.5 0 0 0 4 19.5v-15z" fill="url(#bookGrad)" />
+          {/* Pages block */}
+          <Path d="M20 2v15h-1V2h1z" fill={isDark ? '#374151' : '#F3F4F6'} />
+          <Path d="M6.5 17H20v1H6.5a1.5 1.5 0 0 0 0 3H20v1H6.5A3.5 3.5 0 0 1 3 18.5v-1A2.5 2.5 0 0 1 6.5 17z" fill={isDark ? '#4B5563' : '#E5E7EB'} />
+        </Svg>
+      </View>
+    );
+  }
+
+  if (type === 'pencil') {
+    return (
+      <View style={[{ width: size, height: size, position: 'absolute', zIndex: 1, transform: [{ rotate: '-45deg' }] }, style]}>
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Defs>
+            <SvgGradient id="pencilGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+              <Stop offset="0%" stopColor="#FBBF24" />
+              <Stop offset="100%" stopColor="#D97706" />
+            </SvgGradient>
+            <SvgGradient id="eraserGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor="#F472B6" />
+              <Stop offset="100%" stopColor="#E11D48" />
+            </SvgGradient>
+          </Defs>
+          {/* Base shadow */}
+          <Path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="rgba(217, 119, 6, 0.2)" transform="translate(1, 1)" />
+          
+          {/* Pencil Shaft */}
+          <Path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25z" fill="url(#pencilGrad)" />
+          {/* Lead Tip */}
+          <Path d="M3 21h1.5l-1.5-1.5z" fill="#1F2937" />
+          {/* Eraser */}
+          <Path d="M20.71 7.04a.996.996 0 0 0 0-1.41l-2.34-2.34a.996.996 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="url(#eraserGrad)" />
+          {/* Metal Band */}
+          <Path d="M15.5 5.5 L18.5 8.5" stroke="#9CA3AF" strokeWidth="2" />
+        </Svg>
+      </View>
+    );
+  }
+
+  if (type === 'cap') {
+    return (
+      <View style={[{ width: size, height: size, position: 'absolute', zIndex: 1 }, style]}>
+        <Svg width={size} height={size} viewBox="0 0 24 24">
+          <Defs>
+            <SvgGradient id="capGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <Stop offset="0%" stopColor="#2DD4BF" />
+              <Stop offset="100%" stopColor="#0F766E" />
+            </SvgGradient>
+          </Defs>
+          {/* Shadow */}
+          <Path d="M12 2 L22 7 L12 12 L2 7 Z" fill="rgba(15, 118, 110, 0.2)" transform="translate(1, 1)" />
+          <Path d="M4 10.5 v4.5 A8 8 0 0 0 20 15 v-4.5" fill="rgba(15, 118, 110, 0.2)" transform="translate(1, 1)" />
+
+          {/* Rhombus top */}
+          <Path d="M12 2 L22 7 L12 12 L2 7 Z" fill="url(#capGrad)" />
+          {/* Skull cap */}
+          <Path d="M6 10.5 v3.5 A6 6 0 0 0 18 14 v-3.5" fill="url(#capGrad)" />
+          <Path d="M6 10.5 L12 13.5 L18 10.5" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1" />
+          {/* Tassel */}
+          <Path d="M12 7 L17 11.5 v4.5" fill="none" stroke="#FBBF24" strokeWidth="1.5" strokeLinecap="round" />
+          <Circle cx="17" cy="16.5" r="1" fill="#FBBF24" />
+        </Svg>
+      </View>
+    );
+  }
+
+  return null;
+}
+
 // ─── Circular Attendance Arc ──────────────────────────────────────────────────
 function AttendanceArc({
-  pct, present, absent, total, unmarked, isDark,
-}: { pct: number; present: number; absent: number; total: number; unmarked: number; isDark: boolean }) {
-  const SIZE = 164;
-  const STROKE = 13;
-  const R = (SIZE - STROKE) / 2;
+  pct,
+  isDark,
+  size,
+  stroke,
+}: {
+  pct: number;
+  isDark: boolean;
+  size?: number;
+  stroke?: number;
+}) {
+  const SIZE = size || 210;
+  const STROKE = stroke || 14;
+  const R = (SIZE - STROKE) / 2 - 20;
   const CIRC = 2 * Math.PI * R;
-  const ARC_DEG = 240;
-  const START_DEG = 150;
-  const arcLen = (ARC_DEG / 360) * CIRC;
-  const fillLen = (pct / 100) * arcLen;
-  const gapLen = CIRC - arcLen;
-  const t = isDark ? D.dark : D.light;
   const cx = SIZE / 2;
   const cy = SIZE / 2;
 
+  const animatedPct = useSharedValue(0);
+
+  useEffect(() => {
+    animatedPct.value = withTiming(pct, { duration: 1000 });
+  }, [pct]);
+
+  const animatedProps = useAnimatedProps(() => {
+    const currentFill = (animatedPct.value / 100) * CIRC;
+    return {
+      strokeDasharray: `${currentFill > 0 ? currentFill : 0.01} ${CIRC}`,
+    };
+  });
+
+  const textColor = isDark ? '#FFFFFF' : '#1E293B';
+  const subTextColor = isDark ? 'rgba(255,255,255,0.6)' : '#64748B';
+  const trackColor = isDark ? 'rgba(255,255,255,0.06)' : '#EBF0F6';
+
+  // Calculate dynamic position of the 3D thumb dot based on current fill percentage
+  const angleRad = ((pct / 100) * 360) * Math.PI / 180;
+  const dotX = cx + R * Math.cos(angleRad);
+  const dotY = cy + R * Math.sin(angleRad);
+
   return (
-    <View style={styles.arcContainer}>
-      <Svg width={SIZE} height={SIZE} style={{ overflow: 'visible' }}>
-        <Defs>
-          <SvgGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <Stop offset="0%" stopColor={ACCENT.emerald} stopOpacity="1" />
-            <Stop offset="60%" stopColor={ACCENT.violet} stopOpacity="1" />
-            <Stop offset="100%" stopColor={ACCENT.violetMid} stopOpacity="1" />
-          </SvgGradient>
-          <SvgGradient id="trackGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <Stop offset="0%" stopColor={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'} stopOpacity="1" />
-            <Stop offset="100%" stopColor={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'} stopOpacity="1" />
-          </SvgGradient>
-        </Defs>
-        <Circle
+    <View style={[{ width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' }]}>
+      <Svg width={SIZE} height={SIZE} style={[{ transform: [{ rotate: '-90deg' }] }]}>
+        {/* Soft shadow outside to simulate clay extrusion */}
+        <Circle cx={cx} cy={cy} r={R + STROKE / 2 + 10} fill="none" stroke={isDark ? 'rgba(0,0,0,0.3)' : 'rgba(150,170,200,0.15)'} strokeWidth={14} />
+        {/* Bright highlight inner ring for bevel effect */}
+        <Circle cx={cx} cy={cy} r={R + STROKE / 2 + 3} fill="none" stroke={isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF'} strokeWidth={6} />
+
+        {/* The Trough Base (recessed background track) */}
+        <Circle cx={cx} cy={cy} r={R} fill="none" stroke={trackColor} strokeWidth={STROKE + 6} />
+
+        {/* Trough Inner Shadows to give hollow indent look */}
+        <Circle cx={cx} cy={cy} r={R} fill="none" stroke={isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.05)'} strokeWidth={STROKE + 6} />
+        <Circle cx={cx} cy={cy} r={R + 2} fill="none" stroke={isDark ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.02)'} strokeWidth={2} />
+        <Circle cx={cx} cy={cy} r={R - 2} fill="none" stroke={isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.5)'} strokeWidth={2} />
+        
+        {/* Progress Arc */}
+        <AnimatedCircle
           cx={cx} cy={cy} r={R}
           fill="none"
-          stroke="url(#trackGrad)"
+          stroke="#278261"
           strokeWidth={STROKE}
           strokeLinecap="round"
-          strokeDasharray={`${arcLen} ${gapLen + STROKE}`}
-          strokeDashoffset={-(gapLen / 2 + STROKE / 2)}
-          transform={`rotate(${START_DEG}, ${cx}, ${cy})`}
+          animatedProps={animatedProps}
         />
+
+        {/* 3D Green Ball Thumb */}
         <Circle
-          cx={cx} cy={cy} r={R}
-          fill="none"
-          stroke="url(#arcGrad)"
-          strokeWidth={STROKE}
-          strokeLinecap="round"
-          strokeDasharray={`${fillLen > 0 ? fillLen : 0.01} ${CIRC}`}
-          strokeDashoffset={-(gapLen / 2 + STROKE / 2)}
-          transform={`rotate(${START_DEG}, ${cx}, ${cy})`}
+          cx={dotX}
+          cy={dotY}
+          r={STROKE - 2}
+          fill="#278261"
+          stroke="#FFFFFF"
+          strokeWidth={3}
         />
       </Svg>
-      <View style={styles.arcCenter}>
-        <Text style={[styles.arcPct, { color: t.text1 }]}>{pct}<Text style={[styles.arcPctSymbol, { color: t.text2 }]}>%</Text></Text>
-        <Text style={[styles.arcLabel, { color: t.text3 }]}>Attendance</Text>
+      {/* Center Text */}
+      <View style={[StyleSheet.absoluteFillObject, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Text style={{ fontSize: 44, fontWeight: '800', color: textColor, letterSpacing: -1 }}>
+          {pct}
+          <Text style={{ fontSize: 22, color: subTextColor, fontWeight: '700' }}>%</Text>
+        </Text>
+        <Text style={{ fontSize: 13, fontWeight: '700', color: subTextColor, marginTop: -2 }}>present today</Text>
       </View>
     </View>
   );
 }
 
-// ─── Stat Pill ────────────────────────────────────────────────────────────────
-function StatPill({ value, label, color, isDark }: { value: number | string; label: string; color: string; isDark: boolean }) {
-  const t = isDark ? D.dark : D.light;
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({ value, label, type, isDark }: { value: number | string; label: string; type: 'present' | 'absent' | 'pending'; isDark: boolean }) {
+  const config = {
+    present: {
+      icon: 'checkmark-circle-outline',
+      color: '#278261', // Darker green for icon
+      bg: isDark ? 'rgba(39, 130, 97, 0.2)' : '#E3F2ED',
+      shadowColor: '#278261',
+    },
+    absent: {
+      icon: 'close-circle-outline',
+      color: '#D14343', // Red
+      bg: isDark ? 'rgba(209, 67, 67, 0.2)' : '#FCE8E8',
+      shadowColor: '#D14343',
+    },
+    pending: {
+      icon: 'help-circle-outline',
+      color: '#D97321', // Orange
+      bg: isDark ? 'rgba(217, 115, 33, 0.2)' : '#FDF0E5',
+      shadowColor: '#D97321',
+    }
+  }[type];
+
+  const cardBg = isDark ? '#1F2937' : '#FFFFFF';
+  const labelColor = isDark ? 'rgba(255,255,255,0.7)' : '#64748B';
+  const valueColor = isDark ? '#FFFFFF' : '#1E293B';
+
   return (
-    <View style={[styles.statPill, { backgroundColor: `${color}14`, borderColor: `${color}22` }]}>
-      <Text style={[styles.statPillVal, { color }]}>{value}</Text>
-      <Text style={[styles.statPillLbl, { color: t.text3 }]}>{label}</Text>
+    <View style={[
+      {
+        flex: 1,
+        backgroundColor: cardBg,
+        borderRadius: 20,
+        padding: 16,
+        ...(Platform.OS === 'web' ? {
+          boxShadow: `0px 12px 24px ${config.shadowColor}35, inset 4px 4px 10px rgba(255, 255, 255, 1), inset -4px -4px 10px rgba(0, 0, 0, 0.06)`
+        } : {
+          shadowColor: config.shadowColor,
+          shadowOffset: { width: 0, height: 10 },
+          shadowOpacity: 0.35,
+          shadowRadius: 16,
+          elevation: 8,
+        }),
+      }
+    ]}>
+      <View style={{
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        backgroundColor: config.bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 12,
+        ...(Platform.OS === 'web' ? {
+          boxShadow: `inset 2px 2px 4px rgba(255, 255, 255, 0.8), inset -2px -2px 4px rgba(0, 0, 0, 0.08), 0px 4px 8px ${config.shadowColor}25`
+        } : {})
+      }}>
+        <Ionicons name={config.icon as any} size={20} color={config.color} />
+      </View>
+      <Text style={{ fontSize: 13, fontWeight: '700', color: labelColor, marginBottom: 4 }}>{label}</Text>
+      <Text style={{ fontSize: 24, fontWeight: '800', color: valueColor, letterSpacing: -0.5 }}>{value}</Text>
     </View>
   );
 }
 
 // ─── Attendance Hero Card ─────────────────────────────────────────────────────
 function AttendanceHero({ data, onPress, isDark }: { data: DashboardMetrics | null; onPress: () => void; isDark: boolean }) {
-  const t = isDark ? D.dark : D.light;
+  const { width: winWidth } = useWindowDimensions();
+  const isWideLayout = IS_WEB && winWidth > 820;
+
   const total = data?.totalStudents || 0;
   const present = data?.presentToday || 0;
   const absent = data?.absentToday || 0;
   const unmarked = Math.max(0, total - present - absent);
   const pct = total > 0 ? Math.round((present / total) * 100) : 0;
+
   const pressScale = useSharedValue(1);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: pressScale.value }] }));
-  let statusText = total === 0 ? 'No Class Assigned' : unmarked === 0 ? 'Fully Marked ✓' : `${unmarked} left to mark`;
-  let statusColor = total === 0 ? t.text3 : unmarked === 0 ? ACCENT.emerald : ACCENT.amber;
+  const hoverLift = useSharedValue(0);
+
+  const anim = useAnimatedStyle(() => {
+    const hoverScale = IS_WEB ? interpolate(hoverLift.value, [0, 1], [1, 1.01]) : 1;
+    return {
+      transform: [{ scale: pressScale.value * hoverScale }]
+    };
+  });
+
+  let statusText = total === 0 ? 'No Class Assigned' : unmarked === 0 ? 'Fully Marked' : `${unmarked} student${unmarked !== 1 ? 's' : ''} left to mark`;
+  let statusColor = total === 0 ? 'rgba(255,255,255,0.6)' : unmarked === 0 ? '#38B289' : '#E8520A';
+
+  const cardBg = isDark ? '#111827' : '#FFFFFF';
+  const textColor = isDark ? '#FFFFFF' : '#1E293B';
+  const subTextColor = isDark ? 'rgba(255,255,255,0.6)' : '#64748B';
+
+  const handlePressIn = () => {
+    pressScale.value = withTiming(0.98, { duration: 150 });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  const handlePressOut = () => {
+    pressScale.value = withTiming(1, { duration: 150 });
+  };
 
   return (
-    <Animated.View entering={FadeInDown.delay(100).duration(550).springify().damping(16)} style={[anim, { marginBottom: 20 }]}>
-      <TouchableOpacity
-        activeOpacity={1}
-        onPressIn={() => { pressScale.value = withSpring(0.975, { damping: 18 }); }}
-        onPressOut={() => { pressScale.value = withSpring(1, { damping: 14 }); }}
-        onPress={onPress}
-      >
-        <View style={[styles.heroCard, { backgroundColor: t.bgCard, borderColor: t.border }]}>
-          {isDark && <View style={[styles.cardTopGlow, { backgroundColor: `${ACCENT.violet}18` }]} />}
-          {isDark && <View style={styles.cardShimmerLine} />}
-          <View style={styles.heroCardHeader}>
-            <View>
-              <Text style={[styles.heroCardTitle, { color: t.text1 }]}>Today's Class</Text>
-              <Text style={[styles.heroCardSub, { color: t.text2 }]}>Tap to manage attendance</Text>
+    <Animated.View
+      entering={FadeInDown.delay(100).duration(550).springify().damping(16)}
+      style={[
+        anim,
+        {
+          marginBottom: 20,
+          borderRadius: 32,
+          overflow: 'hidden',
+          backgroundColor: cardBg,
+          ...(Platform.OS === 'web' ? {
+            boxShadow: isDark 
+              ? '0px 20px 50px rgba(0,0,0,0.8), inset 2px 2px 4px rgba(255,255,255,0.06), inset -2px -2px 4px rgba(0,0,0,0.5)' 
+              : '0px 20px 50px rgba(150,170,200,0.4), 0px 8px 16px rgba(150,170,200,0.2), inset 3px 3px 8px rgba(255,255,255,1), inset -3px -3px 8px rgba(0,0,0,0.04)'
+          } : {
+            shadowColor: isDark ? '#000' : '#8A9BAE',
+            shadowOffset: { width: 0, height: 16 },
+            shadowOpacity: isDark ? 0.7 : 0.4,
+            shadowRadius: 32,
+            elevation: 12,
+          }),
+        }
+      ]}
+    >
+      <View style={{ padding: isWideLayout ? 36 : 24 }}>
+        <Pressable
+          onPressIn={handlePressIn}
+          onPressOut={handlePressOut}
+          onPress={onPress}
+          onHoverIn={() => {
+            if (IS_WEB) hoverLift.value = withTiming(1, { duration: 180 });
+          }}
+          onHoverOut={() => {
+            if (IS_WEB) hoverLift.value = withTiming(0, { duration: 220 });
+          }}
+          style={[Platform.OS === 'web' && { cursor: 'pointer' }]}
+        >
+          {/* 1. Header Section */}
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 24, fontWeight: '800', color: textColor, letterSpacing: -0.5 }}>Today's Roll Call</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
+                <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
+                <Text style={{ fontSize: 14, fontWeight: '600', color: subTextColor }}>{statusText}</Text>
+              </View>
             </View>
-            <View style={[styles.heroCardChip, { backgroundColor: isDark ? 'rgba(108,99,255,0.18)' : 'rgba(108,99,255,0.10)' }]}>
-              <Ionicons name="people" size={12} color={ACCENT.violet} style={{ marginRight: 4 }} />
-              <Text style={[styles.heroCardChipText, { color: ACCENT.violet }]}>{total} students</Text>
+
+            {/* Pill student count badge */}
+            <View style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 24,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : '#F1F5F9',
+              ...(Platform.OS === 'web' ? {
+                boxShadow: isDark 
+                  ? 'inset 2px 2px 4px rgba(255,255,255,0.06), inset -2px -2px 4px rgba(0,0,0,0.3)' 
+                  : 'inset 3px 3px 6px rgba(255,255,255,1), inset -3px -3px 6px rgba(150,170,200,0.3), 0px 2px 8px rgba(0,0,0,0.04)'
+              } : {})
+            }}>
+              <Ionicons name="people-outline" size={16} color={textColor} style={{ marginRight: 6 }} />
+              <Text style={{ fontSize: 14, fontWeight: '700', color: textColor }}>{total} student{total !== 1 ? 's' : ''}</Text>
             </View>
           </View>
-          <View style={styles.heroCardBody}>
-            <AttendanceArc pct={pct} present={present} absent={absent} total={total} unmarked={unmarked} isDark={isDark} />
-            <View style={styles.heroStatCol}>
-              <StatPill value={present} label="Present" color={ACCENT.emerald} isDark={isDark} />
-              <StatPill value={absent} label="Absent" color={ACCENT.rose} isDark={isDark} />
-              <StatPill value={unmarked} label="Pending" color={ACCENT.amber} isDark={isDark} />
-            </View>
+
+          {/* 2. Middle Arc Section */}
+          <View style={{ width: '100%', alignItems: 'center', justifyContent: 'center', marginBottom: 28, marginTop: 10, position: 'relative' }}>
+            {/* Premium Claymorphic Graphics in the whitespace */}
+            <ClayGraphic type="clock" size={32} isDark={isDark} style={{ top: 15, left: '10%' }} />
+            <ClayGraphic type="book" size={28} isDark={isDark} style={{ bottom: 15, left: '14%' }} />
+            <ClayGraphic type="pencil" size={28} isDark={isDark} style={{ top: 25, right: '10%' }} />
+            <ClayGraphic type="cap" size={32} isDark={isDark} style={{ bottom: 25, right: '14%' }} />
+
+            <AttendanceArc pct={pct} isDark={isDark} size={210} stroke={16} />
           </View>
-          <View style={[styles.heroCardFooter, { backgroundColor: isDark ? 'rgba(0,0,0,0.20)' : '#F7F9FD', borderTopColor: t.border }]}>
-            <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-            <Text style={[styles.heroCardFooterText, { color: statusColor }]}>{statusText}</Text>
-            <View style={{ flex: 1 }} />
-            <Text style={[styles.heroCardFooterLink, { color: ACCENT.violet }]}>Manage →</Text>
+
+
+          {/* 3. Stats Cards Row */}
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 28 }}>
+            <StatCard value={present} label="Present" type="present" isDark={isDark} />
+            <StatCard value={absent} label="Absent" type="absent" isDark={isDark} />
+            <StatCard value={unmarked} label="Not marked" type="pending" isDark={isDark} />
           </View>
-        </View>
-      </TouchableOpacity>
+
+          {/* 4. Footer Button */}
+          <View style={{
+              borderRadius: 20,
+              backgroundColor: '#6366F1',
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              paddingVertical: 18,
+              ...(Platform.OS === 'web' ? {
+                boxShadow: '0px 12px 24px rgba(99, 102, 241, 0.4), inset 3px 3px 8px rgba(255, 255, 255, 0.6), inset -3px -3px 8px rgba(0, 0, 0, 0.25)'
+              } : {
+                shadowColor: '#6366F1',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.5,
+                shadowRadius: 16,
+                elevation: 10,
+              })
+            }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#FFFFFF', letterSpacing: -0.2 }}>Mark Attendance</Text>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" style={{ marginLeft: 8 }} />
+          </View>
+        </Pressable>
+      </View>
     </Animated.View>
   );
 }
 
 // ─── Hero Banner ──────────────────────────────────────────────────────────────
-function HeroBanner({ name }: { name: string; isDark: boolean }) {
+function HeroBanner({ name, card }: { name: string; isDark: boolean; card?: React.ReactNode }) {
   return (
     <View style={{ marginTop: 4, marginBottom: 20 }}>
       <DashboardHero
@@ -256,6 +552,9 @@ function HeroBanner({ name }: { name: string; isDark: boolean }) {
         greeting={getGreeting()}
         name={name}
         stacks
+        useSchoolBranding
+        eyebrowIcon="school-outline"
+        card={card}
       />
     </View>
   );
@@ -569,6 +868,38 @@ function LiveBadge({ count }: { count: string }) {
 }
 
 // ─── Enhanced Menu Card ───────────────────────────────────────────────────────
+function getStaffClayColors(configKey: string, isDark: boolean) {
+  let bg = '#4A72E6';
+  let shadowColor = '#253FA3';
+
+  if (configKey === 'diary') {
+    bg = isDark ? '#3053C4' : '#4A72E6'; // Periwinkle Blue
+    shadowColor = isDark ? '#1C318F' : '#253FA3';
+  } else if (configKey === 'timetable') {
+    bg = isDark ? '#1B7F5F' : '#2CB288'; // Emerald Green
+    shadowColor = isDark ? '#0D4E3A' : '#136146';
+  } else if (configKey === 'attendance') {
+    bg = isDark ? '#9B531C' : '#E58539'; // Tangerine Orange
+    shadowColor = isDark ? '#5C2D0B' : '#75390E';
+  } else if (configKey === 'leaves') {
+    bg = isDark ? '#9E2E3B' : '#E65565'; // Crimson Red
+    shadowColor = isDark ? '#5E131C' : '#7A1621';
+  } else if (configKey === 'results') {
+    bg = isDark ? '#9E731D' : '#E6AE3C'; // Amber Yellow
+    shadowColor = isDark ? '#5A3E08' : '#7D550A';
+  } else if (configKey === 'complaints') {
+    bg = isDark ? '#5033B3' : '#825AE6'; // Purple
+    shadowColor = isDark ? '#2F187A' : '#4925A3';
+  } else if (configKey === 'lms') {
+    bg = isDark ? '#A12A76' : '#E65AAB'; // Pink
+    shadowColor = isDark ? '#601142' : '#7D1F57';
+  } else if (configKey === 'payslips') {
+    bg = isDark ? '#117E77' : '#1CB3AA'; // Teal
+    shadowColor = isDark ? '#054D48' : '#0B615C';
+  }
+  return { bg, shadowColor };
+}
+
 function MenuCard({
   title,
   subtitle,
@@ -590,37 +921,58 @@ function MenuCard({
   const t = isDark ? D.dark : D.light;
 
   const pressScale = useSharedValue(1);
-  const pressDepth = useSharedValue(0);
+  const translateY = useSharedValue(0);
   const hoverLift = useSharedValue(0);
 
   const wrapperStyle = useAnimatedStyle(() => {
-    const y = IS_WEB ? interpolate(hoverLift.value, [0, 1], [0, -6]) : 0;
-    const hoverScale = IS_WEB ? interpolate(hoverLift.value, [0, 1], [1, 1.018]) : 1;
+    const y = IS_WEB ? interpolate(hoverLift.value, [0, 1], [0, -3]) : translateY.value;
+    const hoverScale = IS_WEB ? interpolate(hoverLift.value, [0, 1], [1, 1.02]) : 1;
     return {
       transform: [{ translateY: y }, { scale: pressScale.value * hoverScale }],
     };
   });
 
-  const gradZoneStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(pressDepth.value, [0, 1], [1, 0.82]),
-  }));
+  const clayStyle = useMemo(() => {
+    const { bg, shadowColor } = getStaffClayColors(configKey, isDark);
+    const borderRadius = IS_WEB ? 28 : 24;
 
-  const shimmerDelay = 800 + index * 500;
+    if (Platform.OS === 'web') {
+      return {
+        backgroundColor: bg,
+        borderRadius,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.45)',
+        boxShadow:
+          `0px 8px 18px ${shadowColor}33, ` +
+          `-5px -5px 12px ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)'}, ` +
+          `inset 2px 2px 4px rgba(255, 255, 255, 0.45), ` +
+          `inset -2.5px -2.5px 5px rgba(0, 0, 0, 0.16)`
+      };
+    }
 
-  const webShadow = IS_WEB
-    ? ({
-        boxShadow: `0 20px 48px -14px ${cfg.shadowColor}55, 0 10px 28px -12px rgba(15, 23, 42, 0.14), 0 2px 8px -2px rgba(15, 23, 42, 0.08)`,
-      } as const)
-    : null;
-  const nativeShadow = !IS_WEB
-    ? {
-        shadowColor: cfg.shadowColor,
-        shadowOffset: { width: 0, height: 14 } as const,
-        shadowOpacity: isDark ? 0.45 : 0.32,
-        shadowRadius: 24,
-        elevation: 20,
-      }
-    : null;
+    return {
+      backgroundColor: bg,
+      borderRadius,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.45)',
+      shadowColor,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.45 : 0.28,
+      shadowRadius: 12,
+      elevation: 6,
+    };
+  }, [configKey, isDark]);
+
+  const handlePressIn = () => {
+    pressScale.value = withTiming(0.97, { duration: 150 });
+    translateY.value = withTiming(1.5, { duration: 150 });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  };
+
+  const handlePressOut = () => {
+    pressScale.value = withTiming(1, { duration: 150 });
+    translateY.value = withTiming(0, { duration: 150 });
+  };
 
   return (
     <Animated.View
@@ -634,9 +986,13 @@ function MenuCard({
       }
       style={[
         wrapperStyle,
-        { width: MENU_CARD_W },
-        webShadow,
-        nativeShadow,
+        clayStyle,
+        {
+          width: MENU_CARD_W,
+          height: IS_WEB ? 144 : 132,
+          position: 'relative',
+          overflow: Platform.OS === 'web' ? 'hidden' : 'visible',
+        },
       ]}
     >
       <Pressable
@@ -649,129 +1005,186 @@ function MenuCard({
         onHoverOut={() => {
           if (IS_WEB) hoverLift.value = withTiming(0, { duration: 220 });
         }}
-        onPressIn={() => {
-          pressScale.value = withSpring(0.94, { damping: 22, stiffness: 360 });
-          pressDepth.value = withTiming(1, { duration: 90 });
-        }}
-        onPressOut={() => {
-          pressScale.value = withSpring(1, { damping: 13, stiffness: 180 });
-          pressDepth.value = withTiming(0, { duration: 200 });
-        }}
-        style={({ pressed }) => [
-          IS_WEB && { cursor: 'pointer' as const },
-          IS_WEB && { userSelect: 'none' as const },
-          pressed && { opacity: 0.97 },
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={[
+          StyleSheet.absoluteFill,
+          Platform.OS === 'web' && { cursor: 'pointer' },
         ]}
       >
-        {/* ── Outer Card Shell ── */}
-        <View style={[mc.card, {
-          borderColor: isDark ? 'rgba(255,255,255,0.11)' : 'rgba(0,0,0,0.07)',
-        }]}>
+        {/* Abstract Background graphics */}
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: IS_WEB ? 90 : 80,
+            height: IS_WEB ? 90 : 80,
+            borderRadius: IS_WEB ? 45 : 40,
+            borderWidth: 1.5,
+            borderColor: 'rgba(255, 255, 255, 0.08)',
+            bottom: IS_WEB ? -20 : -15,
+            right: IS_WEB ? -20 : -15,
+            zIndex: 1,
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: IS_WEB ? 44 : 38,
+            height: IS_WEB ? 44 : 38,
+            borderRadius: IS_WEB ? 22 : 19,
+            borderWidth: 1,
+            borderColor: 'rgba(255, 255, 255, 0.05)',
+            bottom: IS_WEB ? 40 : 35,
+            right: IS_WEB ? -10 : -8,
+            zIndex: 1,
+          }}
+        />
+        <View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            width: IS_WEB ? 24 : 18,
+            height: IS_WEB ? 24 : 18,
+            borderRadius: IS_WEB ? 12 : 9,
+            backgroundColor: 'rgba(255, 255, 255, 0.06)',
+            bottom: IS_WEB ? 45 : 38,
+            right: IS_WEB ? 25 : 20,
+            zIndex: 1,
+            ...(Platform.OS === 'web' ? {
+              boxShadow: '1px 2px 3px rgba(0,0,0,0.06), inset 1px 1px 2px rgba(255,255,255,0.2)'
+            } : {})
+          }}
+        />
 
-          {/* ══════════════════════════════════════
-              ZONE 1 — GRADIENT ICON PANEL
-          ══════════════════════════════════════ */}
-          <Animated.View style={[{ borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' }, gradZoneStyle]}>
-            <LinearGradient
-              colors={cfg.grad}
-              style={mc.gradZone}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            >
-              {/* Geometric pattern decoration */}
-              <CardPattern type={cfg.patternType} accentLight={cfg.accentLight} />
-
-              {/* Bottom depth shadow — softens gradient into text zone */}
-              <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.28)']}
-                style={mc.gradZoneVignette}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                pointerEvents="none"
-              />
-
-              {/* Top-edge gloss line */}
-              <View style={mc.topGloss} />
-
-              {/* Shimmer sweep */}
-              <ShimmerSweep color={cfg.shimmerColor} width={MENU_CARD_W} delay={shimmerDelay} />
-
-              {/* Badge (top-right) — only when pending */}
-              {badge && (
-                <View style={mc.badgePosition}>
-                  <LiveBadge count={badge} />
-                </View>
-              )}
-
-              {/* ── Icon — centered, clean, no rings ── */}
-              <View style={mc.iconWrapper}>
-                {/* Diffuse background glow */}
-                <View style={[mc.iconGlowBlob, { backgroundColor: 'rgba(255,255,255,0.14)' }]} />
-                {/* Icon container: frosted glass disc */}
-                <View style={mc.iconDisc}>
-                  {/* Inner highlight ring */}
-                  <View style={mc.iconDiscHighlight} />
-                  {cfg.icon}
-                </View>
-              </View>
-            </LinearGradient>
-          </Animated.View>
-
-          {/* ══════════════════════════════════════
-              ACCENT DIVIDER — gradient line
-          ══════════════════════════════════════ */}
-          <LinearGradient
-            colors={[cfg.accentBar[0], cfg.accentBar[1], 'transparent']}
-            style={mc.accentDivider}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-          />
-
-          {/* ══════════════════════════════════════
-              ZONE 2 — TEXT INFO PANEL
-          ══════════════════════════════════════ */}
-          <View style={[mc.textZone, {
-            backgroundColor: t.menuTextBg,
-            borderBottomLeftRadius: 24,
-            borderBottomRightRadius: 24,
-            borderTopWidth: StyleSheet.hairlineWidth,
-            borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
-          }]}>
-
-            {/* Category tag */}
-            <View style={[mc.categoryTag, { backgroundColor: `${cfg.accentBar[0]}1F`, borderColor: `${cfg.accentBar[0]}38` }]}>
-              <View style={[mc.categoryDot, { backgroundColor: cfg.accentLight }]} />
-              <Text style={[mc.categoryText, { color: cfg.accentLight }]}>{cfg.category}</Text>
+        {/* ── Icon (top-left, raised disc) ── */}
+        <View style={{
+          position: 'absolute',
+          top: 12,
+          left: 12,
+          zIndex: 2
+        }}>
+          <View style={{
+            width: IS_WEB ? 42 : 36,
+            height: IS_WEB ? 42 : 36,
+            borderRadius: IS_WEB ? 14 : 11,
+            backgroundColor: 'rgba(255,255,255,0.22)',
+            borderColor: 'rgba(255,255,255,0.32)',
+            borderWidth: 1,
+            alignItems: 'center',
+            justifyContent: 'center',
+            ...(Platform.OS === 'web' ? {
+              boxShadow: '1px 2px 4px rgba(0,0,0,0.12), inset 1px 1px 2px rgba(255,255,255,0.35)'
+            } : {
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 1.5 },
+              shadowOpacity: 0.1,
+              shadowRadius: 2,
+              elevation: 1.5
+            })
+          }}>
+            <View style={{ transform: [{ scale: IS_WEB ? 0.78 : 0.68 }] }}>
+              {cfg.icon}
             </View>
-
-            {/* Title + arrow row */}
-            <View style={mc.titleRow}>
-              <Text style={[mc.titleText, { color: t.text1 }]} numberOfLines={1}>{title}</Text>
-              <View style={[mc.arrowChip, { backgroundColor: `${cfg.accentBar[0]}20`, borderColor: `${cfg.accentBar[0]}30` }]}>
-                <Ionicons name="chevron-forward" size={14} color={cfg.accentLight} />
-              </View>
-            </View>
-
-            {/* Subtitle */}
-            <Text style={[mc.subtitleText, { color: t.text2 }]} numberOfLines={IS_WEB ? 2 : 1}>{subtitle}</Text>
-
-            {IS_WEB && (
-              <Text style={[mc.webHint, { color: t.text3 }]} numberOfLines={1}>Click to open</Text>
-            )}
-
-            {/* Bottom accent micro-bar */}
-            <LinearGradient
-              colors={[cfg.accentBar[0], `${cfg.accentBar[1]}00`]}
-              style={mc.microBar}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-            />
           </View>
+          {/* Badge position directly absolute over the icon */}
+          {badge && (
+            <View style={{
+              position: 'absolute',
+              top: -4,
+              right: -4,
+              backgroundColor: '#FF3D5C',
+              borderRadius: 8,
+              paddingHorizontal: 5,
+              paddingVertical: 1,
+              borderWidth: 1.5,
+              borderColor: isDark ? '#121824' : '#FFFFFF',
+              zIndex: 3,
+            }}>
+              <Text style={{ color: '#FFFFFF', fontSize: 8.5, fontWeight: '900' }}>{badge}</Text>
+            </View>
+          )}
+        </View>
 
-          {/* Outer border overlay (full card) */}
-          <View style={[mc.outerBorder, {
-            borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
-          }]} pointerEvents="none" />
+        {/* ── Category tag (top-right, inset capsule) ── */}
+        <View style={[
+          mc.categoryTag,
+          {
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 2,
+            backgroundColor: 'rgba(0,0,0,0.15)',
+            borderColor: 'rgba(255,255,255,0.15)',
+            borderWidth: 1,
+            marginBottom: 0,
+            ...(Platform.OS === 'web' ? {
+              boxShadow: 'inset 1px 1px 2px rgba(0,0,0,0.2), inset -1px -1px 2px rgba(255,255,255,0.1)'
+            } : {})
+          }
+        ]}>
+          <View style={[mc.categoryDot, { backgroundColor: '#FFFFFF' }]} />
+          <Text style={[mc.categoryText, { color: '#FFFFFF', fontSize: 8, fontWeight: '900' }]}>{cfg.category}</Text>
+        </View>
+
+        {/* ── Bottom Text info panel ── */}
+        <View style={{
+          position: 'absolute',
+          bottom: 12,
+          left: 12,
+          right: 42,
+          zIndex: 2,
+        }}>
+          <Text
+            style={{
+              fontSize: IS_WEB ? 15 : 13.5,
+              fontWeight: '800',
+              color: '#FFFFFF',
+              letterSpacing: -0.2
+            }}
+            numberOfLines={1}
+          >
+            {title}
+          </Text>
+          <Text
+            style={{
+              fontSize: IS_WEB ? 10.5 : 9.5,
+              fontWeight: '600',
+              color: 'rgba(255,255,255,0.78)',
+              marginTop: 2
+            }}
+            numberOfLines={1}
+          >
+            {subtitle}
+          </Text>
+        </View>
+
+        {/* ── Chevron button (bottom-right) ── */}
+        <View style={{
+          position: 'absolute',
+          bottom: 12,
+          right: 12,
+          width: IS_WEB ? 26 : 22,
+          height: IS_WEB ? 26 : 22,
+          borderRadius: IS_WEB ? 13 : 11,
+          backgroundColor: 'rgba(255,255,255,0.22)',
+          borderWidth: 1,
+          borderColor: 'rgba(255,255,255,0.32)',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 2,
+          ...(Platform.OS === 'web' ? {
+            boxShadow: '1px 2px 4px rgba(0,0,0,0.12), inset 1px 1px 2px rgba(255,255,255,0.35)'
+          } : {
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 1.5 },
+            shadowOpacity: 0.1,
+            shadowRadius: 2,
+            elevation: 1.5
+          }),
+        }}>
+          <Ionicons name="chevron-forward" size={IS_WEB ? 13 : 10} color="#FFFFFF" />
         </View>
       </Pressable>
     </Animated.View>
@@ -787,6 +1200,12 @@ export default function StaffDashboard() {
   const { staffId, isViewingAsAdmin, viewAsName } = useEffectiveStaffId();
   const viewAsParams = isViewingAsAdmin ? { staffId, viewAsName } : undefined;
   const { payslipsEnabled } = useStaffPortalConfig();
+  const [viewedStaff, setViewedStaff] = useState<Staff | null>(null);
+
+  useEffect(() => {
+    if (!isViewingAsAdmin || !staffId) { setViewedStaff(null); return; }
+    StaffService.getById(staffId).then(setViewedStaff).catch(() => setViewedStaff(null));
+  }, [isViewingAsAdmin, staffId]);
 
   const { data, loading: metricsLoading } = usePersistedSWR<DashboardMetrics>({
     cacheKey: `staff-dashboard-${staffId ?? 'self'}`,
@@ -829,7 +1248,7 @@ export default function StaffDashboard() {
   const menuItems = [
     { title: 'Diary', subtitle: 'Daily logs & notes', configKey: 'diary', route: '/staff/diary' },
     { title: 'Timetable', subtitle: 'Class schedule', configKey: 'timetable', route: '/staff/timetable' },
-    { title: 'Attendance', subtitle: 'History & reports', configKey: 'attendance', route: '/staff/attendance' },
+    { title: 'My Attendance', subtitle: 'History & reports', configKey: 'attendance', route: '/staff/attendance' },
     { title: 'Leaves', subtitle: 'Review approvals', configKey: 'leaves', route: '/staff/leaves', badge: data?.pendingLeaves ? `${data.pendingLeaves}` : undefined },
     { title: 'Results', subtitle: 'Enter & view marks', configKey: 'results', route: '/staff/results' },
     { title: 'Complaints', subtitle: 'Student issues', configKey: 'complaints', route: '/staff/complaints' },
@@ -843,6 +1262,22 @@ export default function StaffDashboard() {
   });
 
   const firstName = (isViewingAsAdmin ? viewAsName : user?.displayName)?.split(' ')[0] || 'Teacher';
+
+  const headerProfileCard = (
+    <AdminHeaderCard
+      compact
+      compactRole
+      displayName={(isViewingAsAdmin ? (viewedStaff?.display_name || viewAsName) : user?.displayName) || 'Staff Member'}
+      photoUrl={isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl}
+      roleLabel={
+        isViewingAsAdmin
+          ? (viewedStaff?.designation_name || viewedStaff?.designation || 'Staff')
+          : (user?.role?.name || 'Staff')
+      }
+      staffCode={isViewingAsAdmin ? viewedStaff?.staff_code : user?.staff_code}
+      portalBadge="STAFF"
+    />
+  );
 
   return (
     <View style={[styles.root, { backgroundColor: t.bg }]}>
@@ -860,7 +1295,7 @@ export default function StaffDashboard() {
         showsVerticalScrollIndicator={false}
       >
         {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
-        <HeroBanner name={firstName} isDark={isDark} />
+        <HeroBanner name={firstName} isDark={isDark} card={headerProfileCard} />
         {!isViewingAsAdmin && !!data?.pendingLeaves && (
           <LeaveAlert count={data.pendingLeaves} onPress={() => router.push('/staff/leaves' as any)} isDark={isDark} />
         )}

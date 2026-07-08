@@ -1,11 +1,13 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../utils/haptics';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ADMIN_THEME } from '../constants/adminTheme';
+import { schoolColorWithAlpha } from '../constants/schoolConfig';
 import { SCHOOL_NAME } from '../constants/school';
+import ClayIconButton from './ClayIconButton';
 
 import Animated, { SharedValue, useAnimatedStyle, interpolateColor, interpolate, Extrapolation } from 'react-native-reanimated';
 import { useTheme } from '../hooks/useTheme';
@@ -44,8 +46,11 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
     const isWideWeb = isWeb && windowWidth >= 768;
 
     const textPrimary = isDark ? '#F8FAFC' : ADMIN_THEME.colors.text.primary;
-    const textSecondary = isDark ? 'rgba(248,250,252,0.55)' : ADMIN_THEME.colors.text.secondary;
-    const iconBtnBg = isDark ? 'rgba(255,255,255,0.08)' : ADMIN_THEME.colors.background.subtle;
+    const accent = ADMIN_THEME.colors.primary;
+
+    /* Solid clay tone the mobile slab materializes into once the user scrolls. */
+    const claySolid = isDark ? '#1C1630' : '#F6F2FC';
+    const clayTransparent = isDark ? 'rgba(28,22,48,0)' : 'rgba(246,242,252,0)';
 
     const handleBack = () => {
         if (router.canGoBack()) {
@@ -79,40 +84,62 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
                 };
             }
             return {
-                backgroundColor: ADMIN_THEME.colors.background.surface,
-                borderBottomColor: ADMIN_THEME.colors.border,
-                shadowOpacity: 0.1,
+                backgroundColor: claySolid,
+                borderBottomColor: schoolColorWithAlpha(accent, isDark ? 0.35 : 0.16),
+                shadowOpacity: isDark ? 0.4 : 0.16,
             };
         }
 
-        const lightBg0 = 'rgba(255,255,255,0)';
-        const lightBg1 = 'rgba(255,255,255,0.95)';
-        const darkBg0 = 'rgba(11,15,23,0)';
-        const darkBg1 = 'rgba(11,15,23,0.92)';
+        if (isWideWeb) {
+            const lightBg0 = 'rgba(255,255,255,0)';
+            const lightBg1 = 'rgba(255,255,255,0.95)';
+            const darkBg0 = 'rgba(11,15,23,0)';
+            const darkBg1 = 'rgba(11,15,23,0.92)';
+
+            const bgColor = interpolateColor(
+                scrollY.value,
+                [0, 50],
+                isDark ? [darkBg0, darkBg1] : [lightBg0, lightBg1]
+            );
+            const borderColor = interpolateColor(
+                scrollY.value,
+                [0, 50],
+                isDark
+                    ? ['rgba(255,255,255,0)', 'rgba(255,255,255,0.08)']
+                    : ['rgba(226,232,240,0)', ADMIN_THEME.colors.border]
+            );
+            const shadowOpacity = interpolate(
+                scrollY.value,
+                [0, 50],
+                [0, 0.06],
+                Extrapolation.CLAMP
+            );
+
+            return {
+                backgroundColor: bgColor,
+                borderBottomColor: borderColor,
+                shadowOpacity,
+            };
+        }
 
         const bgColor = interpolateColor(
             scrollY.value,
             [0, 50],
-            isDark ? [darkBg0, darkBg1] : [lightBg0, lightBg1]
-        );
-        const borderColor = interpolateColor(
-            scrollY.value,
-            [0, 50],
-            isDark
-                ? ['rgba(255,255,255,0)', 'rgba(255,255,255,0.08)']
-                : ['rgba(226,232,240,0)', ADMIN_THEME.colors.border]
+            [clayTransparent, claySolid]
         );
         const shadowOpacity = interpolate(
             scrollY.value,
             [0, 50],
-            [0, isWideWeb ? 0.06 : 0.1],
+            [0, isDark ? 0.4 : 0.18],
             Extrapolation.CLAMP
         );
+        const borderBottomWidth = interpolate(scrollY.value, [0, 50], [0, 1], Extrapolation.CLAMP);
 
         return {
             backgroundColor: bgColor,
-            borderBottomColor: borderColor,
             shadowOpacity,
+            borderBottomWidth,
+            borderBottomColor: schoolColorWithAlpha(accent, isDark ? 0.35 : 0.16),
         };
     });
 
@@ -128,6 +155,8 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
     return (
         <Animated.View style={[
             styles.container,
+            !isWideWeb && styles.claySlab,
+            { shadowColor: accent },
             isAbsolute && styles.absoluteHeader,
             isWideWeb && styles.containerWide,
             isWideWeb && styles.containerWideZ,
@@ -141,26 +170,28 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
                     ]}
                 >
                     {showBack ? (
-                        <Pressable
+                        <ClayIconButton
                             onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 handleBack();
                             }}
-                            style={[styles.iconButton, { backgroundColor: iconBtnBg }, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                            isDark={isDark}
+                            accent={accent}
                         >
-                            <Ionicons name="arrow-back" size={22} color={textPrimary} />
-                        </Pressable>
+                            <Ionicons name="arrow-back" size={19} color={accent} />
+                        </ClayIconButton>
                     ) : null}
                     {showMenu ? (
-                        <Pressable
+                        <ClayIconButton
                             onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 if (onMenuPress) onMenuPress();
                             }}
-                            style={[styles.iconButton, { backgroundColor: iconBtnBg }, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                            isDark={isDark}
+                            accent={accent}
                         >
-                            <Feather name="menu" size={22} color={textPrimary} />
-                        </Pressable>
+                            <Feather name="menu" size={19} color={accent} />
+                        </ClayIconButton>
                     ) : null}
                 </View>
 
@@ -172,34 +203,35 @@ const AdminHeader: React.FC<AdminHeaderProps> = ({
 
                 <View style={styles.rightContainer}>
                     {rightAction && (
-                        <Pressable
+                        <ClayIconButton
                             onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 rightAction.onPress();
                             }}
-                            style={[styles.iconButton, { marginRight: 8, backgroundColor: iconBtnBg }, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                            isDark={isDark}
+                            accent={accent}
+                            style={{ marginRight: 8 }}
                         >
-                            <Ionicons name={rightAction.icon} size={22} color={textPrimary} />
-                        </Pressable>
+                            <Ionicons name={rightAction.icon} size={19} color={accent} />
+                        </ClayIconButton>
                     )}
                     {showNotification && (
-                        <Pressable
+                        <ClayIconButton
                             onPress={() => {
                                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                                 router.push('/admin/notifications' as any);
                             }}
-                            style={[styles.iconButton, { marginRight: 8, backgroundColor: iconBtnBg }, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                            isDark={isDark}
+                            accent={accent}
+                            style={{ marginRight: 8 }}
                         >
-                            <Ionicons name="notifications-outline" size={22} color={textSecondary} />
-                        </Pressable>
+                            <Ionicons name="notifications-outline" size={19} color={accent} />
+                        </ClayIconButton>
                     )}
                     {showProfileButton && (
-                        <Pressable
-                            onPress={handleSettings}
-                            style={[styles.iconButton, { backgroundColor: iconBtnBg }, Platform.OS === 'web' && { cursor: 'pointer' }]}
-                        >
-                            <Ionicons name="settings-outline" size={22} color={textSecondary} />
-                        </Pressable>
+                        <ClayIconButton onPress={handleSettings} isDark={isDark} accent={accent} round size={40}>
+                            <Ionicons name="settings-outline" size={18} color={accent} />
+                        </ClayIconButton>
                     )}
                 </View>
             </View>
@@ -232,6 +264,13 @@ const styles = StyleSheet.create({
         borderBottomColor: ADMIN_THEME.colors.border,
         ...ADMIN_THEME.shadows.sm,
         paddingBottom: ADMIN_THEME.spacing.s,
+    },
+    /* Puffed clay slab (mobile only — the full-bleed desktop toolbar stays flat/glassy). */
+    claySlab: {
+        borderBottomLeftRadius: 26,
+        borderBottomRightRadius: 26,
+        shadowOffset: { width: 0, height: 10 },
+        shadowRadius: 20,
         overflow: 'hidden',
     },
     containerWide: {
@@ -242,14 +281,6 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-    },
-    iconButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: ADMIN_THEME.borderRadius.m,
-        backgroundColor: ADMIN_THEME.colors.background.subtle,
     },
     title: {
         flex: 1,

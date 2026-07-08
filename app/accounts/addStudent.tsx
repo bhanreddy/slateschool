@@ -30,42 +30,120 @@ import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import AdmissionSuccessModal from '../../src/components/AdmissionSuccessModal';
+import ClayPasswordToggle from '../../src/components/ClayPasswordToggle';
 import { buildAdmissionFormData, AdmissionFormData } from '../../src/utils/admissionFormPdf';
 
 const { width: SW } = Dimensions.get('window');
 
+// ─── Form palette (brand-aligned clay) ────────────────────────────────────────
+const FORM = {
+  brand: ADMIN_THEME.colors.primary,
+  violet: '#7C6FFF',
+  coral: ADMIN_THEME.colors.secondary,
+  sage: '#5BAA9A',
+  plum: '#9B7EDE',
+  surface: (isDark: boolean) => (isDark ? '#1A1726' : '#FDFCFF'),
+  field: (isDark: boolean) => (isDark ? '#221F30' : '#F3EFF8'),
+  border: (isDark: boolean) => (isDark ? 'rgba(124, 111, 255, 0.18)' : 'rgba(102, 89, 144, 0.14)'),
+  label: (isDark: boolean) => (isDark ? '#A89EC4' : '#6B6280'),
+  text: (isDark: boolean) => (isDark ? '#EDE8F5' : '#2D2640'),
+  muted: (isDark: boolean) => (isDark ? '#7A718F' : '#9B92AD'),
+};
+
+// ─── Claymorphism helpers ─────────────────────────────────────────────────────
+function clayField(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(45, 30, 70, 0.55)' : 'rgba(102, 89, 144, 0.20)';
+    const light = isDark ? 'rgba(124, 111, 255, 0.07)' : 'rgba(255, 255, 255, 0.92)';
+    const innerHi = isDark ? 'rgba(124, 111, 255, 0.10)' : 'rgba(255, 255, 255, 0.80)';
+    const innerLo = isDark ? 'rgba(20, 15, 35, 0.35)' : 'rgba(102, 89, 144, 0.12)';
+    return {
+      boxShadow:
+        `5px 5px 14px ${drop}, -4px -4px 11px ${light}, ` +
+        `inset 1.5px 1.5px 2px ${innerHi}, inset -1.5px -1.5px 2px ${innerLo}`,
+    } as any;
+  }
+  return {
+    shadowColor: isDark ? '#3D2858' : '#665990',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: isDark ? 0.38 : 0.18,
+    shadowRadius: 11,
+    elevation: 4,
+  } as any;
+}
+
+function clayCard(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(35, 22, 55, 0.58)' : 'rgba(102, 89, 144, 0.22)';
+    const light = isDark ? 'rgba(124, 111, 255, 0.06)' : 'rgba(255, 255, 255, 0.96)';
+    return { boxShadow: `8px 8px 22px ${drop}, -6px -6px 18px ${light}` } as any;
+  }
+  return {
+    shadowColor: isDark ? '#3D2858' : '#665990',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: isDark ? 0.42 : 0.16,
+    shadowRadius: 15,
+    elevation: 6,
+  } as any;
+}
+
+type AutofillMode = 'off' | 'password' | 'tel';
+
+function fieldAutofill(fieldKey: string, mode: AutofillMode = 'off') {
+  const base: Record<string, unknown> = {
+    autoComplete: mode === 'password' ? 'new-password' : 'off',
+    textContentType: mode === 'password' ? 'newPassword' : 'none',
+    autoCorrect: false,
+  };
+  if (Platform.OS !== 'web') return base;
+  return {
+    ...base,
+    nativeID: fieldKey,
+    id: fieldKey,
+    name: fieldKey,
+    'data-1p-ignore': 'true',
+    'data-lpignore': 'true',
+    'data-form-type': 'other',
+  };
+}
+
 // ─── Section accent colors ────────────────────────────────────────────────────
 const SECTION_COLORS = {
-  personal: { accent: '#3B82F6', light: '#EFF6FF', dark: '#1E3A5F' },
-  academic: { accent: '#10B981', light: '#ECFDF5', dark: '#064E3B' },
-  parents: { accent: '#F59E0B', light: '#FFFBEB', dark: '#78350F' },
-  additional: { accent: '#8B5CF6', light: '#F5F3FF', dark: '#2E1065' },
-  credentials: { accent: '#EF4444', light: '#FEF2F2', dark: '#7F1D1D' },
+  personal: { accent: '#665990', light: '#EDE9F6', dark: '#2A2438' },
+  academic: { accent: '#5BAA9A', light: '#E8F5F1', dark: '#1A2E28' },
+  parents: { accent: '#F57964', light: '#FFF0ED', dark: '#3D2220' },
+  additional: { accent: '#9B7EDE', light: '#F3EEFF', dark: '#2A1F40' },
+  credentials: { accent: '#7C6FFF', light: '#EEEAFF', dark: '#252040' },
 };
 
 // ─── Avatar gradient palettes per gender ─────────────────────────────────────
 const AVATAR_GRADS: Record<number, [string, string]> = {
-  1: ['#3B82F6', '#6366F1'],  // Male — blue/indigo
-  2: ['#EC4899', '#F43F5E'],  // Female — pink/rose
-  3: ['#10B981', '#14B8A6'],  // Other — teal
+  1: ['#665990', '#7C6FFF'],
+  2: ['#E8927C', '#F57964'],
+  3: ['#5BAA9A', '#7C6FFF'],
 };
 
 // ─── Floating Label InputField ────────────────────────────────────────────────
 const InputField = ({
   label, placeholder, value, onChangeText,
   keyboardType = 'default', icon, required = false,
-  secureTextEntry = false, editable = true, accentColor = '#3B82F6',
+  secureTextEntry = false, editable = true, accentColor = FORM.brand,
+  fieldKey, autofillMode = 'off', ...rest
 }: any) => {
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
 
   const focused = useSharedValue(0);
   const hasValue = value && value.length > 0;
+  const [showPassword, setShowPassword] = useState(false);
+  const [webReadOnly, setWebReadOnly] = useState(Platform.OS === 'web');
+  const isPassword = !!secureTextEntry;
+  const autofill = fieldKey ? fieldAutofill(fieldKey, autofillMode) : fieldAutofill('ims-stu-field', autofillMode);
 
   const borderAnim = useAnimatedStyle(() => ({
     borderColor: focused.value === 1
       ? accentColor
-      : isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)',
+      : FORM.border(isDark),
     borderWidth: focused.value === 1 ? 1.5 : 1,
   }));
 
@@ -75,25 +153,44 @@ const InputField = ({
 
   return (
     <View style={styles.inputGroup}>
-      <Text style={[styles.label, hasValue || focused ? { color: isDark ? '#94A3B8' : '#64748B' } : {}]}>
-        {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
+      <Text style={[styles.label, hasValue || focused ? { color: FORM.label(isDark) } : {}]}>
+        {label}{required && <Text style={{ color: FORM.coral }}> *</Text>}
       </Text>
-      <Animated.View style={[styles.inputWrapper, borderAnim, !editable && styles.inputWrapperDisabled]}>
+      <Animated.View style={[
+        styles.inputWrapper,
+        clayField(isDark),
+        borderAnim,
+        !editable && styles.inputWrapperDisabled,
+      ]}>
         <Animated.View style={[{ marginRight: 10 }, iconAnim]}>
-          <Ionicons name={icon} size={18} color={focused.value === 1 ? accentColor : (isDark ? '#64748B' : '#94A3B8')} />
+          <Ionicons name={icon} size={18} color={focused.value === 1 ? accentColor : FORM.muted(isDark)} />
         </Animated.View>
         <AppTextInput
           style={[styles.input, !editable && styles.inputDisabled]}
           placeholder={placeholder}
-          placeholderTextColor={isDark ? '#374151' : '#CBD5E1'}
+          placeholderTextColor={FORM.muted(isDark)}
           value={value}
           onChangeText={onChangeText}
           keyboardType={keyboardType as any}
-          secureTextEntry={secureTextEntry}
+          secureTextEntry={isPassword && !showPassword}
           editable={editable}
-          onFocus={() => { focused.value = withTiming(1, { duration: 180 }); }}
+          readOnly={editable ? webReadOnly : undefined}
+          onFocus={() => {
+            if (webReadOnly) setWebReadOnly(false);
+            focused.value = withTiming(1, { duration: 180 });
+          }}
           onBlur={() => { focused.value = withTiming(0, { duration: 200 }); }}
+          {...autofill}
+          {...rest}
         />
+        {isPassword && editable && (
+          <ClayPasswordToggle
+            visible={showPassword}
+            onToggle={() => setShowPassword(v => !v)}
+            isDark={isDark}
+            accentColor={accentColor}
+          />
+        )}
         {!editable && (
           <Ionicons name="lock-closed-outline" size={14} color={isDark ? '#374151' : '#CBD5E1'} />
         )}
@@ -105,7 +202,7 @@ const InputField = ({
 // ─── Enhanced SelectField with search ────────────────────────────────────────
 const SelectField = ({
   label, value, options, onSelect, placeholder,
-  icon, required = false, loading = false, accentColor = '#3B82F6',
+  icon, required = false, loading = false, accentColor = FORM.brand,
 }: any) => {
   const { theme, isDark } = useTheme();
   const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
@@ -124,12 +221,13 @@ const SelectField = ({
   return (
     <View style={styles.inputGroup}>
       <Text style={styles.label}>
-        {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
+        {label}{required && <Text style={{ color: FORM.coral }}> *</Text>}
       </Text>
       <Pressable
         style={({ pressed }) => [
           styles.inputWrapper,
-          { borderColor: selectedOption ? accentColor : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)') },
+          clayField(isDark),
+          { borderColor: selectedOption ? accentColor : FORM.border(isDark) },
           { borderWidth: selectedOption ? 1.5 : 1 },
           pressed && { opacity: 0.85 },
         ]}
@@ -137,9 +235,9 @@ const SelectField = ({
         disabled={loading}
       >
         <View style={{ marginRight: 10 }}>
-          <Ionicons name={icon} size={18} color={selectedOption ? accentColor : (isDark ? '#64748B' : '#94A3B8')} />
+          <Ionicons name={icon} size={18} color={selectedOption ? accentColor : FORM.muted(isDark)} />
         </View>
-        <Text style={[styles.input, !selectedOption && { color: isDark ? '#374151' : '#CBD5E1' }, { paddingTop: 0 }]}>
+        <Text style={[styles.input, !selectedOption && { color: FORM.muted(isDark) }, { paddingTop: 0 }]}>
           {loading ? 'Loading…' : selectedOption ? selectedOption.name : placeholder}
         </Text>
         {selectedOption ? (
@@ -148,7 +246,7 @@ const SelectField = ({
           </View>
         ) : (
           <Animated.View style={chevronAnim}>
-            <Ionicons name="chevron-down" size={16} color={isDark ? '#64748B' : '#94A3B8'} />
+            <Ionicons name="chevron-down" size={16} color={FORM.muted(isDark)} />
           </Animated.View>
         )}
       </Pressable>
@@ -168,25 +266,26 @@ const SelectField = ({
                 style={styles.modalCloseBtn}
                 onPress={() => setModalVisible(false)}
               >
-                <Ionicons name="close" size={18} color={isDark ? '#94A3B8' : '#64748B'} />
+                <Ionicons name="close" size={18} color={FORM.muted(isDark)} />
               </Pressable>
             </View>
 
             {/* Search bar — only show for lists > 5 */}
             {options.length > 5 && (
               <View style={[styles.modalSearchWrap, ds.searchBarWrapper]}>
-                <Ionicons name="search-outline" size={16} color={isDark ? '#64748B' : '#94A3B8'} style={{ marginRight: 8 }} />
+                <Ionicons name="search-outline" size={16} color={FORM.muted(isDark)} style={{ marginRight: 8 }} />
                 <AppTextInput
                   style={[ds.inputInChrome, styles.modalSearch]}
                   placeholder={`Search ${label}...`}
-                  placeholderTextColor={isDark ? '#374151' : '#94A3B8'}
+                  placeholderTextColor={FORM.muted(isDark)}
                   value={searchQuery}
                   onChangeText={setSearchQuery}
                   autoCorrect={false}
+                  {...fieldAutofill(`ims-stu-select-${label.replace(/\s/g, '-').toLowerCase()}`, 'off')}
                 />
                 {searchQuery.length > 0 && (
                   <Pressable onPress={() => setSearchQuery('')}>
-                    <Ionicons name="close-circle" size={16} color={isDark ? '#64748B' : '#94A3B8'} />
+                    <Ionicons name="close-circle" size={16} color={FORM.muted(isDark)} />
                   </Pressable>
                 )}
               </View>
@@ -224,7 +323,7 @@ const SelectField = ({
               }}
               ListEmptyComponent={
                 <View style={styles.modalEmpty}>
-                  <Ionicons name="search-outline" size={28} color={isDark ? '#374151' : '#CBD5E1'} />
+                  <Ionicons name="search-outline" size={28} color={FORM.muted(isDark)} />
                   <Text style={styles.modalEmptyText}>{`No results for "${searchQuery}"`}</Text>
                 </View>
               }
@@ -247,7 +346,7 @@ const SectionCard = ({
   const col = SECTION_COLORS[colorKey];
 
   return (
-    <Animated.View entering={FadeInDown.delay(delay).duration(500).springify()} style={styles.sectionCard}>
+    <Animated.View entering={FadeInDown.delay(delay).duration(500).springify()} style={[styles.sectionCard, clayCard(isDark)]}>
       {/* Left accent bar */}
       <View style={[styles.sectionAccentBar, { backgroundColor: col.accent }]} />
 
@@ -280,7 +379,7 @@ const ProgressSteps = ({ activeStep, isDark }: { activeStep: number; isDark: boo
             progressStyles.dot,
             done && progressStyles.dotDone,
             active && progressStyles.dotActive,
-            !done && !active && { backgroundColor: isDark ? '#1E293B' : '#E2E8F0', borderColor: isDark ? '#1E293B' : '#E2E8F0' },
+            !done && !active && { backgroundColor: isDark ? '#221F30' : '#E8E2F0', borderColor: isDark ? '#221F30' : '#E8E2F0' },
           ]}>
             {done
               ? <Ionicons name="checkmark" size={9} color="#fff" />
@@ -291,7 +390,7 @@ const ProgressSteps = ({ activeStep, isDark }: { activeStep: number; isDark: boo
             progressStyles.label,
             active && progressStyles.labelActive,
             done && progressStyles.labelDone,
-            !done && !active && { color: isDark ? '#374151' : '#CBD5E1' },
+            !done && !active && { color: FORM.muted(isDark) },
           ]}>{step}</Text>
           {i < STEPS.length - 1 && (
             <View style={[progressStyles.connector, done && progressStyles.connectorDone]} />
@@ -306,15 +405,15 @@ const progressStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'center', paddingHorizontal: 20, marginBottom: 28, gap: 0 },
   stepWrap: { alignItems: 'center', flex: 1, position: 'relative' },
   dot: { width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', borderWidth: 2, borderColor: '#CBD5E1', justifyContent: 'center', alignItems: 'center', zIndex: 1 },
-  dotActive: { borderColor: '#3B82F6', backgroundColor: '#3B82F6' },
-  dotDone: { backgroundColor: '#10B981', borderColor: '#10B981' },
+  dotActive: { borderColor: '#665990', backgroundColor: '#665990' },
+  dotDone: { backgroundColor: '#5BAA9A', borderColor: '#5BAA9A' },
   dotInner: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#CBD5E1' },
   dotInnerActive: { backgroundColor: '#fff' },
   label: { fontSize: 9, fontWeight: '600', marginTop: 5, letterSpacing: 0.2, textAlign: 'center' },
-  labelActive: { color: '#3B82F6', fontWeight: '800' },
-  labelDone: { color: '#10B981' },
-  connector: { position: 'absolute', top: 10, left: '55%', right: '-55%', height: 2, backgroundColor: '#E2E8F0', zIndex: 0 },
-  connectorDone: { backgroundColor: '#10B981' },
+  labelActive: { color: '#665990', fontWeight: '800' },
+  labelDone: { color: '#5BAA9A' },
+  connector: { position: 'absolute', top: 10, left: '55%', right: '-55%', height: 2, backgroundColor: '#E8E2F0', zIndex: 0 },
+  connectorDone: { backgroundColor: '#5BAA9A' },
 });
 
 // ─── Live Avatar ──────────────────────────────────────────────────────────────
@@ -511,8 +610,8 @@ export default function AddStudentScreen() {
   }
 
   const gradColors: [string, string] = isEditMode
-    ? ['#1E40AF', '#3B82F6']
-    : ['#065F46', '#10B981'];
+    ? ['#52467A', '#7C6FFF']
+    : ['#4A3F6B', '#665990'];
 
   return (
     <View style={styles.container}>
@@ -580,17 +679,17 @@ export default function AddStudentScreen() {
               <View style={styles.halfInput}>
                 <InputField label="First Name" placeholder="John" value={formData.first_name}
                   onChangeText={(t: string) => update('first_name', t)} icon="person-outline"
-                  required accentColor={SECTION_COLORS.personal.accent} />
+                  required accentColor={SECTION_COLORS.personal.accent} fieldKey="ims-stu-given-name" />
               </View>
               <View style={styles.halfInput}>
                 <InputField label="Last Name" placeholder="Last Name (optional)" value={formData.last_name}
                   onChangeText={(t: string) => update('last_name', t)} icon="person-outline"
-                  accentColor={SECTION_COLORS.personal.accent} />
+                  accentColor={SECTION_COLORS.personal.accent} fieldKey="ims-stu-family-name" />
               </View>
             </View>
             <InputField label="Middle Name" placeholder="Optional" value={formData.middle_name}
               onChangeText={(t: string) => update('middle_name', t)} icon="person-outline"
-              accentColor={SECTION_COLORS.personal.accent} />
+              accentColor={SECTION_COLORS.personal.accent} fieldKey="ims-stu-middle-name" />
             <SelectField label="Gender" value={formData.gender_id} options={GENDERS}
               onSelect={(v: number) => update('gender_id', v)} icon="transgender-outline"
               required accentColor={SECTION_COLORS.personal.accent} />
@@ -610,16 +709,16 @@ export default function AddStudentScreen() {
           <SectionCard title="Academic Information" icon="school-outline" colorKey="academic" delay={220}>
             <InputField label="Admission Number" placeholder="ADM2024001" value={formData.admission_no}
               onChangeText={(t: string) => update('admission_no', t)} icon="card-outline"
-              required accentColor={SECTION_COLORS.academic.accent} />
+              required accentColor={SECTION_COLORS.academic.accent} fieldKey="ims-stu-adm-code" />
             <InputField label="APAR Number" placeholder="Enter APAR number (optional)" value={formData.apar_number || ''}
               onChangeText={(t: string) => update('apar_number', t)} icon="document-text-outline"
-              accentColor={SECTION_COLORS.academic.accent} />
+              accentColor={SECTION_COLORS.academic.accent} fieldKey="ims-stu-apar-code" />
             <InputField label="PEN Number" placeholder="PEN2025001 (optional)" value={formData.pen_number || ''}
               onChangeText={(t: string) => update('pen_number', t)} icon="id-card-outline"
-              autoCapitalize="characters" accentColor={SECTION_COLORS.academic.accent} />
+              autoCapitalize="characters" accentColor={SECTION_COLORS.academic.accent} fieldKey="ims-stu-pen-code" />
             <InputField label="Roll Number" placeholder="Auto-generated"
               value={(formData as any).roll_number ? String((formData as any).roll_number) : ''}
-              editable={false} icon="list-outline" accentColor={SECTION_COLORS.academic.accent} />
+              editable={false} icon="list-outline" accentColor={SECTION_COLORS.academic.accent} fieldKey="ims-stu-roll-num" />
             <AppDatePicker
               label="Admission Date"
               value={formData.admission_date || ''}
@@ -659,24 +758,25 @@ export default function AddStudentScreen() {
               <View style={styles.halfInput}>
                 <InputField label="First Name" placeholder="Father's name" value={father.first_name}
                   onChangeText={(t: string) => setFather(p => ({ ...p, first_name: t }))}
-                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-given" />
               </View>
               <View style={styles.halfInput}>
                 <InputField label="Last Name" placeholder="Surname" value={father.last_name}
                   onChangeText={(t: string) => setFather(p => ({ ...p, last_name: t }))}
-                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-family" />
               </View>
             </View>
             <View style={styles.row}>
               <View style={styles.halfInput}>
                 <InputField label="Phone" placeholder="Mobile" value={father.phone}
                   onChangeText={(t: string) => setFather(p => ({ ...p, phone: t }))}
-                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
+                  fieldKey="ims-stu-father-mobile" autofillMode="tel" />
               </View>
               <View style={styles.halfInput}>
                 <InputField label="Occupation" placeholder="Job title" value={father.occupation}
                   onChangeText={(t: string) => setFather(p => ({ ...p, occupation: t }))}
-                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-father-job" />
               </View>
             </View>
 
@@ -685,24 +785,25 @@ export default function AddStudentScreen() {
               <View style={styles.halfInput}>
                 <InputField label="First Name" placeholder="Mother's name" value={mother.first_name}
                   onChangeText={(t: string) => setMother(p => ({ ...p, first_name: t }))}
-                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-given" />
               </View>
               <View style={styles.halfInput}>
                 <InputField label="Last Name" placeholder="Surname" value={mother.last_name}
                   onChangeText={(t: string) => setMother(p => ({ ...p, last_name: t }))}
-                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  icon="person-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-family" />
               </View>
             </View>
             <View style={styles.row}>
               <View style={styles.halfInput}>
                 <InputField label="Phone" placeholder="Mobile" value={mother.phone}
                   onChangeText={(t: string) => setMother(p => ({ ...p, phone: t }))}
-                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  keyboardType="phone-pad" icon="call-outline" accentColor={SECTION_COLORS.parents.accent}
+                  fieldKey="ims-stu-mother-mobile" autofillMode="tel" />
               </View>
               <View style={styles.halfInput}>
                 <InputField label="Occupation" placeholder="Job title" value={mother.occupation}
                   onChangeText={(t: string) => setMother(p => ({ ...p, occupation: t }))}
-                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} />
+                  icon="briefcase-outline" accentColor={SECTION_COLORS.parents.accent} fieldKey="ims-stu-mother-job" />
               </View>
             </View>
           </SectionCard>
@@ -724,10 +825,12 @@ export default function AddStudentScreen() {
           <SectionCard title="Contact & Login" icon="lock-closed-outline" colorKey="credentials" delay={400}>
             <InputField label="Email Address" placeholder="student@school.edu" value={formData.email}
               onChangeText={(t: string) => update('email', t)} keyboardType="email-address"
-              icon="mail-outline" accentColor={SECTION_COLORS.credentials.accent} />
+              icon="mail-outline" accentColor={SECTION_COLORS.credentials.accent}
+              fieldKey="ims-stu-contact-addr" autoCapitalize="none" />
             <InputField label="Phone Number" placeholder="+91 9876543210" value={formData.phone}
               onChangeText={(t: string) => update('phone', t)} keyboardType="phone-pad"
-              icon="call-outline" accentColor={SECTION_COLORS.credentials.accent} />
+              icon="call-outline" accentColor={SECTION_COLORS.credentials.accent}
+              fieldKey="ims-stu-mobile-line" autofillMode="tel" />
             <InputField
               label={isEditMode ? "New Password (optional)" : "Initial Password"}
               placeholder={isEditMode ? "Leave empty to keep current" : "Min 6 characters"}
@@ -737,6 +840,8 @@ export default function AddStudentScreen() {
               required={!isEditMode}
               secureTextEntry
               accentColor={SECTION_COLORS.credentials.accent}
+              fieldKey="ims-stu-portal-secret"
+              autofillMode="password"
             />
           </SectionCard>
 
@@ -748,7 +853,7 @@ export default function AddStudentScreen() {
               disabled={loading}
             >
               <LinearGradient
-                colors={isEditMode ? ['#1E40AF', '#3B82F6'] : ['#065F46', '#10B981']}
+                colors={isEditMode ? ['#52467A', '#7C6FFF'] : ['#665990', '#F57964']}
                 style={styles.saveButton}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               >
@@ -793,9 +898,9 @@ export default function AddStudentScreen() {
 const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
 
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#0A0F1E' : '#F1F5F9', gap: 10 },
-  loadingTitle: { fontSize: 17, fontWeight: '800', color: isDark ? '#E2E8F0' : '#1E293B', marginTop: 8 },
-  loadingSubtitle: { fontSize: 13, color: isDark ? '#64748B' : '#94A3B8', fontWeight: '500' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: isDark ? '#12101A' : '#F5F2FA', gap: 10 },
+  loadingTitle: { fontSize: 17, fontWeight: '800', color: FORM.text(isDark), marginTop: 8 },
+  loadingSubtitle: { fontSize: 13, color: FORM.muted(isDark), fontWeight: '500' },
 
   scrollContent: { padding: 18, paddingBottom: 60 },
 
@@ -822,36 +927,31 @@ const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   // ── Section cards ──
   sectionCard: {
     flexDirection: 'row',
-    backgroundColor: isDark ? '#111827' : '#FFFFFF',
-    borderRadius: 22,
+    backgroundColor: FORM.surface(isDark),
+    borderRadius: 24,
     marginBottom: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: isDark ? 0.30 : 0.07,
-    shadowRadius: 12,
-    elevation: 6,
     borderWidth: 1,
-    borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+    borderColor: FORM.border(isDark),
   },
   sectionAccentBar: { width: 4, borderRadius: 0 },
   sectionInner: { flex: 1, padding: 20 },
   sectionHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 18 },
   sectionIconWrap: { width: 32, height: 32, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-  sectionTitle: { fontSize: 15, fontWeight: '800', color: isDark ? '#E2E8F0' : '#0F172A', letterSpacing: -0.2 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: FORM.text(isDark), letterSpacing: -0.2 },
 
   // ── Input field ──
   inputGroup: { marginBottom: 14 },
-  label: { fontSize: 12, fontWeight: '700', color: isDark ? '#64748B' : '#64748B', marginBottom: 7, letterSpacing: 0.1 },
+  label: { fontSize: 12, fontWeight: '700', color: FORM.label(isDark), marginBottom: 7, letterSpacing: 0.1 },
   inputWrapper: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
-    borderRadius: 13, paddingHorizontal: 14, height: 48,
-    borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.10)',
+    backgroundColor: FORM.field(isDark),
+    borderRadius: 16, paddingHorizontal: 14, height: 50,
+    borderWidth: 1, borderColor: FORM.border(isDark),
   },
   inputWrapperDisabled: { opacity: 0.6 },
-  input: { flex: 1, fontSize: 15, color: isDark ? '#E2E8F0' : '#0F172A', fontWeight: '500' },
-  inputDisabled: { color: isDark ? '#475569' : '#94A3B8' },
+  input: { flex: 1, fontSize: 15, color: FORM.text(isDark), fontWeight: '500' },
+  inputDisabled: { color: FORM.muted(isDark) },
   selectedBadge: { width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
 
   // ── Row layout ──
@@ -861,46 +961,46 @@ const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   // ── Modal ──
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   modalContent: {
-    backgroundColor: isDark ? '#111827' : '#FFFFFF',
+    backgroundColor: FORM.surface(isDark),
     borderTopLeftRadius: 28, borderTopRightRadius: 28,
     paddingTop: 12, paddingHorizontal: 20,
     maxHeight: '82%',
   },
-  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? '#374151' : '#E2E8F0', alignSelf: 'center', marginBottom: 18 },
+  modalHandle: { width: 36, height: 4, borderRadius: 2, backgroundColor: isDark ? '#3D3650' : '#E8E2F0', alignSelf: 'center', marginBottom: 18 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: isDark ? '#E2E8F0' : '#0F172A', letterSpacing: -0.3 },
-  modalSubtitle: { fontSize: 12, color: isDark ? '#64748B' : '#94A3B8', marginTop: 2, fontWeight: '500' },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: FORM.text(isDark), letterSpacing: -0.3 },
+  modalSubtitle: { fontSize: 12, color: FORM.muted(isDark), marginTop: 2, fontWeight: '500' },
   modalCloseBtn: {
     width: 32, height: 32, borderRadius: 16,
-    backgroundColor: isDark ? '#1E293B' : '#F1F5F9',
+    backgroundColor: FORM.field(isDark),
     justifyContent: 'center', alignItems: 'center',
   },
   modalSearchWrap: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: isDark ? '#1E293B' : '#FFFFFF',
+    backgroundColor: FORM.field(isDark),
     borderRadius: 12, paddingHorizontal: 12, height: 42,
     marginBottom: 12,
-    borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.08)' : '#CBD5E1',
+    borderWidth: 1, borderColor: FORM.border(isDark),
   },
-  modalSearch: { flex: 1, fontSize: 14, color: isDark ? '#E2E8F0' : '#0F172A', fontWeight: '500' },
+  modalSearch: { flex: 1, fontSize: 14, color: FORM.text(isDark), fontWeight: '500' },
   modalEmpty: { alignItems: 'center', paddingVertical: 36, gap: 10 },
-  modalEmptyText: { fontSize: 14, color: isDark ? '#64748B' : '#94A3B8', fontWeight: '500' },
+  modalEmptyText: { fontSize: 14, color: FORM.muted(isDark), fontWeight: '500' },
   optionItem: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 14, gap: 10,
-    borderBottomWidth: 1, borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)',
+    borderBottomWidth: 1, borderBottomColor: FORM.border(isDark),
     paddingLeft: 4,
   },
   selectedOption: { borderRadius: 10, paddingHorizontal: 4 },
   optionAccentBar: { width: 3, height: 18, borderRadius: 2 },
-  optionText: { flex: 1, fontSize: 15, color: isDark ? '#94A3B8' : '#475569', fontWeight: '500' },
+  optionText: { flex: 1, fontSize: 15, color: FORM.label(isDark), fontWeight: '500' },
   optionCheck: { width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
 
   // ── Save button ──
   saveButtonWrap: {
     borderRadius: 18, marginTop: 10,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.30, shadowRadius: 20, elevation: 12,
+    shadowColor: '#665990', shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28, shadowRadius: 20, elevation: 12,
   },
   saveButton: {
     height: 58, borderRadius: 18,

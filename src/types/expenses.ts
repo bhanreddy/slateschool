@@ -21,6 +21,7 @@ export interface CreateExpenseRequest {
     expense_date: string;
     description?: string;
     receipt_url?: string;
+    status?: ExpenseStatus;
 }
 
 export interface UpdateExpenseStatusRequest {

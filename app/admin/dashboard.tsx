@@ -137,6 +137,94 @@ const CARD_WIDTH = ACTUAL_WIDTH - CONTAINER_PADDING * 2;
 const GRID_GAP = 10;
 const GRID_COLS = 3;
 
+// ponytail: clay helpers local to dashboard — extract to shared util if a 3rd screen needs them
+function clay(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md') {
+  const spread = raised === 'lg' ? 22 : raised === 'sm' ? 10 : 16;
+  const dy = raised === 'lg' ? 12 : raised === 'sm' ? 5 : 8;
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(0,0,0,0.50)' : 'rgba(148,163,184,0.38)';
+    const light = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.92)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.75)';
+    const innerLo = isDark ? 'rgba(0,0,0,0.32)' : 'rgba(148,163,184,0.22)';
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${drop}, ` +
+        `-${dy}px -${dy}px ${spread}px ${light}, ` +
+        `inset 2px 2px 4px ${innerHi}, ` +
+        `inset -2px -2px 4px ${innerLo}`,
+    } as any;
+  }
+  return {
+    shadowColor: isDark ? '#000000' : '#94A3B8',
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: isDark ? 0.45 : 0.26,
+    shadowRadius: spread,
+    elevation: raised === 'lg' ? 10 : raised === 'sm' ? 4 : 7,
+  } as any;
+}
+
+function clayGlow(color: string, raised: 'sm' | 'md' = 'md') {
+  const dy = raised === 'sm' ? 4 : 7;
+  const spread = raised === 'sm' ? 10 : 16;
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${color}44, ` +
+        `inset 1.5px 1.5px 3px rgba(255,255,255,0.40), ` +
+        `inset -1.5px -1.5px 3px rgba(0,0,0,0.12)`,
+    } as any;
+  }
+  return {
+    shadowColor: color,
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: 0.38,
+    shadowRadius: spread,
+    elevation: raised === 'sm' ? 5 : 8,
+  } as any;
+}
+
+function clayInset(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const innerLo = isDark ? 'rgba(0,0,0,0.38)' : 'rgba(148,163,184,0.28)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.85)';
+    return {
+      boxShadow: `inset 2px 2px 6px ${innerLo}, inset -1px -1px 4px ${innerHi}`,
+    } as any;
+  }
+  return {
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(0,0,0,0.22)' : 'rgba(148,163,184,0.20)',
+  } as any;
+}
+
+function ClayCardOverlays({ isDark, cardRadius, accentColor, gradientColors, hideTopAccent = false }: {
+  isDark: boolean; cardRadius: number; accentColor: string; gradientColors?: [string, string]; hideTopAccent?: boolean;
+}) {
+  return (
+    <>
+      <View style={{
+        position: 'absolute', top: 0, left: 0, right: 0, height: '50%',
+        borderTopLeftRadius: cardRadius, borderTopRightRadius: cardRadius,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.55)',
+      }} />
+      <View style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
+        borderBottomLeftRadius: cardRadius, borderBottomRightRadius: cardRadius,
+        backgroundColor: isDark ? 'rgba(0,0,0,0.10)' : `${accentColor}0A`,
+      }} />
+      {!hideTopAccent && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, overflow: 'hidden' }}>
+          {gradientColors ? (
+            <LinearGradient colors={gradientColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
+          ) : (
+            <View style={{ flex: 1, backgroundColor: accentColor, opacity: isDark ? 0.85 : 0.72 }} />
+          )}
+        </View>
+      )}
+    </>
+  );
+}
+
 /* ─────────────────────────────────────────────────────────────────────────── */
 /* PULSE INDICATOR                                                           */
 /* ─────────────────────────────────────────────────────────────────────────── */
@@ -181,6 +269,7 @@ interface SummaryMiniCardProps {
 const SummaryMiniCard = React.memo(({ label, value, icon, color, isDark, delay }: SummaryMiniCardProps) => {
   const { width } = useWindowDimensions();
   const isCompact = width < 520;
+  const cardRadius = isCompact ? 20 : 22;
 
   return (
     <Animated.View
@@ -190,25 +279,25 @@ const SummaryMiniCard = React.memo(({ label, value, icon, color, isDark, delay }
         flex: isCompact ? 0 : 1,
         flexBasis: isCompact ? '47%' : undefined,
         minWidth: isCompact ? '47%' : '22%',
-        backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-        borderRadius: 16,
-        padding: isCompact ? 12 : 14,
+        backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+        borderRadius: cardRadius,
+        padding: isCompact ? 14 : 16,
         borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: isDark ? 0.15 : 0.03,
-        shadowRadius: 8,
-        elevation: isAndroid ? 1 : 2,
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
+        ...clay(isDark, 'sm'),
+        overflow: 'hidden',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: isCompact ? 10 : 12
+        gap: isCompact ? 10 : 12,
       }}
     >
+      <ClayCardOverlays isDark={isDark} cardRadius={cardRadius} accentColor={color} hideTopAccent />
       <View style={{
-        width: 36, height: 36, borderRadius: 10,
-        backgroundColor: color + '12',
-        alignItems: 'center', justifyContent: 'center', flexShrink: 0
+        width: 40, height: 40, borderRadius: 14,
+        backgroundColor: `${color}14`,
+        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+        borderWidth: 1, borderColor: `${color}20`,
+        ...clayGlow(color, 'sm'),
       }}>
         <Ionicons name={icon} size={18} color={color} />
       </View>
@@ -234,48 +323,105 @@ const DashboardCard = React.memo(
     const isWideScreen = isWeb && windowWidth >= 768;
 
     const scale = useSharedValue(1);
-    const cardAnim = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+    const translateY = useSharedValue(0);
+    const cardAnim = useAnimatedStyle(() => ({
+      transform: [
+        { scale: scale.value },
+        { translateY: translateY.value }
+      ]
+    }));
 
-    const [g0, g1] = item.accentGradient;
+    const clayStyle = useMemo(() => {
+      const baseColor = item.color;
+      let bg = '#4A72E6';
+      let shadowColor = '#253FA3';
+      
+      if (baseColor === '#3B82F6') { // Blue (Vibrant Periwinkle/Royal)
+        bg = isDark ? '#3053C4' : '#4A72E6';
+        shadowColor = isDark ? '#1C318F' : '#253FA3';
+      } else if (baseColor === '#10B981') { // Green (Vibrant Mint/Emerald)
+        bg = isDark ? '#1B7F5F' : '#2CB288';
+        shadowColor = isDark ? '#0D4E3A' : '#136146';
+      } else if (baseColor === '#F59E0B') { // Orange (Vibrant Amber/Apricot)
+        bg = isDark ? '#9B531C' : '#E58539';
+        shadowColor = isDark ? '#5C2D0B' : '#75390E';
+      } else if (baseColor === '#EF4444') { // Red (Vibrant Coral/Crimson)
+        bg = isDark ? '#9E2E3B' : '#E65565';
+        shadowColor = isDark ? '#5E131C' : '#7A1621';
+      }
+
+      const borderRadius = isWideScreen ? 34 : 28;
+
+      if (Platform.OS === 'web') {
+        return {
+          backgroundColor: bg,
+          borderRadius,
+          borderWidth: 1,
+          borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.45)',
+          boxShadow:
+            `0px 10px 24px ${shadowColor}33, ` +
+            `-6px -6px 16px ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)'}, ` +
+            `inset 2.5px 2.5px 5px rgba(255, 255, 255, 0.45), ` +
+            `inset -3.5px -3.5px 7px rgba(0, 0, 0, 0.16)`
+        };
+      }
+
+      return {
+        backgroundColor: bg,
+        borderRadius,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.45)',
+        shadowColor,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: isDark ? 0.45 : 0.28,
+        shadowRadius: 18,
+        elevation: 8,
+      };
+    }, [item.color, isDark, isWideScreen]);
 
     return (
       <View style={[{ marginRight: isWideScreen ? 0 : CARD_MARGIN }, cardWidth !== undefined ? { width: cardWidth } : { width: CARD_WIDTH }]}>
         <Pressable
-          onPressIn={() => { scale.value = withSpring(0.97, { damping: 16, stiffness: 320 }); Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); }}
-          onPressOut={() => { scale.value = withSpring(1, { damping: 13, stiffness: 250 }); }}
+          onHoverIn={() => {
+            scale.value = withTiming(1.02, { duration: 180 });
+            translateY.value = withTiming(-4, { duration: 180 });
+          }}
+          onHoverOut={() => {
+            scale.value = withTiming(1, { duration: 180 });
+            translateY.value = withTiming(0, { duration: 180 });
+          }}
+          onPressIn={() => {
+            scale.value = withTiming(0.98, { duration: 150 });
+            translateY.value = withTiming(2, { duration: 150 });
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          }}
+          onPressOut={() => {
+            scale.value = withTiming(1, { duration: 150 });
+            translateY.value = withTiming(0, { duration: 150 });
+          }}
           onPress={onPress}
         >
-          <Animated.View renderToHardwareTextureAndroid={isAndroid} style={[cardAnim, {
-            borderRadius: isWideScreen ? 24 : 22,
-            overflow: 'hidden',
-            ...(isAndroid
-              ? { elevation: 3 }
-              : {
-                  shadowColor: g0,
-                  shadowOffset: { width: 0, height: 12 },
-                  shadowOpacity: 0.40,
-                  shadowRadius: 24,
-                  elevation: 14,
-                }),
-          }]}>
-            <LinearGradient
-              colors={[g0, g1]}
-              start={{ x: 0.05, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={{ padding: isWideScreen ? 24 : 22, minHeight: isWideScreen ? 160 : 150 }}
-            >
-              <View style={{
-                position: 'absolute', top: 0, left: 0, right: 0, height: 1,
-                backgroundColor: 'rgba(255,255,255,0.25)',
-              }} />
-
+          <Animated.View renderToHardwareTextureAndroid={isAndroid} style={[cardAnim, clayStyle]}>
+            <View style={{ padding: isWideScreen ? 24 : 22, minHeight: isWideScreen ? 160 : 150 }}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
                 <View style={{
-                  width: isWideScreen ? 44 : 40, height: isWideScreen ? 44 : 40,
+                  width: isWideScreen ? 44 : 40,
+                  height: isWideScreen ? 44 : 40,
                   borderRadius: isWideScreen ? 14 : 13,
-                  backgroundColor: 'rgba(255,255,255,0.18)',
-                  alignItems: 'center', justifyContent: 'center',
-                  borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
+                  backgroundColor: 'rgba(255,255,255,0.22)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.32)',
+                  ...(Platform.OS === 'web' ? {
+                    boxShadow: '2px 3px 6px rgba(0,0,0,0.12), -1px -1px 2px rgba(255,255,255,0.15), inset 1px 1px 2px rgba(255,255,255,0.4)'
+                  } : {
+                    shadowColor: '#000000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.12,
+                    shadowRadius: 3,
+                    elevation: 2
+                  })
                 }}>
                   <Ionicons name={item.icon} size={isWideScreen ? 22 : 20} color="rgba(255,255,255,0.95)" />
                 </View>
@@ -283,8 +429,20 @@ const DashboardCard = React.memo(
                 {item.badge ? (
                   <View style={{
                     backgroundColor: 'rgba(255,255,255,0.22)',
-                    paddingHorizontal: 10, paddingVertical: 4,
-                    borderRadius: 8, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+                    paddingHorizontal: 10,
+                    paddingVertical: 4,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.32)',
+                    ...(Platform.OS === 'web' ? {
+                      boxShadow: '2px 2px 4px rgba(0,0,0,0.08), -1px -1px 2px rgba(255,255,255,0.15), inset 1px 1px 2px rgba(255,255,255,0.4)'
+                    } : {
+                      shadowColor: '#000000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.1,
+                      shadowRadius: 2.5,
+                      elevation: 1.5
+                    })
                   }}>
                     <Text style={{ color: 'white', fontSize: 9, fontWeight: '800', letterSpacing: 1.2 }}>
                       {item.badge}
@@ -299,7 +457,7 @@ const DashboardCard = React.memo(
               </View>
 
               <Text style={{
-                color: 'rgba(255,255,255,0.72)', fontSize: 11, fontWeight: '700',
+                color: 'rgba(255,255,255,0.76)', fontSize: 11, fontWeight: '700',
                 letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 6,
               }}>
                 {item.label}
@@ -314,9 +472,24 @@ const DashboardCard = React.memo(
 
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 }}>
                 <View style={{
-                  flexDirection: 'row', alignItems: 'center', gap: 4,
-                  backgroundColor: 'rgba(255,255,255,0.15)',
-                  paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: 'rgba(255,255,255,0.18)',
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.28)',
+                  ...(Platform.OS === 'web' ? {
+                    boxShadow: '2px 2px 4px rgba(0,0,0,0.08), -1px -1px 2px rgba(255,255,255,0.15), inset 1px 1px 2px rgba(255,255,255,0.4)'
+                  } : {
+                    shadowColor: '#000000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 2.5,
+                    elevation: 1.5
+                  })
                 }}>
                   <Ionicons
                     name={item.trendUp ? 'trending-up' : 'trending-down'}
@@ -327,18 +500,7 @@ const DashboardCard = React.memo(
                   </Text>
                 </View>
               </View>
-
-              <View style={{
-                position: 'absolute', width: 120, height: 120, borderRadius: 60,
-                backgroundColor: 'rgba(255,255,255,0.06)',
-                bottom: -30, right: -20,
-              }} />
-              <View style={{
-                position: 'absolute', width: 70, height: 70, borderRadius: 35,
-                backgroundColor: 'rgba(255,255,255,0.06)',
-                bottom: 10, right: 30,
-              }} />
-            </LinearGradient>
+            </View>
           </Animated.View>
         </Pressable>
       </View>
@@ -358,11 +520,15 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
   const styles = useMemo(() => getStyles(theme, isDark, isWideScreen), [theme, isDark, isWideScreen]);
 
   const scale = useSharedValue(1);
+  const translateY = useSharedValue(0);
   const iconScale = useSharedValue(1);
   const iconRotate = useSharedValue(0);
 
   const cardAnimStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      { scale: scale.value },
+      { translateY: translateY.value }
+    ],
   }));
   const iconAnimStyle = useAnimatedStyle(() => ({
     transform: [
@@ -372,7 +538,8 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(isAndroid ? 0.96 : 0.91, { damping: 12, stiffness: 400 });
+    scale.value = withTiming(0.97, { duration: 150 });
+    translateY.value = withTiming(2, { duration: 150 });
     if (!isAndroid) {
       iconScale.value = withSequence(
         withSpring(1.22, { damping: 6, stiffness: 460 }),
@@ -387,223 +554,300 @@ const GridItem = React.memo(({ item, index, cardWidth }: { item: ActionItem; ind
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
   const handlePressOut = () => {
-    scale.value = withSpring(1, { damping: 14, stiffness: 280 });
+    scale.value = withTiming(1, { duration: 150 });
+    translateY.value = withTiming(0, { duration: 150 });
   };
 
-  const t = ACTION_CARD_VISUALS[item.route] ?? TIER[item.tier];
-  const [g0, g1] = item.gradient ?? t.g;
-  const orbSize = cardWidth * 1.05;
-  const radius = isWideScreen ? 26 : 22;
+  const category = item.category;
+  const clayStyle = useMemo(() => {
+    let bg = '#4A72E6';
+    let shadowColor = '#253FA3';
+    
+    if (category === 'Academic' || category === 'AI') {
+      bg = isDark ? '#3053C4' : '#4A72E6';
+      shadowColor = isDark ? '#1C318F' : '#253FA3';
+    } else if (category === 'Finance') {
+      bg = isDark ? '#1B7F5F' : '#2CB288';
+      shadowColor = isDark ? '#0D4E3A' : '#136146';
+    } else if (category === 'Analytics') {
+      bg = isDark ? '#5033B3' : '#825AE6';
+      shadowColor = isDark ? '#2F187A' : '#4925A3';
+    } else if (category === 'Comms') {
+      bg = isDark ? '#9B531C' : '#E58539';
+      shadowColor = isDark ? '#5C2D0B' : '#75390E';
+    } else if (category === 'Support') {
+      bg = isDark ? '#9E4437' : '#E06D5E';
+      shadowColor = isDark ? '#5B1E16' : '#7D2F23';
+    } else if (category === 'Ops') {
+      bg = isDark ? '#9E731D' : '#E6AE3C';
+      shadowColor = isDark ? '#5A3E08' : '#7D550A';
+    } else if (category === 'HR') {
+      bg = isDark ? '#9E333C' : '#E65A65';
+      shadowColor = isDark ? '#5E1015' : '#7D1B22';
+    } else if (category === 'Security') {
+      bg = isDark ? '#9E2833' : '#E64A57';
+      shadowColor = isDark ? '#5E0B11' : '#7D161F';
+    }
+
+    const borderRadius = isWideScreen ? 34 : 30;
+
+    if (Platform.OS === 'web') {
+      return {
+        backgroundColor: bg,
+        borderRadius,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.45)',
+        boxShadow:
+          `0px 8px 20px ${shadowColor}33, ` +
+          `-6px -6px 16px ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)'}, ` +
+          `inset 2.5px 2.5px 5px rgba(255, 255, 255, 0.45), ` +
+          `inset -3.5px -3.5px 7px rgba(0, 0, 0, 0.16)`
+      };
+    }
+
+    return {
+      backgroundColor: bg,
+      borderRadius,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.45)',
+      shadowColor,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.45 : 0.28,
+      shadowRadius: 16,
+      elevation: 7,
+    };
+  }, [category, isDark, isWideScreen]);
 
   return (
     <Animated.View
       entering={enterAnim(index * 45)}
       style={[styles.gridWrapper, { width: cardWidth }]}
     >
-      <TouchableOpacity
-        activeOpacity={1}
+      <Pressable
+        onHoverIn={() => {
+          scale.value = withTiming(1.02, { duration: 180 });
+          translateY.value = withTiming(-4, { duration: 180 });
+        }}
+        onHoverOut={() => {
+          scale.value = withTiming(1, { duration: 180 });
+          translateY.value = withTiming(0, { duration: 180 });
+        }}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         onPress={() => router.push(item.route as any)}
       >
-        <Animated.View style={[cardAnimStyle, isAndroid
-          ? { elevation: 2 }
-          : {
-              shadowColor: item.gradient?.[1] ?? t.shadow,
-              shadowOffset: { width: 0, height: 14 },
-              shadowOpacity: isDark ? 0.36 : 0.24,
-              shadowRadius: 24,
-              elevation: 12,
-            }]}>
-          <View renderToHardwareTextureAndroid={isAndroid} style={[styles.gridItem, { borderRadius: radius }]}>
-
-            <LinearGradient
-              colors={[g0, g1]}
-              start={{ x: 0.0, y: 0.0 }}
-              end={{ x: 1.0, y: 1.0 }}
-              style={StyleSheet.absoluteFill}
-            />
-
-            {!isAndroid && (
-              <>
-                <LinearGradient
-                  colors={[t.wash, 'rgba(255,255,255,0.04)', 'transparent']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0.7 }}
-                  style={{
-                    position: 'absolute',
-                    top: 0, left: 0, right: 0,
-                    height: '58%',
-                    borderTopLeftRadius: radius,
-                    borderTopRightRadius: radius,
-                  }}
-                />
-
-                <LinearGradient
-                  colors={['transparent', 'rgba(15,23,42,0.32)']}
-                  start={{ x: 0.5, y: 0 }}
-                  end={{ x: 0.5, y: 1 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              </>
-            )}
-
-            <View style={{
-              ...StyleSheet.absoluteFillObject,
-              borderRadius: radius,
+        <Animated.View style={[cardAnimStyle, styles.gridItem, clayStyle]}>
+          {/* Abstract Claymorphic Background Graphics */}
+          <View 
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: isWideScreen ? 110 : 90,
+              height: isWideScreen ? 110 : 90,
+              borderRadius: isWideScreen ? 55 : 45,
               borderWidth: 1.5,
-              borderColor: t.rim,
-            }} />
-
-            {!isAndroid && (
-              <>
-                <LinearGradient
-                  colors={[t.accent, 'rgba(255,255,255,0.08)']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 0, y: 1 }}
-                  style={{
-                    position: 'absolute',
-                    top: 12,
-                    bottom: 12,
-                    left: 0,
-                    width: 4,
-                    borderTopRightRadius: 99,
-                    borderBottomRightRadius: 99,
-                    opacity: 0.95,
-                  }}
-                />
-
-                <View style={{
-                  position: 'absolute',
-                  width: orbSize, height: orbSize, borderRadius: orbSize / 2,
-                  backgroundColor: t.orb,
-                  bottom: -(orbSize * 0.46), right: -(orbSize * 0.42),
-                }} />
-                <View style={{
-                  position: 'absolute',
-                  width: orbSize * 0.48, height: orbSize * 0.48,
-                  borderRadius: (orbSize * 0.48) / 2,
-                  backgroundColor: 'rgba(255,255,255,0.08)',
-                  top: -(orbSize * 0.20), right: -(orbSize * 0.18),
-                }} />
-              </>
-            )}
-
-            {item.badge !== undefined && item.badge > 0 && (
-              <View style={[styles.gridBadge, { backgroundColor: t.badge, shadowColor: t.badge }]}>
-                <Text style={styles.gridBadgeText}>{item.badge > 99 ? '99+' : item.badge}</Text>
-              </View>
-            )}
-
-            <View style={{
-              position: 'absolute', top: 9, left: 9,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 5,
-              backgroundColor: 'rgba(15,23,42,0.24)',
-              paddingHorizontal: 8, paddingVertical: 4,
-              borderRadius: 999,
+              borderColor: 'rgba(255, 255, 255, 0.08)',
+              bottom: isWideScreen ? -25 : -20,
+              right: isWideScreen ? -25 : -20,
+              zIndex: 1,
+            }} 
+          />
+          <View 
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: isWideScreen ? 60 : 50,
+              height: isWideScreen ? 60 : 50,
+              borderRadius: isWideScreen ? 30 : 25,
               borderWidth: 1,
-              borderColor: 'rgba(255,255,255,0.18)',
-            }}>
-              <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: t.accent }} />
-              <Text style={{
-                fontSize: 7, fontWeight: '900', letterSpacing: 1.1,
-                color: t.label,
-                textTransform: 'uppercase',
-              }}>
-                {item.category}
+              borderColor: 'rgba(255, 255, 255, 0.05)',
+              bottom: isWideScreen ? 50 : 40,
+              right: isWideScreen ? -12 : -10,
+              zIndex: 1,
+            }} 
+          />
+          <View 
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: isWideScreen ? 36 : 28,
+              height: isWideScreen ? 36 : 28,
+              borderRadius: isWideScreen ? 18 : 14,
+              backgroundColor: 'rgba(255, 255, 255, 0.07)',
+              bottom: isWideScreen ? 68 : 55,
+              right: isWideScreen ? 35 : 28,
+              zIndex: 1,
+              ...(Platform.OS === 'web' ? {
+                boxShadow: '1px 2px 4px rgba(0,0,0,0.06), inset 1px 1px 2px rgba(255,255,255,0.2)'
+              } : {})
+            }} 
+          />
+          <View 
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: isWideScreen ? 18 : 14,
+              height: isWideScreen ? 40 : 32,
+              borderRadius: isWideScreen ? 9 : 7,
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              bottom: isWideScreen ? 18 : 15,
+              right: isWideScreen ? 62 : 50,
+              transform: [{ rotate: '45deg' }],
+              zIndex: 1,
+              ...(Platform.OS === 'web' ? {
+                boxShadow: '1px 2px 4px rgba(0,0,0,0.05), inset 1px 1px 2px rgba(255,255,255,0.15)'
+              } : {})
+            }} 
+          />
+          <View 
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              width: 6,
+              height: 6,
+              borderRadius: 3,
+              backgroundColor: 'rgba(255, 255, 255, 0.15)',
+              bottom: isWideScreen ? 92 : 75,
+              right: isWideScreen ? 20 : 15,
+              zIndex: 1,
+            }} 
+          />
+
+          {item.badge !== undefined && item.badge > 0 && (
+            <View style={[styles.gridBadge, {
+              backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.9)',
+              borderColor: isDark ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.85)',
+              zIndex: 2,
+              ...(Platform.OS === 'web' ? {
+                boxShadow: '2px 2px 4px rgba(0,0,0,0.1), -1px -1px 2px rgba(255,255,255,0.2), inset 1px 1px 2px rgba(255,255,255,0.4)'
+              } : {
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.1,
+                shadowRadius: 2.5,
+                elevation: 1.5
+              })
+            }]}>
+              <Text style={[styles.gridBadgeText, { color: isDark ? '#FFFFFF' : '#0F172A' }]}>
+                {item.badge > 99 ? '99+' : item.badge}
               </Text>
             </View>
+          )}
 
-            <View style={[styles.gridContent, { paddingTop: isWideScreen ? 38 : 34 }]}>
+          <View style={{
+            position: 'absolute', top: 9, left: 9,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+            backgroundColor: 'rgba(0,0,0,0.15)',
+            paddingHorizontal: 8, paddingVertical: 4,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: 'rgba(255,255,255,0.15)',
+            zIndex: 2,
+            ...(Platform.OS === 'web' ? {
+              boxShadow: 'inset 1px 1px 2px rgba(0,0,0,0.2), inset -1px -1px 2px rgba(255,255,255,0.1)'
+            } : {})
+          }}>
+            <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: 'rgba(255,255,255,0.72)' }} />
+            <Text style={{
+              fontSize: 7, fontWeight: '900', letterSpacing: 1.1,
+              color: 'rgba(255,255,255,0.92)',
+              textTransform: 'uppercase',
+            }}>
+              {item.category}
+            </Text>
+          </View>
 
-              <Animated.View style={[iconAnimStyle, {
-                width: isWideScreen ? 50 : 42,
-                height: isWideScreen ? 50 : 42,
-                borderRadius: isWideScreen ? 18 : 15,
-                backgroundColor: 'rgba(255,255,255,0.18)',
+          <View style={[styles.gridContent, { paddingTop: isWideScreen ? 38 : 34, zIndex: 2 }]}>
+            <Animated.View style={[iconAnimStyle, {
+              width: isWideScreen ? 50 : 42,
+              height: isWideScreen ? 50 : 42,
+              borderRadius: isWideScreen ? 18 : 15,
+              backgroundColor: 'rgba(255,255,255,0.22)',
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.32)',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              ...(Platform.OS === 'web' ? {
+                boxShadow: '2px 3px 6px rgba(0,0,0,0.12), -1px -1px 2px rgba(255,255,255,0.15), inset 1px 1px 2px rgba(255,255,255,0.4)'
+              } : {
+                shadowColor: '#000000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.12,
+                shadowRadius: 3,
+                elevation: 2
+              }),
+            }]}>
+              <Ionicons
+                name={item.icon}
+                size={isWideScreen ? 24 : 20}
+                color="rgba(255,255,255,0.97)"
+              />
+            </Animated.View>
+
+            <View style={styles.bottomRow}>
+              <View style={{ flex: 1, marginRight: 6 }}>
+                <Text
+                  style={[
+                    styles.gridTitle,
+                    isMobile
+                      ? {
+                          flex: undefined,
+                          fontSize: windowWidth < 380 ? 12.5 : 13.5,
+                          lineHeight: windowWidth < 380 ? 16 : 17,
+                        }
+                      : { fontSize: isWideScreen ? 14 : 12.5 },
+                  ]}
+                  {...(!isMobile ? { numberOfLines: 2 } : {})}
+                >
+                  {item.title}
+                </Text>
+                {!isMobile && (
+                  <Text style={{
+                    color: 'rgba(255,255,255,0.78)',
+                    fontSize: isWideScreen ? 9 : 8,
+                    fontWeight: '700',
+                    letterSpacing: 0.7,
+                    textTransform: 'uppercase',
+                    marginTop: 4,
+                  }} numberOfLines={1}>
+                    {item.tier === 'PRIMARY' ? 'Daily tools' : item.category}
+                  </Text>
+                )}
+              </View>
+
+              <View style={{
+                width: isWideScreen ? 28 : 24,
+                height: isWideScreen ? 28 : 24,
+                borderRadius: isWideScreen ? 14 : 12,
+                backgroundColor: 'rgba(255,255,255,0.22)',
                 borderWidth: 1,
-                borderColor: 'rgba(255,255,255,0.28)',
+                borderColor: 'rgba(255,255,255,0.32)',
                 alignItems: 'center',
                 justifyContent: 'center',
-                overflow: 'hidden',
-                ...(isAndroid ? { elevation: 0 } : {
-                  shadowColor: 'rgba(0,0,0,0.5)',
-                  shadowOffset: { width: 0, height: 5 },
-                  shadowOpacity: 0.55,
-                  shadowRadius: 10,
-                  elevation: 6,
+                flexShrink: 0,
+                ...(Platform.OS === 'web' ? {
+                  boxShadow: '2px 3px 6px rgba(0,0,0,0.12), -1px -1px 2px rgba(255,255,255,0.15), inset 1px 1px 2px rgba(255,255,255,0.4)'
+                } : {
+                  shadowColor: '#000000',
+                  shadowOffset: { width: 0, height: 2 },
+                  shadowOpacity: 0.12,
+                  shadowRadius: 3,
+                  elevation: 2
                 }),
-              }]}>
-                {!isAndroid && (
-                  <LinearGradient
-                    colors={['rgba(255,255,255,0.30)', 'rgba(255,255,255,0.10)']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                )}
+              }}>
                 <Ionicons
-                  name={item.icon}
-                  size={isWideScreen ? 24 : 20}
-                  color="rgba(255,255,255,0.97)"
+                  name="chevron-forward"
+                  size={isWideScreen ? 14 : 11}
+                  color="rgba(255,255,255,0.90)"
                 />
-              </Animated.View>
-
-              <View style={styles.bottomRow}>
-                <View style={{ flex: 1, marginRight: 6 }}>
-                  <Text
-                    style={[
-                      styles.gridTitle,
-                      isMobile
-                        ? {
-                            flex: undefined,
-                            fontSize: windowWidth < 380 ? 12.5 : 13.5,
-                            lineHeight: windowWidth < 380 ? 16 : 17,
-                          }
-                        : { fontSize: isWideScreen ? 14 : 12.5 },
-                    ]}
-                    {...(!isMobile ? { numberOfLines: 2 } : {})}
-                  >
-                    {item.title}
-                  </Text>
-                  {!isMobile && (
-                    <Text style={{
-                      color: 'rgba(255,255,255,0.68)',
-                      fontSize: isWideScreen ? 9 : 8,
-                      fontWeight: '700',
-                      letterSpacing: 0.7,
-                      textTransform: 'uppercase',
-                      marginTop: 4,
-                    }} numberOfLines={1}>
-                      {item.tier === 'PRIMARY' ? 'Daily tools' : item.category}
-                    </Text>
-                  )}
-                </View>
-
-                <View style={{
-                  width: isWideScreen ? 28 : 24,
-                  height: isWideScreen ? 28 : 24,
-                  borderRadius: isWideScreen ? 14 : 12,
-                  backgroundColor: 'rgba(255,255,255,0.16)',
-                  borderWidth: 1,
-                  borderColor: 'rgba(255,255,255,0.26)',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}>
-                  <Ionicons
-                    name="chevron-forward"
-                    size={isWideScreen ? 14 : 11}
-                    color="rgba(255,255,255,0.90)"
-                  />
-                </View>
               </View>
             </View>
           </View>
         </Animated.View>
-      </TouchableOpacity>
+      </Pressable>
     </Animated.View>
   );
 });
@@ -649,6 +893,7 @@ const MetricCard = React.memo(({
   const skeletonAnim = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   const skeletonColor = isDark ? 'rgba(255,255,255,0.14)' : 'rgba(15,23,42,0.09)';
+  const cardRadius = isWideScreen ? 28 : 24;
 
   return (
     <Pressable
@@ -657,37 +902,47 @@ const MetricCard = React.memo(({
     >
       <Animated.View renderToHardwareTextureAndroid={isAndroid} style={[anim, {
         width,
-        backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-        borderRadius: isWideScreen ? 20 : 18,
-        padding: isWideScreen ? 18 : 14,
+        backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+        borderRadius: cardRadius,
+        padding: isWideScreen ? 20 : 16,
         borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-        ...(isAndroid ? { elevation: 1 } : {
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: isDark ? 0.2 : 0.05,
-          shadowRadius: 12,
-          elevation: 4,
-        }),
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
+        ...clay(isDark, 'md'),
         overflow: 'hidden',
       }]}>
-        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, backgroundColor: iconColor }} />
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: '52%',
+          borderTopLeftRadius: cardRadius, borderTopRightRadius: cardRadius,
+          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.55)',
+        }} />
+        <View style={{
+          position: 'absolute', bottom: 0, left: 0, right: 0, height: '38%',
+          borderBottomLeftRadius: cardRadius, borderBottomRightRadius: cardRadius,
+          backgroundColor: isDark ? 'rgba(0,0,0,0.10)' : `${iconColor}0A`,
+        }} />
+        <View style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 4,
+          backgroundColor: iconColor, opacity: isDark ? 0.85 : 0.72,
+        }} />
 
         <View style={{
-          width: isWideScreen ? 40 : 36, height: isWideScreen ? 40 : 36,
-          borderRadius: isWideScreen ? 20 : 18,
+          width: isWideScreen ? 44 : 40, height: isWideScreen ? 44 : 40,
+          borderRadius: isWideScreen ? 22 : 20,
           backgroundColor: iconBg,
           alignItems: 'center', justifyContent: 'center',
           marginBottom: isWideScreen ? 14 : 10,
-          marginTop: 4,
+          marginTop: 6,
+          borderWidth: 1,
+          borderColor: isDark ? `${iconColor}28` : `${iconColor}18`,
+          ...clayGlow(iconColor, 'sm'),
         }}>
           <Ionicons name={iconName} size={isWideScreen ? 20 : 17} color={iconColor} />
         </View>
 
         <View style={{
-          width: 28, height: 2, borderRadius: 1,
+          width: 32, height: 3, borderRadius: 2,
           backgroundColor: iconColor, marginBottom: isWideScreen ? 10 : 8,
-          opacity: 0.7,
+          opacity: 0.55,
         }} />
 
         <Text style={{
@@ -825,44 +1080,47 @@ function PremiumProgressCard({ title, pct, gradientColors, pctColor, isDark, isW
   pctColor: string; isDark: boolean; isWideScreen: boolean; delay?: number;
 }) {
   const safeWidth = `${Math.min(Math.max(pct, 0), 100)}%` as any;
+  const cardRadius = isWideScreen ? 28 : 24;
   return (
     <Animated.View
       entering={enterAnim(delay)}
       renderToHardwareTextureAndroid={isAndroid}
       style={{
-        backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-        borderRadius: isWideScreen ? 24 : 20,
+        backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+        borderRadius: cardRadius,
         borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-        padding: isWideScreen ? 24 : 18,
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
+        padding: isWideScreen ? 26 : 20,
         marginBottom: isWideScreen ? 24 : 16,
-        ...(isAndroid ? { elevation: 2 } : {
-          shadowColor: gradientColors[0],
-          shadowOffset: { width: 0, height: 6 },
-          shadowOpacity: isDark ? 0.18 : 0.07,
-          shadowRadius: 16,
-          elevation: 5,
-        }),
+        ...clay(isDark, 'lg'),
         overflow: 'hidden',
       }}
     >
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, overflow: 'hidden' }}>
-        <LinearGradient colors={gradientColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
-      </View>
+      <ClayCardOverlays isDark={isDark} cardRadius={cardRadius} accentColor={pctColor} gradientColors={gradientColors} />
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: isWideScreen ? 18 : 14, marginTop: 4 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: isWideScreen ? 20 : 16, marginTop: 6 }}>
         <View>
           <Text style={{ fontSize: isWideScreen ? 10 : 9, fontWeight: '800', letterSpacing: 1.5, color: isDark ? 'rgba(255,255,255,0.4)' : 'rgba(15,23,42,0.4)', textTransform: 'uppercase', marginBottom: 4 }}>Progress</Text>
           <Text style={{ fontSize: isWideScreen ? 17 : 15, fontWeight: '800', letterSpacing: -0.3, color: isDark ? '#FFFFFF' : '#0F172A' }}>{title}</Text>
         </View>
-        <Text style={{ fontSize: isWideScreen ? 28 : 24, fontWeight: '900', color: pctColor }}>{pct}%</Text>
+        <Text style={{ fontSize: isWideScreen ? 30 : 26, fontWeight: '900', color: pctColor, letterSpacing: -0.5 }}>{pct}%</Text>
       </View>
 
-      <View style={{ height: isWideScreen ? 12 : 10, borderRadius: 99, backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.07)', overflow: 'hidden' }}>
-        <LinearGradient colors={gradientColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ height: '100%', width: safeWidth, borderRadius: 99 }} />
+      <View style={{
+        height: isWideScreen ? 14 : 12, borderRadius: 99,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)',
+        overflow: 'hidden',
+        ...clayInset(isDark),
+      }}>
+        <LinearGradient
+          colors={gradientColors}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={{ height: '100%', width: safeWidth, borderRadius: 99, ...clayGlow(gradientColors[0], 'sm') }}
+        />
       </View>
 
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 }}>
         <Text style={{ fontSize: 9, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)' }}>0%</Text>
         <Text style={{ fontSize: 9, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(15,23,42,0.3)' }}>100%</Text>
       </View>
@@ -877,32 +1135,27 @@ function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, 
   title: string; subtitle: string; accentColor: string;
   isDark: boolean; isWideScreen: boolean; delay?: number; children: React.ReactNode;
 }) {
+  const cardRadius = isWideScreen ? 28 : 24;
   return (
     <Animated.View
       entering={enterAnim(delay)}
       renderToHardwareTextureAndroid={isAndroid}
       style={{
         marginBottom: isWideScreen ? 28 : 20,
-        backgroundColor: isDark ? '#141C2E' : '#FFFFFF',
-        borderRadius: isWideScreen ? 24 : 20,
+        backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+        borderRadius: cardRadius,
         borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
         overflow: 'hidden',
-        ...(isAndroid ? { elevation: 2 } : {
-          shadowColor: accentColor,
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: isDark ? 0.15 : 0.07,
-          shadowRadius: 20,
-          elevation: 6,
-        }),
+        ...clay(isDark, 'lg'),
       }}
     >
-      <View style={{ height: 3, backgroundColor: accentColor }} />
+      <ClayCardOverlays isDark={isDark} cardRadius={cardRadius} accentColor={accentColor} />
 
       <View style={{
-        paddingHorizontal: isWideScreen ? 24 : 18,
-        paddingTop: isWideScreen ? 20 : 16,
-        paddingBottom: isWideScreen ? 16 : 12,
+        paddingHorizontal: isWideScreen ? 26 : 20,
+        paddingTop: isWideScreen ? 22 : 18,
+        paddingBottom: isWideScreen ? 18 : 14,
         flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start',
       }}>
         <View style={{ flex: 1, marginRight: 12 }}>
@@ -913,15 +1166,32 @@ function PremiumChartCard({ title, subtitle, accentColor, isDark, isWideScreen, 
             {subtitle}
           </Text>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: 6,
+          paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
+          backgroundColor: isDark ? `${accentColor}18` : `${accentColor}10`,
+          borderWidth: 1, borderColor: isDark ? `${accentColor}30` : `${accentColor}20`,
+          ...clayGlow(accentColor, 'sm'),
+        }}>
           <PulseIndicator color={accentColor} />
           <Text style={{ fontSize: 8, fontWeight: '800', color: accentColor, letterSpacing: 0.8 }}>LIVE</Text>
         </View>
       </View>
 
-      <View style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)', marginHorizontal: isWideScreen ? 24 : 18 }} />
+      <View style={{
+        height: 1,
+        backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)',
+        marginHorizontal: isWideScreen ? 26 : 20,
+      }} />
 
-      <View style={{ paddingVertical: 14, paddingHorizontal: 8, alignItems: 'center' }}>
+      <View style={{
+        paddingVertical: 16, paddingHorizontal: 10, alignItems: 'center',
+        backgroundColor: isDark ? 'rgba(0,0,0,0.08)' : 'rgba(248,250,252,0.6)',
+        marginHorizontal: isWideScreen ? 14 : 10,
+        marginBottom: isWideScreen ? 14 : 10,
+        borderRadius: isWideScreen ? 20 : 16,
+        ...clayInset(isDark),
+      }}>
         {children}
       </View>
     </Animated.View>
@@ -1299,22 +1569,32 @@ export default function AdminDashboard() {
       entering={enterAnim(270)}
       renderToHardwareTextureAndroid={isAndroid}
       style={{
-        backgroundColor: isDark ? '#141C2E' : '#FFFFFF', borderRadius: 24, borderWidth: 1,
-        borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)',
-        paddingHorizontal: 24, paddingVertical: 20, marginBottom: isWideScreen ? 32 : 24,
-        ...(isAndroid ? { elevation: 2 } : { shadowColor: '#10B981', shadowOffset: { width: 0, height: 10 }, shadowOpacity: isDark ? 0.15 : 0.04, shadowRadius: 20, elevation: 6 }),
+        backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+        borderRadius: 28,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
+        paddingHorizontal: 26,
+        paddingVertical: 22,
+        marginBottom: isWideScreen ? 32 : 24,
+        ...clay(isDark, 'lg'),
         overflow: 'hidden',
       }}
     >
+      <ClayCardOverlays isDark={isDark} cardRadius={28} accentColor="#10B981" />
       {!isAndroid && (
         <View style={{ position: 'absolute', bottom: -10, left: 0, right: 0, opacity: 0.08 }}>
           <LineChart data={[{value: 20}, {value: 50}, {value: 30}, {value: 80}, {value: 40}, {value: 90}]} height={60} width={rightColWidth} color="#3B82F6" thickness={3} startFillColor="#3B82F6" endFillColor="transparent" yAxisThickness={0} xAxisThickness={0} hideRules hideDataPoints />
         </View>
       )}
-      <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, backgroundColor: '#10B981' }} />
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#10B98118', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{
+            width: 40, height: 40, borderRadius: 20,
+            backgroundColor: '#10B98118',
+            alignItems: 'center', justifyContent: 'center',
+            borderWidth: 1, borderColor: '#10B98128',
+            ...clayGlow('#10B981', 'sm'),
+          }}>
             <PulseIndicator color="#10B981" />
           </View>
           <View>
@@ -1322,7 +1602,12 @@ export default function AdminDashboard() {
             <Text style={{ fontSize: 14, fontWeight: '800', color: isDark ? '#FFFFFF' : '#0F172A', letterSpacing: -0.2 }}>All Systems Operational</Text>
           </View>
         </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: isWideScreen ? 28 : 16 }}>
+        <View style={{
+          flexDirection: 'row', alignItems: 'center', gap: isWideScreen ? 28 : 16,
+          paddingHorizontal: isWideScreen ? 18 : 14, paddingVertical: 10, borderRadius: 18,
+          backgroundColor: isDark ? 'rgba(0,0,0,0.12)' : 'rgba(248,250,252,0.7)',
+          ...clayInset(isDark),
+        }}>
           {[
             { label: 'TOTAL STAFF', value: staff?.total_staff ?? '28', color: '#2563EB' },
             { label: 'ACTIVE', value: staff?.active_staff ?? '28', color: '#10B981' },
@@ -1476,25 +1761,52 @@ export default function AdminDashboard() {
         const sevColor = ins.severity === 'high' ? '#EF4444' : ins.severity === 'medium' ? '#F59E0B' : '#3B82F6';
         const sevBg = ins.severity === 'high' ? 'rgba(239,68,68,0.10)' : ins.severity === 'medium' ? 'rgba(245,158,11,0.10)' : 'rgba(59,130,246,0.10)';
         const sevIcon: IconName = ins.severity === 'high' ? 'alert-circle' : ins.severity === 'medium' ? 'warning' : 'information-circle';
+        const alertRadius = isWideScreen ? 24 : 22;
         return (
           <Animated.View key={ins.id} entering={enterAnim(440 + idx * 60)}
             style={{
-              backgroundColor: isDark ? '#141C2E' : '#FFFFFF', borderRadius: isWideScreen ? 20 : 18, borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.06)', marginBottom: isWideScreen ? 14 : 10, overflow: 'hidden',
-              ...(isAndroid ? { elevation: 1 } : { shadowColor: sevColor, shadowOffset: { width: 0, height: 4 }, shadowOpacity: isDark ? 0.15 : 0.07, shadowRadius: 12, elevation: 4 }),
+              backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+              borderRadius: alertRadius,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.85)',
+              marginBottom: isWideScreen ? 14 : 10,
+              ...clay(isDark, 'md'),
+              overflow: 'hidden',
               flexDirection: 'row',
             }}>
-            <View style={{ width: 5, backgroundColor: sevColor, borderTopLeftRadius: isWideScreen ? 20 : 18, borderBottomLeftRadius: isWideScreen ? 20 : 18 }} />
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: isWideScreen ? 16 : 14, paddingHorizontal: isWideScreen ? 16 : 12 }}>
-              <View style={{ width: isWideScreen ? 42 : 36, height: isWideScreen ? 42 : 36, borderRadius: isWideScreen ? 12 : 10, backgroundColor: sevBg, alignItems: 'center', justifyContent: 'center', marginRight: isWideScreen ? 14 : 10, flexShrink: 0 }}>
+            <ClayCardOverlays isDark={isDark} cardRadius={alertRadius} accentColor={sevColor} hideTopAccent />
+            <View style={{
+              width: 6, backgroundColor: sevColor,
+              borderTopLeftRadius: alertRadius, borderBottomLeftRadius: alertRadius,
+              ...clayGlow(sevColor, 'sm'),
+            }} />
+            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: isWideScreen ? 18 : 15, paddingHorizontal: isWideScreen ? 18 : 14 }}>
+              <View style={{
+                width: isWideScreen ? 44 : 40, height: isWideScreen ? 44 : 40,
+                borderRadius: isWideScreen ? 16 : 14,
+                backgroundColor: sevBg,
+                alignItems: 'center', justifyContent: 'center',
+                marginRight: isWideScreen ? 14 : 10, flexShrink: 0,
+                borderWidth: 1, borderColor: `${sevColor}22`,
+                ...clayGlow(sevColor, 'sm'),
+              }}>
                 <Ionicons name={sevIcon} size={isWideScreen ? 19 : 16} color={sevColor} />
               </View>
               <View style={{ flex: 1 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 5 }}>
-                  <View style={{ backgroundColor: sevBg, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <View style={{
+                    backgroundColor: sevBg, borderRadius: 8,
+                    paddingHorizontal: 9, paddingVertical: 4,
+                    borderWidth: 1, borderColor: `${sevColor}25`,
+                    ...clayGlow(sevColor, 'sm'),
+                  }}>
                     <Text style={{ fontSize: isWideScreen ? 9 : 8, fontWeight: '800', letterSpacing: 1, color: sevColor }}>{ins.severity.toUpperCase()}</Text>
                   </View>
-                  <View style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(15,23,42,0.05)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
+                  <View style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.04)',
+                    borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4,
+                    ...clayInset(isDark),
+                  }}>
                     <Text style={{ fontSize: isWideScreen ? 9 : 8, fontWeight: '700', color: isDark ? 'rgba(255,255,255,0.5)' : 'rgba(15,23,42,0.5)', textTransform: 'uppercase' }}>{ins.category}</Text>
                   </View>
                 </View>
@@ -1665,8 +1977,7 @@ const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
     gridItem: {
       width: '100%',
       aspectRatio: isWide ? 1 / 1.04 : 1 / 1.12,
-      overflow: 'hidden',
-      backgroundColor: isDark ? '#111827' : '#1E293B',
+      overflow: Platform.OS === 'web' ? 'hidden' : 'visible',
     },
     gridContent: {
       flex: 1,
@@ -1684,11 +1995,6 @@ const getStyles = (theme: Theme, isDark: boolean, isWide = false) =>
       color: '#FFFFFF',
       letterSpacing: -0.15,
       lineHeight: isWide ? 18 : 16,
-      ...(isAndroid ? {} : {
-        textShadowColor: 'rgba(0,0,0,0.25)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 4,
-      }),
     },
     gridBadge: {
       position: 'absolute', top: 9, right: 9,

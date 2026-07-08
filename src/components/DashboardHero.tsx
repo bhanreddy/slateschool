@@ -1,8 +1,10 @@
 import React from 'react';
 import { View, Text, StyleSheet, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useTheme } from '../hooks/useTheme';
+import { SCHOOL_CONFIG, schoolTheme } from '../constants/schoolConfig';
 
 interface DashboardHeroProps {
     /** Uppercase eyebrow shown in the date pill, e.g. "TUESDAY, 7 JULY 2026" */
@@ -17,6 +19,10 @@ interface DashboardHeroProps {
     cardWidth?: number;
     /** Stack greeting above card instead of side by side */
     stacks?: boolean;
+    /** Optional icon in the date pill for portal theming */
+    eyebrowIcon?: keyof typeof Ionicons.glyphMap;
+    /** Use school brand tints instead of default indigo */
+    useSchoolBranding?: boolean;
 }
 
 const LIGHT = {
@@ -51,9 +57,18 @@ const DashboardHero: React.FC<DashboardHeroProps> = ({
     card,
     cardWidth,
     stacks = false,
+    eyebrowIcon,
+    useSchoolBranding = false,
 }) => {
     const { isDark } = useTheme();
-    const c = isDark ? DARK : LIGHT;
+    const schoolAccent = SCHOOL_CONFIG.theme.accent ?? '#0D8ECF';
+    const schoolPrimary = schoolTheme.light.colors.primary ?? '#665990';
+    const base = isDark ? DARK : LIGHT;
+    const c = useSchoolBranding
+        ? isDark
+            ? { ...base, accent: '#93C5FD', name: '#C4B5FD', pillBg: `${schoolAccent}22`, pillBorder: `${schoolAccent}40`, orb: `${schoolPrimary}22` }
+            : { ...base, accent: schoolAccent, name: schoolPrimary, pillBg: `${schoolAccent}12`, pillBorder: `${schoolAccent}28`, orb: `${schoolPrimary}14` }
+        : base;
 
     return (
         <Animated.View entering={FadeInDown.duration(420)} style={styles.root}>
@@ -64,10 +79,19 @@ const DashboardHero: React.FC<DashboardHeroProps> = ({
                 style={[styles.panel, { borderColor: c.border }]}
             >
                 <View style={[styles.orb, { backgroundColor: c.orb }]} pointerEvents="none" />
+                {useSchoolBranding && (
+                    <View style={styles.schoolOrb} pointerEvents="none">
+                        <Ionicons name="library-outline" size={52} color={isDark ? 'rgba(255,255,255,0.04)' : `${schoolPrimary}12`} />
+                    </View>
+                )}
                 <View style={[styles.row, stacks && styles.rowStacked]}>
                     <View style={[styles.copy, !stacks && styles.copyRow]}>
                         <View style={[styles.pill, { backgroundColor: c.pillBg, borderColor: c.pillBorder }]}>
-                            <View style={[styles.pillDot, { backgroundColor: c.accent }]} />
+                            {eyebrowIcon ? (
+                                <Ionicons name={eyebrowIcon} size={11} color={c.accent} />
+                            ) : (
+                                <View style={[styles.pillDot, { backgroundColor: c.accent }]} />
+                            )}
                             <Text style={[styles.eyebrow, { color: c.accent }]} numberOfLines={1}>
                                 {eyebrow}
                             </Text>
@@ -107,6 +131,7 @@ const styles = StyleSheet.create({
         }),
     },
     orb: { position: 'absolute', right: -60, top: -70, width: 180, height: 180, borderRadius: 90 },
+    schoolOrb: { position: 'absolute', left: 12, bottom: 8, opacity: 0.9 },
     row: { flexDirection: 'row', alignItems: 'center', gap: 24 },
     rowStacked: { flexDirection: 'column', alignItems: 'stretch' },
     copy: { minWidth: 0, zIndex: 2 },

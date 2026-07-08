@@ -44,22 +44,22 @@ export default function StaffLayout() {
             />
             <MaterialTopTabs.Screen
                 name="manage-students"
-                options={{ title: "Attendance" }}
+                options={{ title: "Attendance", headerShown: false } as any}
             />
             <MaterialTopTabs.Screen
                 name="timetable"
-                options={{ title: "Timetable" }}
+                options={{ title: "Timetable", headerShown: false } as any}
             />
             <MaterialTopTabs.Screen
                 name="results"
-                options={{ title: "Results" }}
+                options={{ title: "Results", headerShown: false } as any}
             />
 
             {/* ── Non-tab screens (navigable but NOT swipeable) ── */}
-            <MaterialTopTabs.Screen name="attendance" options={hiddenScreenOptions} />
-            <MaterialTopTabs.Screen name="complaints" options={hiddenScreenOptions} />
-            <MaterialTopTabs.Screen name="diary" options={hiddenScreenOptions} />
-            <MaterialTopTabs.Screen name="leaves" options={hiddenScreenOptions} />
+            <MaterialTopTabs.Screen name="attendance" options={{ ...hiddenScreenOptions, title: 'Attendance', headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="complaints" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="diary" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
+            <MaterialTopTabs.Screen name="leaves" options={{ ...hiddenScreenOptions, headerShown: false } as any} />
             <MaterialTopTabs.Screen name="lms-upload" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="payslip" options={hiddenScreenOptions} />
             <MaterialTopTabs.Screen name="profile" options={hiddenScreenOptions} />

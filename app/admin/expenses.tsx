@@ -85,11 +85,25 @@ export default function AdminExpenses() {
   const [deleting, setDeleting] = useState(false);
 
   // --- FORM STATES ---
-  const [newTitle, setNewTitle] = useState('');
-  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
-  const [newAmount, setNewAmount] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [expenseRows, setExpenseRows] = useState([
+    { id: '1', title: '', category: CATEGORIES[0], amount: '', description: '' }
+  ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const addExpenseRows = () => {
+    setExpenseRows(prev => [
+      ...prev,
+      { id: Date.now().toString(), title: '', category: CATEGORIES[0], amount: '', description: '' }
+    ]);
+  };
+
+  const updateExpenseRow = (id: string, field: string, value: string) => {
+    setExpenseRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  };
+
+  const removeExpenseRow = (id: string) => {
+    setExpenseRows(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
+  };
 
   // Search focus
   const [searchFocused, setSearchFocused] = useState(false);
@@ -116,22 +130,38 @@ export default function AdminExpenses() {
 
   // --- HANDLERS ---
   const handleAddExpense = async () => {
-    if (!newTitle || !newAmount) { alertCompat('Validation', 'Please fill in Title and Amount'); return; }
-    const amount = parseFloat(newAmount);
-    if (isNaN(amount) || amount <= 0) { alertCompat('Validation', 'Invalid amount'); return; }
+    const validRows = expenseRows.filter(r => r.title.trim() && r.amount.trim());
+    if (validRows.length === 0) { alertCompat('Validation', 'Please fill in at least one expense title and amount.'); return; }
+    
+    let hasError = false;
+    const payload: CreateExpenseRequest[] = validRows.map(r => {
+      const amount = parseFloat(r.amount);
+      if (isNaN(amount) || amount <= 0) hasError = true;
+      return {
+        title: r.title.trim(),
+        category: r.category,
+        amount,
+        expense_date: new Date().toISOString().split('T')[0],
+        description: r.description.trim() || undefined,
+        status: 'paid' as any
+      };
+    });
+
+    if (hasError) { alertCompat('Validation', 'Invalid amount in one or more rows'); return; }
+
     setIsSubmitting(true);
-    const payload: CreateExpenseRequest = {
-      title: newTitle, category: newCategory, amount,
-      expense_date: new Date().toISOString().split('T')[0],
-      description: newDescription,
-    };
-    const success = await createExpense(payload);
+    const success = await createBulkExpenses(payload);
     setIsSubmitting(false);
-    if (success) { setIsAddModalVisible(false); resetForm(); alertCompat('Success', 'Expense created successfully'); }
+    
+    if (success.ok) { 
+      setIsAddModalVisible(false); 
+      resetForm(); 
+      alertCompat('Success', 'Expense(s) created successfully'); 
+    }
   };
 
   const resetForm = () => {
-    setNewTitle(''); setNewCategory(CATEGORIES[0]); setNewAmount(''); setNewDescription('');
+    setExpenseRows([{ id: '1', title: '', category: CATEGORIES[0], amount: '', description: '' }]);
   };
 
   const handleApprove = async (expense: Expense) => {
@@ -324,18 +354,7 @@ export default function AdminExpenses() {
             />
           )}
 
-          {/* ── FABs ── */}
-          <RNAnimated.View style={[styles.fabWrapperSecondary, { transform: [{ scale: fabScale }] }]}>
-            <TouchableOpacity
-              style={styles.fabSecondary}
-              onPress={() => setIsBulkModalVisible(true)}
-              onPressIn={onFabPressIn}
-              onPressOut={onFabPressOut}
-              activeOpacity={1}
-            >
-              <Ionicons name="grid-outline" size={20} color="#6366F1" />
-            </TouchableOpacity>
-          </RNAnimated.View>
+          {/* ── FAB ── */}
           <RNAnimated.View style={[styles.fabWrapper, { transform: [{ scale: fabScale }] }]}>
             <TouchableOpacity
               style={styles.fab}
@@ -378,60 +397,70 @@ export default function AdminExpenses() {
 
             <View style={styles.fieldSep} />
 
-            <Text style={styles.label}>TITLE</Text>
-            <AppTextInput
-              style={styles.input}
-              placeholder="e.g. Lab Equipment"
-              placeholderTextColor="#9CA3AF"
-              value={newTitle}
-              onChangeText={setNewTitle}
-            />
+            <ScrollView horizontal showsHorizontalScrollIndicator>
+              <View style={{ minWidth: 600, paddingVertical: 10 }}>
+                {/* Header */}
+                <View style={[styles.headerRow, { borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 8, marginBottom: 8 }]}>
+                  <Text style={[styles.gridHeaderCell, { width: 140 }]}>Title</Text>
+                  <Text style={[styles.gridHeaderCell, { width: 110 }]}>Category</Text>
+                  <Text style={[styles.gridHeaderCell, { width: 90 }]}>Amount</Text>
+                  <Text style={[styles.gridHeaderCell, { width: 160 }]}>Description</Text>
+                  <Text style={[styles.gridHeaderCell, { width: 40 }]}></Text>
+                </View>
 
-            <Text style={styles.label}>AMOUNT</Text>
-            <View style={styles.amountInputRow}>
-              <View style={styles.currencyBox}>
-                <Text style={styles.currencyBoxText}>₹</Text>
+                {/* Rows */}
+                <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                  {expenseRows.map((row, idx) => (
+                    <View key={row.id} style={[styles.dataRow, { borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingVertical: 6 }]}>
+                      <AppTextInput
+                        style={[styles.cellInput, { width: 140 }]}
+                        placeholder="e.g. Lab Items"
+                        placeholderTextColor="#9CA3AF"
+                        value={row.title}
+                        onChangeText={(v) => updateExpenseRow(row.id, 'title', v)}
+                      />
+                      <TouchableOpacity
+                        style={[styles.categoryCell, { width: 110 }]}
+                        onPress={() => {
+                          const cIdx = CATEGORIES.indexOf(row.category);
+                          const nextC = CATEGORIES[(cIdx + 1) % CATEGORIES.length];
+                          updateExpenseRow(row.id, 'category', nextC);
+                        }}
+                      >
+                        <Text style={styles.categoryText} numberOfLines={1}>{row.category}</Text>
+                        <Ionicons name="chevron-down" size={12} color="#9CA3AF" />
+                      </TouchableOpacity>
+                      <View style={[styles.amountCell, { width: 90 }]}>
+                        <Text style={styles.amountPrefix}>₹</Text>
+                        <AppTextInput
+                          style={[styles.cellInput, { flex: 1, borderWidth: 0, paddingHorizontal: 0 }]}
+                          placeholder="0.00"
+                          placeholderTextColor="#9CA3AF"
+                          keyboardType="numeric"
+                          value={row.amount}
+                          onChangeText={(v) => updateExpenseRow(row.id, 'amount', v)}
+                        />
+                      </View>
+                      <AppTextInput
+                        style={[styles.cellInput, { width: 160 }]}
+                        placeholder="Notes..."
+                        placeholderTextColor="#9CA3AF"
+                        value={row.description}
+                        onChangeText={(v) => updateExpenseRow(row.id, 'description', v)}
+                      />
+                      <TouchableOpacity style={styles.deleteRowBtn} onPress={() => removeExpenseRow(row.id)}>
+                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+                  ))}
+                </ScrollView>
               </View>
-              <AppTextInput
-                style={[styles.input, { flex: 1 }]}
-                placeholder="0.00"
-                placeholderTextColor="#9CA3AF"
-                keyboardType="numeric"
-                value={newAmount}
-                onChangeText={setNewAmount}
-              />
-            </View>
-
-            <Text style={styles.label}>CATEGORY</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryRow}>
-              {CATEGORIES.map((cat) => {
-                const m = CATEGORY_META[cat];
-                const active = newCategory === cat;
-                return (
-                  <TouchableOpacity
-                    key={cat}
-                    style={[styles.catChip, active && { backgroundColor: m.bg, borderColor: m.color }]}
-                    onPress={() => setNewCategory(cat)}
-                  >
-                    <FontAwesome5 name={m.icon} size={10} color={active ? m.color : '#9CA3AF'} style={{ marginRight: 5 }} />
-                    <Text style={[styles.catText, active && { color: m.color, fontWeight: '700' }]}>{cat}</Text>
-                  </TouchableOpacity>
-                );
-              })}
             </ScrollView>
 
-            <Text style={styles.label}>
-              DESCRIPTION{' '}
-              <Text style={styles.labelOpt}>(optional)</Text>
-            </Text>
-            <AppTextInput
-              style={[styles.input, { height: 72, textAlignVertical: 'top' }]}
-              multiline
-              placeholder="Any additional details..."
-              placeholderTextColor="#9CA3AF"
-              value={newDescription}
-              onChangeText={setNewDescription}
-            />
+            <TouchableOpacity style={styles.addGridRowBtn} onPress={addExpenseRows}>
+              <Ionicons name="add-circle" size={20} color="#6366F1" />
+              <Text style={styles.addGridRowText}>Add one more row</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleAddExpense} disabled={isSubmitting}>
               {isSubmitting ? (
@@ -439,19 +468,13 @@ export default function AdminExpenses() {
               ) : (
                 <>
                   <Ionicons name="checkmark-done-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
-                  <Text style={styles.submitBtnText}>Submit Expense</Text>
+                  <Text style={styles.submitBtnText}>Submit Expenses</Text>
                 </>
               )}
             </TouchableOpacity>
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
-
-      <BulkExpenseSheet
-        visible={isBulkModalVisible}
-        onClose={() => setIsBulkModalVisible(false)}
-        onSubmit={createBulkExpenses}
-      />
 
       {/* ════════════════════════════════════
           DETAILS MODAL
@@ -957,4 +980,86 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     shadowOpacity: 0.38, shadowRadius: 8,
   },
   confirmDeleteText: { color: '#fff', fontWeight: '900', fontSize: 14 },
+
+  // ── GRID LAYOUT ───────────────────────────
+  dataRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  gridHeaderCell: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#9CA3AF',
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  cellInput: {
+    height: 38,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    fontSize: 13,
+    color: '#1F2937',
+    backgroundColor: '#F9FAFB',
+  },
+  categoryCell: {
+    height: 38,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#F9FAFB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  categoryText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#374151',
+    flex: 1,
+  },
+  amountCell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    borderRadius: 8,
+    backgroundColor: '#F9FAFB',
+    paddingLeft: 8,
+    height: 38,
+  },
+  amountPrefix: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6B7280',
+    marginRight: 2,
+  },
+  deleteRowBtn: {
+    width: 40,
+    height: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addGridRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: '#E0E7FF',
+    borderStyle: 'dashed',
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 16,
+    backgroundColor: '#F5F8FF',
+  },
+  addGridRowText: {
+    marginLeft: 6,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6366F1',
+  },
 });

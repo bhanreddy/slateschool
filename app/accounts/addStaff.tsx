@@ -24,8 +24,10 @@ import { StaffService } from '@/src/services/staffService';
 import { ReferenceDataService } from '../../src/services/referenceDataService';
 import { useTheme } from '../../src/hooks/useTheme';
 import { useAccountsWebChrome } from '../../src/contexts/AccountsWebChromeContext';
+import { ADMIN_THEME } from '../../src/constants/adminTheme';
 import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
+import ClayPasswordToggle from '../../src/components/ClayPasswordToggle';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import {
   STAFF_ADD_LOGIN_ROLE_OPTIONS,
@@ -36,24 +38,96 @@ import {
 
 const { width: SW } = Dimensions.get('window');
 
+// ─── Form palette (brand-aligned clay) ────────────────────────────────────────
+const FORM = {
+  brand: ADMIN_THEME.colors.primary,
+  violet: '#7C6FFF',
+  coral: ADMIN_THEME.colors.secondary,
+  sage: '#5BAA9A',
+  plum: '#9B7EDE',
+  surface: (isDark: boolean) => (isDark ? '#1A1726' : '#FDFCFF'),
+  field: (isDark: boolean) => (isDark ? '#221F30' : '#F3EFF8'),
+  border: (isDark: boolean) => (isDark ? 'rgba(124, 111, 255, 0.18)' : 'rgba(102, 89, 144, 0.14)'),
+  label: (isDark: boolean) => (isDark ? '#A89EC4' : '#6B6280'),
+  text: (isDark: boolean) => (isDark ? '#EDE8F5' : '#2D2640'),
+  muted: (isDark: boolean) => (isDark ? '#7A718F' : '#9B92AD'),
+};
+
+// ─── Claymorphism helpers ─────────────────────────────────────────────────────
+function clayField(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(45, 30, 70, 0.55)' : 'rgba(102, 89, 144, 0.20)';
+    const light = isDark ? 'rgba(124, 111, 255, 0.07)' : 'rgba(255, 255, 255, 0.92)';
+    const innerHi = isDark ? 'rgba(124, 111, 255, 0.10)' : 'rgba(255, 255, 255, 0.80)';
+    const innerLo = isDark ? 'rgba(20, 15, 35, 0.35)' : 'rgba(102, 89, 144, 0.12)';
+    return {
+      boxShadow:
+        `5px 5px 14px ${drop}, -4px -4px 11px ${light}, ` +
+        `inset 1.5px 1.5px 2px ${innerHi}, inset -1.5px -1.5px 2px ${innerLo}`,
+    } as any;
+  }
+  return {
+    shadowColor: isDark ? '#3D2858' : '#665990',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: isDark ? 0.38 : 0.18,
+    shadowRadius: 11,
+    elevation: 4,
+  } as any;
+}
+
+function clayCard(isDark: boolean) {
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(35, 22, 55, 0.58)' : 'rgba(102, 89, 144, 0.22)';
+    const light = isDark ? 'rgba(124, 111, 255, 0.06)' : 'rgba(255, 255, 255, 0.96)';
+    return { boxShadow: `8px 8px 22px ${drop}, -6px -6px 18px ${light}` } as any;
+  }
+  return {
+    shadowColor: isDark ? '#3D2858' : '#665990',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: isDark ? 0.42 : 0.16,
+    shadowRadius: 15,
+    elevation: 6,
+  } as any;
+}
+
+type AutofillMode = 'off' | 'password' | 'tel';
+
+function fieldAutofill(fieldKey: string, mode: AutofillMode = 'off') {
+  const base: Record<string, unknown> = {
+    autoComplete: mode === 'password' ? 'new-password' : 'off',
+    textContentType: mode === 'password' ? 'newPassword' : 'none',
+    autoCorrect: false,
+  };
+  if (Platform.OS !== 'web') return base;
+  return {
+    ...base,
+    nativeID: fieldKey,
+    id: fieldKey,
+    name: fieldKey,
+    'data-1p-ignore': 'true',
+    'data-lpignore': 'true',
+    'data-form-type': 'other',
+  };
+}
+
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const SECTION_COLORS = {
-  personal: { accent: '#3B82F6', bg_light: '#EFF6FF', bg_dark: '#172554' },
-  employment: { accent: '#10B981', bg_light: '#ECFDF5', bg_dark: '#052E16' },
-  contact: { accent: '#F59E0B', bg_light: '#FFFBEB', bg_dark: '#451A03' },
+  personal: { accent: '#665990', bg_light: '#EDE9F6', bg_dark: '#2A2438' },
+  employment: { accent: '#5BAA9A', bg_light: '#E8F5F1', bg_dark: '#1A2E28' },
+  contact: { accent: '#F57964', bg_light: '#FFF0ED', bg_dark: '#3D2220' },
 };
 
 // Replaced static DESIGNATION_CONFIG with a dynamic stylish generator
 const getDesigStyle = (name: string, id: string) => {
   const hash = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + parseInt(id);
   const colors = [
-    { color: '#8B5CF6', grad: ['#5B21B6', '#8B5CF6'] as [string, string], icon: 'star-outline' },
-    { color: '#3B82F6', grad: ['#1D4ED8', '#3B82F6'] as [string, string], icon: 'book-outline' },
-    { color: '#10B981', grad: ['#065F46', '#10B981'] as [string, string], icon: 'shield-outline' },
-    { color: '#F59E0B', grad: ['#B45309', '#F59E0B'] as [string, string], icon: 'calculator-outline' },
-    { color: '#EC4899', grad: ['#9D174D', '#EC4899'] as [string, string], icon: 'library-outline' },
-    { color: '#0EA5E9', grad: ['#0369A1', '#0EA5E9'] as [string, string], icon: 'briefcase-outline' },
-    { color: '#EF4444', grad: ['#991B1B', '#EF4444'] as [string, string], icon: 'car-outline' },
+    { color: '#665990', grad: ['#4A3F6B', '#665990'] as [string, string], icon: 'star-outline' },
+    { color: '#7C6FFF', grad: ['#52467A', '#7C6FFF'] as [string, string], icon: 'book-outline' },
+    { color: '#5BAA9A', grad: ['#3D6B60', '#5BAA9A'] as [string, string], icon: 'shield-outline' },
+    { color: '#F57964', grad: ['#C45E4C', '#F57964'] as [string, string], icon: 'calculator-outline' },
+    { color: '#9B7EDE', grad: ['#6B4FA8', '#9B7EDE'] as [string, string], icon: 'library-outline' },
+    { color: '#8B7FD4', grad: ['#5A4F8F', '#8B7FD4'] as [string, string], icon: 'briefcase-outline' },
+    { color: '#E8927C', grad: ['#B86555', '#E8927C'] as [string, string], icon: 'car-outline' },
   ];
   const defaults: Record<string, any> = {
     'Principal': colors[0],
@@ -71,9 +145,9 @@ const getDesigStyle = (name: string, id: string) => {
 };
 
 const GENDER_CONFIG: Record<string, { label: string; icon: string; grad: [string, string] }> = {
-  '1': { label: 'Male', icon: 'male-outline', grad: ['#3B82F6', '#6366F1'] },
-  '2': { label: 'Female', icon: 'female-outline', grad: ['#EC4899', '#F43F5E'] },
-  '3': { label: 'Other', icon: 'male-female-outline', grad: ['#10B981', '#14B8A6'] },
+  '1': { label: 'Male', icon: 'male-outline', grad: ['#665990', '#7C6FFF'] },
+  '2': { label: 'Female', icon: 'female-outline', grad: ['#E8927C', '#F57964'] },
+  '3': { label: 'Other', icon: 'male-female-outline', grad: ['#5BAA9A', '#7C6FFF'] },
 };
 
 // ─── Live Staff Avatar ────────────────────────────────────────────────────────
@@ -119,44 +193,66 @@ const avatarSt = StyleSheet.create({
 // ─── Animated InputField ──────────────────────────────────────────────────────
 const InputField = ({
   label, placeholder, value, onChangeText, keyboardType = 'default',
-  icon, secureTextEntry = false, required = false, accentColor = '#3B82F6', isDark = false,
+  icon, secureTextEntry = false, required = false, accentColor = FORM.brand, isDark = false,
+  fieldKey, autofillMode = 'off', ...rest
 }: any) => {
   const focused = useSharedValue(0);
+  const [showPassword, setShowPassword] = useState(false);
+  const [webReadOnly, setWebReadOnly] = useState(Platform.OS === 'web');
+  const isPassword = !!secureTextEntry;
+
   const borderStyle = useAnimatedStyle(() => ({
     borderColor: focused.value === 1
       ? accentColor
-      : isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)',
+      : FORM.border(isDark),
     borderWidth: focused.value === 1 ? 1.5 : 1,
   }));
 
+  const autofill = fieldKey ? fieldAutofill(fieldKey, autofillMode) : fieldAutofill('ims-stf-field', autofillMode);
+
   return (
     <View style={inputSt.group}>
-      <Text style={[inputSt.label, { color: isDark ? '#64748B' : '#64748B' }]}>
-        {label}{required && <Text style={{ color: '#EF4444' }}> *</Text>}
+      <Text style={[inputSt.label, { color: FORM.label(isDark) }]}>
+        {label}{required && <Text style={{ color: FORM.coral }}> *</Text>}
       </Text>
       <Animated.View style={[
         inputSt.wrapper,
-        { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' },
+        { backgroundColor: FORM.field(isDark) },
+        clayField(isDark),
         borderStyle,
       ]}>
         <Animated.View style={{ marginRight: 10 }}>
           <Ionicons
             name={icon}
             size={18}
-            color={isDark ? '#475569' : '#94A3B8'}
+            color={FORM.muted(isDark)}
           />
         </Animated.View>
         <AppTextInput
-          style={[inputSt.input, { color: isDark ? '#E2E8F0' : '#0F172A' }]}
+          style={[inputSt.input, { color: FORM.text(isDark) }]}
           placeholder={placeholder}
-          placeholderTextColor={isDark ? '#374151' : '#CBD5E1'}
+          placeholderTextColor={FORM.muted(isDark)}
           value={value}
           onChangeText={onChangeText}
           keyboardType={keyboardType as any}
-          secureTextEntry={secureTextEntry}
-          onFocus={() => { focused.value = withTiming(1, { duration: 160 }); }}
+          secureTextEntry={isPassword && !showPassword}
+          readOnly={webReadOnly}
+          onFocus={() => {
+            if (webReadOnly) setWebReadOnly(false);
+            focused.value = withTiming(1, { duration: 160 });
+          }}
           onBlur={() => { focused.value = withTiming(0, { duration: 180 }); }}
+          {...autofill}
+          {...rest}
         />
+        {isPassword && (
+          <ClayPasswordToggle
+            visible={showPassword}
+            onToggle={() => setShowPassword(v => !v)}
+            isDark={isDark}
+            accentColor={accentColor}
+          />
+        )}
       </Animated.View>
     </View>
   );
@@ -166,7 +262,7 @@ const inputSt = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '700', marginBottom: 7, letterSpacing: 0.1 },
   wrapper: {
     flexDirection: 'row', alignItems: 'center',
-    borderRadius: 13, paddingHorizontal: 14, height: 48,
+    borderRadius: 16, paddingHorizontal: 14, height: 50,
     borderWidth: 1,
   },
   input: { flex: 1, fontSize: 15, fontWeight: '500' },
@@ -176,8 +272,8 @@ const inputSt = StyleSheet.create({
 const DesignationSelector = ({ value, onChange, options, isDark }: any) => {
   return (
     <View style={desSt.group}>
-      <Text style={[desSt.label, { color: isDark ? '#64748B' : '#64748B' }]}>
-        Designation <Text style={{ color: '#EF4444' }}>*</Text>
+      <Text style={[desSt.label, { color: FORM.label(isDark) }]}>
+        Designation <Text style={{ color: FORM.coral }}>*</Text>
       </Text>
       <View style={desSt.grid}>
         {options.map((opt: any) => {
@@ -189,19 +285,20 @@ const DesignationSelector = ({ value, onChange, options, isDark }: any) => {
               key={key}
               style={({ pressed }) => [
                 desSt.card,
-                { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' },
-                { borderColor: active ? cfg.color : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)') },
+                { backgroundColor: FORM.field(isDark) },
+                clayField(isDark),
+                { borderColor: active ? cfg.color : FORM.border(isDark) },
                 { borderWidth: active ? 2 : 1 },
                 pressed && { opacity: 0.80 },
               ]}
               onPress={() => onChange(key)}
             >
-              <View style={[desSt.iconWrap, { backgroundColor: active ? cfg.color + '20' : (isDark ? '#0F172A' : '#E2E8F0') }]}>
-                <Ionicons name={cfg.icon as any} size={16} color={active ? cfg.color : (isDark ? '#475569' : '#94A3B8')} />
+              <View style={[desSt.iconWrap, { backgroundColor: active ? cfg.color + '20' : (isDark ? '#1A1726' : '#EDE9F6') }]}>
+                <Ionicons name={cfg.icon as any} size={16} color={active ? cfg.color : FORM.muted(isDark)} />
               </View>
               <Text style={[
                 desSt.cardText,
-                { color: active ? cfg.color : (isDark ? '#64748B' : '#94A3B8') },
+                { color: active ? cfg.color : FORM.muted(isDark) },
                 active && { fontWeight: '800' },
               ]}>
                 {opt.name}
@@ -234,10 +331,10 @@ const desSt = StyleSheet.create({
 // ─── Gender Toggle (pill-style) ───────────────────────────────────────────────
 const GenderToggle = ({ value, onChange, isDark }: any) => (
   <View style={genSt.group}>
-    <Text style={[genSt.label, { color: isDark ? '#64748B' : '#64748B' }]}>
-      Gender <Text style={{ color: '#EF4444' }}>*</Text>
+    <Text style={[genSt.label, { color: FORM.label(isDark) }]}>
+      Gender <Text style={{ color: FORM.coral }}>*</Text>
     </Text>
-    <View style={[genSt.track, { backgroundColor: isDark ? '#1E293B' : '#F1F5F9' }]}>
+    <View style={[genSt.track, { backgroundColor: isDark ? '#221F30' : '#EDE9F6' }]}>
       {Object.entries(GENDER_CONFIG).map(([key, cfg]) => {
         const active = value === key;
         return (
@@ -257,8 +354,8 @@ const GenderToggle = ({ value, onChange, isDark }: any) => (
               </LinearGradient>
             ) : (
               <View style={genSt.pillInactive}>
-                <Ionicons name={cfg.icon as any} size={14} color={isDark ? '#475569' : '#94A3B8'} />
-                <Text style={[genSt.pillText, { color: isDark ? '#475569' : '#94A3B8' }]}>{cfg.label}</Text>
+                <Ionicons name={cfg.icon as any} size={14} color={FORM.muted(isDark)} />
+                <Text style={[genSt.pillText, { color: FORM.muted(isDark) }]}>{cfg.label}</Text>
               </View>
             )}
           </Pressable>
@@ -284,8 +381,8 @@ const LoginRoleSelector = ({ value, onChange, isDark }: {
   isDark: boolean;
 }) => (
   <View style={loginRoleSt.group}>
-    <Text style={[loginRoleSt.label, { color: isDark ? '#64748B' : '#64748B' }]}>
-      Account Login Role <Text style={{ color: '#EF4444' }}>*</Text>
+    <Text style={[loginRoleSt.label, { color: FORM.label(isDark) }]}>
+      Account Login Role <Text style={{ color: FORM.coral }}>*</Text>
     </Text>
     <View style={loginRoleSt.grid}>
       {STAFF_ADD_LOGIN_ROLE_OPTIONS.map((opt) => {
@@ -295,9 +392,10 @@ const LoginRoleSelector = ({ value, onChange, isDark }: {
             key={opt.code}
             style={({ pressed }) => [
               loginRoleSt.card,
-              { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' },
+              { backgroundColor: FORM.field(isDark) },
+              clayField(isDark),
               {
-                borderColor: active ? '#F59E0B' : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
+                borderColor: active ? FORM.coral : FORM.border(isDark),
                 borderWidth: active ? 2 : 1,
               },
               pressed && { opacity: 0.85 },
@@ -306,12 +404,12 @@ const LoginRoleSelector = ({ value, onChange, isDark }: {
           >
             <Text style={[
               loginRoleSt.cardText,
-              { color: active ? '#F59E0B' : (isDark ? '#64748B' : '#94A3B8') },
+              { color: active ? FORM.coral : FORM.muted(isDark) },
               active && { fontWeight: '800' },
             ]}>
               {opt.label}
             </Text>
-            <Text style={[loginRoleSt.portalHint, { color: active ? '#D97706' : (isDark ? '#475569' : '#CBD5E1') }]}>
+            <Text style={[loginRoleSt.portalHint, { color: active ? '#E8927C' : FORM.muted(isDark) }]}>
               {opt.portal === 'staff' ? 'Staff portal' : `${opt.portal} portal`}
             </Text>
           </Pressable>
@@ -349,7 +447,8 @@ const SectionCard = ({
       entering={FadeInDown.delay(delay).duration(500).springify()}
       style={[
         secSt.card,
-        { backgroundColor: isDark ? '#111827' : '#FFFFFF', borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' },
+        { backgroundColor: FORM.surface(isDark), borderColor: FORM.border(isDark) },
+        clayCard(isDark),
       ]}
     >
       <View style={[secSt.bar, { backgroundColor: col.accent }]} />
@@ -358,7 +457,7 @@ const SectionCard = ({
           <View style={[secSt.iconWrap, { backgroundColor: isDark ? col.bg_dark : col.bg_light }]}>
             <Ionicons name={icon as any} size={16} color={col.accent} />
           </View>
-          <Text style={[secSt.title, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>{title}</Text>
+          <Text style={[secSt.title, { color: FORM.text(isDark) }]}>{title}</Text>
         </View>
         {children}
       </View>
@@ -367,10 +466,8 @@ const SectionCard = ({
 };
 const secSt = StyleSheet.create({
   card: {
-    flexDirection: 'row', borderRadius: 22, marginBottom: 16, overflow: 'hidden',
+    flexDirection: 'row', borderRadius: 24, marginBottom: 16, overflow: 'hidden',
     borderWidth: 1,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.07, shadowRadius: 12, elevation: 5,
   },
   bar: { width: 4 },
   inner: { flex: 1, padding: 20 },
@@ -382,32 +479,39 @@ const secSt = StyleSheet.create({
 // ─── Salary display row ───────────────────────────────────────────────────────
 const SalaryField = ({ value, onChange, isDark, accentColor }: any) => {
   const focused = useSharedValue(0);
+  const [webReadOnly, setWebReadOnly] = useState(Platform.OS === 'web');
   const borderStyle = useAnimatedStyle(() => ({
-    borderColor: focused.value === 1 ? accentColor : (isDark ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)'),
+    borderColor: focused.value === 1 ? accentColor : FORM.border(isDark),
     borderWidth: focused.value === 1 ? 1.5 : 1,
   }));
 
   return (
     <View style={inputSt.group}>
-      <Text style={[inputSt.label, { color: isDark ? '#64748B' : '#64748B' }]}>Monthly Salary</Text>
+      <Text style={[inputSt.label, { color: FORM.label(isDark) }]}>Monthly Salary</Text>
       <Animated.View style={[
         inputSt.wrapper,
-        { backgroundColor: isDark ? '#1E293B' : '#F8FAFC' },
+        { backgroundColor: FORM.field(isDark) },
+        clayField(isDark),
         borderStyle,
       ]}>
         {/* Rupee prefix badge */}
-        <View style={[salSt.prefix, { backgroundColor: isDark ? '#0F172A' : '#E2E8F0' }]}>
-          <Text style={[salSt.prefixText, { color: isDark ? '#64748B' : '#475569' }]}>₹</Text>
+        <View style={[salSt.prefix, { backgroundColor: isDark ? '#1A1726' : '#EDE9F6' }]}>
+          <Text style={[salSt.prefixText, { color: FORM.label(isDark) }]}>₹</Text>
         </View>
         <AppTextInput
-          style={[inputSt.input, { color: isDark ? '#E2E8F0' : '#0F172A', marginLeft: 8 }]}
+          style={[inputSt.input, { color: FORM.text(isDark), marginLeft: 8 }]}
           placeholder="e.g. 45,000"
-          placeholderTextColor={isDark ? '#374151' : '#CBD5E1'}
+          placeholderTextColor={FORM.muted(isDark)}
           value={value}
           onChangeText={onChange}
           keyboardType="numeric"
-          onFocus={() => { focused.value = withTiming(1, { duration: 160 }); }}
+          readOnly={webReadOnly}
+          onFocus={() => {
+            if (webReadOnly) setWebReadOnly(false);
+            focused.value = withTiming(1, { duration: 160 });
+          }}
           onBlur={() => { focused.value = withTiming(0, { duration: 180 }); }}
+          {...fieldAutofill('ims-stf-monthly-pay', 'off')}
         />
         {value ? (
           <View style={[salSt.perMonth, { backgroundColor: accentColor + '18' }]}>
@@ -553,7 +657,7 @@ export default function AddStaffScreen() {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#0A0F1E' : '#F1F5F9'} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#12101A' : '#F5F2FA'} />
       {!shellActive && <AdminHeader title={isEditMode ? 'Edit Staff' : 'Add Staff'} showBackButton />}
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
@@ -617,12 +721,14 @@ export default function AddStaffScreen() {
               <View style={styles.half}>
                 <InputField label="First Name" placeholder="Jane" value={formData.firstName}
                   onChangeText={(t: string) => update('firstName', t)}
-                  icon="person-outline" required accentColor={SECTION_COLORS.personal.accent} isDark={isDark} />
+                  icon="person-outline" required accentColor={SECTION_COLORS.personal.accent} isDark={isDark}
+                  fieldKey="ims-stf-given-name" autofillMode="off" />
               </View>
               <View style={styles.half}>
                 <InputField label="Last Name" placeholder="Doe" value={formData.lastName}
                   onChangeText={(t: string) => update('lastName', t)}
-                  icon="person-outline" required accentColor={SECTION_COLORS.personal.accent} isDark={isDark} />
+                  icon="person-outline" required accentColor={SECTION_COLORS.personal.accent} isDark={isDark}
+                  fieldKey="ims-stf-family-name" autofillMode="off" />
               </View>
             </View>
 
@@ -645,7 +751,8 @@ export default function AddStaffScreen() {
               <View style={styles.half}>
                 <InputField label="Staff Code" placeholder="STF-001" value={formData.staffCode}
                   onChangeText={(t: string) => update('staffCode', t)} icon="id-card-outline"
-                  required accentColor={SECTION_COLORS.employment.accent} isDark={isDark} />
+                  required accentColor={SECTION_COLORS.employment.accent} isDark={isDark}
+                  fieldKey="ims-stf-employee-code" autofillMode="off" />
               </View>
               <View style={styles.half}>
                 <AppDatePicker
@@ -690,18 +797,22 @@ export default function AddStaffScreen() {
             />
             <InputField label="Email Address" placeholder="staff@school.edu" value={formData.email}
               onChangeText={(t: string) => update('email', t)} keyboardType="email-address"
-              icon="mail-outline" accentColor={SECTION_COLORS.contact.accent} isDark={isDark} />
+              icon="mail-outline" accentColor={SECTION_COLORS.contact.accent} isDark={isDark}
+              fieldKey="ims-stf-contact-addr" autofillMode="off" autoCapitalize="none" />
             <InputField label="Phone Number" placeholder="+91 98765 43210" value={formData.phone}
               onChangeText={(t: string) => update('phone', t)} keyboardType="phone-pad"
-              icon="call-outline" accentColor={SECTION_COLORS.contact.accent} isDark={isDark} />
+              icon="call-outline" accentColor={SECTION_COLORS.contact.accent} isDark={isDark}
+              fieldKey="ims-stf-mobile-line" autofillMode="tel" />
             {!isEditMode ? (
               <InputField label="Initial Password" placeholder="Min 6 characters" value={formData.password}
                 onChangeText={(t: string) => update('password', t)} secureTextEntry
-                icon="lock-closed-outline" required accentColor={SECTION_COLORS.contact.accent} isDark={isDark} />
+                icon="lock-closed-outline" required accentColor={SECTION_COLORS.contact.accent} isDark={isDark}
+                fieldKey="ims-stf-portal-secret" autofillMode="password" />
             ) : (
               <InputField label="Reset Password" placeholder="Leave empty to keep current" value={formData.password}
                 onChangeText={(t: string) => update('password', t)} secureTextEntry
-                icon="key-outline" accentColor={SECTION_COLORS.contact.accent} isDark={isDark} />
+                icon="key-outline" accentColor={SECTION_COLORS.contact.accent} isDark={isDark}
+                fieldKey="ims-stf-reset-secret" autofillMode="password" />
             )}
           </SectionCard>
 
@@ -781,7 +892,7 @@ const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   // Save button
   saveWrap: {
     borderRadius: 18, marginTop: 8,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 10 },
+    shadowColor: '#665990', shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28, shadowRadius: 20, elevation: 12,
   },
   saveBtn: {

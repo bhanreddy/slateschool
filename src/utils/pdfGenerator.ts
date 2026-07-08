@@ -953,7 +953,19 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     const dateFull = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
     const dateTime = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
     const feeName = transaction.fee_type || 'School Fee';
-    const amountNum = Number(transaction.amount || 0);
+    // Combined multi-fee-type receipt: one receipt lists several paid fee types.
+    const lineItems = (transaction as FeeTransaction & {
+      line_items?: { fee_type: string; academic_year?: string; amount: number }[];
+    }).line_items;
+    const hasLineItems = Array.isArray(lineItems) && lineItems.length > 0;
+    const paidFeeIds = new Set(
+      ((transaction as FeeTransaction & { paid_fee_ids?: string[] }).paid_fee_ids || [])
+        .concat(transaction.student_fee_id ? [transaction.student_fee_id] : [])
+        .filter(Boolean),
+    );
+    const amountNum = hasLineItems
+      ? lineItems!.reduce((sum, li) => sum + Number(li.amount || 0), 0)
+      : Number(transaction.amount || 0);
     const amountFmt = amountNum.toLocaleString('en-IN', { minimumFractionDigits: 2 });
     const paymentMethod = (transaction.payment_method || 'Cash').toUpperCase();
     const academicYearText =
@@ -1017,7 +1029,7 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
           const isPaid = line.balance_due <= 0;
           const isThisPayment =
             line.student_fee_id != null &&
-            line.student_fee_id === transaction.student_fee_id;
+            paidFeeIds.has(line.student_fee_id);
           const cls = [isThisPayment ? 'this-pay' : '', isPaid ? 'paid' : '']
             .filter(Boolean)
             .join(' ');
@@ -1070,12 +1082,21 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
         <table class="rc-table">
           <thead><tr><th>Fee Description</th><th>Amount (₹)</th></tr></thead>
           <tbody>
-            <tr><td>${escapeHtml(feeName)}</td><td class="amt">${amountFmt}</td></tr>
+            ${hasLineItems
+              ? lineItems!
+                  .map((li) => {
+                    const label = li.academic_year
+                      ? `${escapeHtml(li.fee_type)} <span style="color:#6B7280;font-weight:500;">(${escapeHtml(String(li.academic_year))})</span>`
+                      : escapeHtml(li.fee_type);
+                    return `<tr><td>${label}</td><td class="amt">${fmtINR(Number(li.amount || 0))}</td></tr>`;
+                  })
+                  .join('')
+              : `<tr><td>${escapeHtml(feeName)}</td><td class="amt">${amountFmt}</td></tr>`}
           </tbody>
         </table>
         <div class="rc-totals">
-          <div class="rc-totrow"><span>Total Fee</span><span>₹${totalFeeFmt}</span></div>
-          ${(transaction.discount ?? 0) > 0 ? `<div class="rc-totrow"><span>Discount</span><span>− ₹${fmtINR(transaction.discount ?? 0)}</span></div>` : ''}
+          <div class="rc-totrow"><span>${hasLineItems ? 'Total This Payment' : 'Total Fee'}</span><span>₹${hasLineItems ? amountFmt : totalFeeFmt}</span></div>
+          ${!hasLineItems && (transaction.discount ?? 0) > 0 ? `<div class="rc-totrow"><span>Discount</span><span>− ₹${fmtINR(transaction.discount ?? 0)}</span></div>` : ''}
           <div class="rc-totrow grand"><span>Amount Paid</span><span>₹${amountFmt}</span></div>
         </div>
         <div class="rc-words"><strong>In Words:</strong> ${words}</div>

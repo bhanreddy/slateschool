@@ -6,15 +6,20 @@ import { useTranslation } from 'react-i18next';
 import * as Haptics from '../utils/haptics';
 import { isTelugu as isTeluguCheck } from '../utils/lang';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { interpolateColor, interpolate, useAnimatedStyle, Extrapolation, SharedValue, useAnimatedReaction, runOnJS } from 'react-native-reanimated';
+import Animated, { interpolateColor, interpolate, useAnimatedStyle, Extrapolation, SharedValue } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import MenuOverlay from './MenuOverlay';
+import ClayIconButton from './ClayIconButton';
 import { Shadows, Radii, Spacing } from '../theme/themes';
 import { useTheme } from '../hooks/useTheme';
 import { useFeatures } from '../hooks/useFeatures';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SCHOOL_NAME } from '../constants/school';
+import { schoolColorWithAlpha } from '../constants/schoolConfig';
+
+/** Brand violet used to tint every clay puck's shadow across the app. */
+const CLAY_ACCENT = '#7C6BB8';
 
 /** Reanimated can wrap the vector icon; it must not be nested inside `Animated.Text` (causes "Text strings must be rendered within a <Text> component" on Android). */
 
@@ -38,7 +43,6 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
     const [isTeluguLang, setIsTeluguLang] = useState(isTeluguCheck(i18n.language));
     const [menuVisible, setMenuVisible] = useState(false);
     const insets = useSafeAreaInsets();
-    const [iconTint, setIconTint] = useState<string>('#FFFFFF');
 
     React.useEffect(() => {
         setIsTeluguLang(isTeluguCheck(i18n.language));
@@ -81,13 +85,12 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
 
     const animatedStyle = useAnimatedStyle(() => {
         if (!scrollY) {
-            return isDark
-                ? { backgroundColor: 'transparent', borderBottomColor: 'transparent', shadowOpacity: 0 }
-                : { backgroundColor: '#FFFFFF', borderBottomColor: '#E2E8F0', shadowOpacity: 0.1 };
+            /* The cosmic gradient (below) always paints over this — only the lifted shadow matters here. */
+            return { backgroundColor: 'transparent', borderBottomColor: 'transparent', shadowOpacity: 0.35 };
         }
 
         const bgEnd = isDark ? 'rgba(15,23,42,0.97)' : 'rgba(255,255,255,0.95)';
-        const borderEnd = isDark ? 'rgba(51,65,85,0.95)' : 'rgba(226,232,240,1)';
+        const borderEnd = schoolColorWithAlpha(CLAY_ACCENT, isDark ? 0.4 : 0.2);
         const bgColor = interpolateColor(
             scrollY.value,
             [0, 50],
@@ -96,12 +99,12 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
         const borderColor = interpolateColor(
             scrollY.value,
             [0, 50],
-            [isDark ? 'rgba(51,65,85,0)' : 'rgba(226,232,240,0)', borderEnd]
+            [schoolColorWithAlpha(CLAY_ACCENT, 0), borderEnd]
         );
         const shadowOpacity = interpolate(
             scrollY.value,
             [0, 50],
-            [0, 0.1],
+            [0, isDark ? 0.35 : 0.16],
             Extrapolation.CLAMP
         );
 
@@ -140,23 +143,10 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
         };
     }, [isDark]);
 
-    // Safely drive vector icon color into local state instead of using setNativeProps
-    useAnimatedReaction(
-        () => {
-            if (!scrollY) return '#FFFFFF';
-            const end = isDark ? '#F1F5F9' : '#1F2937';
-            return interpolateColor(scrollY.value, [0, 50], ['#FFFFFF', end]);
-        },
-        (currentValue) => {
-            runOnJS(setIconTint)(currentValue as string);
-        },
-        [isDark, scrollY]
-    );
-
     return (
         <Animated.View style={[
             styles.container,
-            { paddingTop: Math.max(insets.top, 36) }, // Guarantee enough space for status bar
+            { paddingTop: Math.max(insets.top, 36), shadowColor: CLAY_ACCENT }, // Guarantee enough space for status bar
             isAbsolute && styles.absoluteHeader,
             animatedStyle,
             containerStyleOverride,
@@ -170,21 +160,19 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
                 />
             )}
 
-            {/* Left: native = menu on home, back on subpages; web = both */}
+            {/* Left: native = menu on home, back on subpages; web = both.
+                Pucks are always dark-clay — the header's brand identity is dark/cosmic
+                whether it's overlaying a hero image or scrolled into a solid app bar. */}
             <View style={[styles.leftNav, showNavBack && showNavMenu && styles.leftNavDual]}>
                 {showNavBack ? (
-                    <Pressable onPress={handleBack} style={Platform.OS === 'web' && { cursor: 'pointer' }}>
-                        <Animated.View style={[styles.iconButton, iconColorStyle]}>
-                            <Ionicons name="arrow-back" size={22} color={iconTint} />
-                        </Animated.View>
-                    </Pressable>
+                    <ClayIconButton onPress={handleBack} isDark accent={CLAY_ACCENT}>
+                        <Ionicons name="arrow-back" size={19} color="#F4F0FB" />
+                    </ClayIconButton>
                 ) : null}
                 {showNavMenu ? (
-                    <Pressable onPress={handleMenuPress} style={Platform.OS === 'web' && { cursor: 'pointer' }}>
-                        <Animated.View style={[styles.iconButton, iconColorStyle]}>
-                            <Ionicons name="menu" size={22} color={iconTint} />
-                        </Animated.View>
-                    </Pressable>
+                    <ClayIconButton onPress={handleMenuPress} isDark accent={CLAY_ACCENT}>
+                        <Ionicons name="menu" size={19} color="#F4F0FB" />
+                    </ClayIconButton>
                 ) : null}
             </View>
 
@@ -269,15 +257,18 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
 
                 {/* Settings Button */}
                 {showSettingsButton && (
-                    <Pressable
+                    <ClayIconButton
                         onPress={() => {
                             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             router.push('/Screen/settings' as any);
                         }}
-                        style={[{ padding: 4 }, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                        isDark
+                        accent={CLAY_ACCENT}
+                        round
+                        size={38}
                     >
-                        <Ionicons name="settings-outline" size={20} color={iconTint} />
-                    </Pressable>
+                        <Ionicons name="settings-outline" size={17} color="#F4F0FB" />
+                    </ClayIconButton>
                 )}
             </View>
 
@@ -294,22 +285,20 @@ const styles = StyleSheet.create({
         paddingBottom: Spacing.sm + 4, // Added more bottom padding
         borderBottomWidth: StyleSheet.hairlineWidth,
         borderBottomColor: 'transparent',
+        borderBottomLeftRadius: 26,
+        borderBottomRightRadius: 26,
+        overflow: 'hidden',
         ...Shadows.sm,
+        shadowOffset: { width: 0, height: 10 },
+        shadowRadius: 20,
     },
     leftNav: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 10,
     },
     leftNavDual: {
-        gap: 6,
-    },
-    iconButton: {
-        width: 40,
-        height: 40,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderRadius: Radii.sm,
-        backgroundColor: '#F8FAFC',
+        gap: 10,
     },
     centerRegion: {
         flex: 1,

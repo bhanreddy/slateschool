@@ -131,7 +131,10 @@
   },
   "schoolRibbon": {
     "tel": "Tel:",
-    "email": "Email:"
+    "email": "Email:",
+    "mottoLabel": "Our Motto",
+    "addressLabel": "Campus",
+    "contactLabel": "Contact"
   },
   "admin_dashboard": {
     "title": "Principal Dashboard",

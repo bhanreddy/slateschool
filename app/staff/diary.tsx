@@ -26,6 +26,56 @@ import {
   type DiaryHistoryTabId,
 } from '../../src/components/diary/DiaryHistoryChrome';
 
+// ─── Clay Helpers ──────────────────────────────────────────────────
+function clay(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
+  const spread = raised === 'lg' ? 24 : raised === 'sm' ? 12 : 18;
+  const dy = raised === 'lg' ? 12 : raised === 'sm' ? 6 : 9;
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(0,0,0,0.60)' : 'rgba(166,180,200,0.55)';
+    const light = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,1)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.9)';
+    const innerLo = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(166,180,200,0.35)';
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${drop}, ` +
+        `-${dy}px -${dy}px ${spread}px ${light}, ` +
+        `inset 3px 3px 6px ${innerHi}, ` +
+        `inset -3px -3px 6px ${innerLo}`,
+    };
+  }
+  return {
+    shadowColor: isDark ? '#000000' : '#94A3B8',
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: isDark ? 0.45 : 0.26,
+    shadowRadius: spread,
+    elevation: raised === 'lg' ? 10 : raised === 'sm' ? 4 : 7,
+  };
+}
+
+function clayInset(isDark: boolean): any {
+  if (Platform.OS === 'web') {
+    const innerLo = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(166,180,200,0.45)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)';
+    return {
+      boxShadow: `inset 4px 4px 8px ${innerLo}, inset -4px -4px 8px ${innerHi}`,
+    };
+  }
+  return {
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(0,0,0,0.22)' : 'rgba(148,163,184,0.20)',
+  };
+}
+
+function clayCard(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
+  return {
+    backgroundColor: isDark ? '#1A2332' : '#EFF2F9',
+    borderRadius: raised === 'lg' ? 30 : 24,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.7)',
+    ...clay(isDark, raised),
+  };
+}
+
 /** Staff diary form copy — teachers post homework in Telugu. */
 const TE = {
   header: 'డైరీ & హోంవర్క్',
@@ -322,9 +372,9 @@ export default function StaffDiary() {
     </View>;
   }
   return <View style={[styles.container, {
-    backgroundColor: theme.colors.background
+    backgroundColor: isDark ? '#0B1020' : '#EFF2F9'
   }]}>
-    <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={theme.colors.background} />
+    <StatusBar barStyle={isDark ? "light-content" : "dark-content"} backgroundColor={isDark ? '#0B1020' : '#EFF2F9'} />
     <StaffHeader title={TE.header} showBackButton={true} />
     {isViewingAsAdmin && <ViewAsBanner name={viewAsName} limited />}
     <ScrollView ref={scrollRef} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
@@ -365,16 +415,21 @@ export default function StaffDiary() {
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.assignmentsScroll} pointerEvents={isEditing ? 'none' : 'auto'}>
             {assignments.map((assign) => {
-              return <TouchableOpacity key={assign.assignment_id} disabled={isEditing} style={[styles.assignmentChip, {
-                borderColor: theme.colors.border,
-                backgroundColor: theme.colors.card
-              }, selectedAssignment?.assignment_id === assign.assignment_id && {
-                borderColor: theme.colors.primary,
-                backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : '#EEF2FF'
-              }]} onPress={() => setSelectedAssignment(assign)}>
+              const isSelected = selectedAssignment?.assignment_id === assign.assignment_id;
+              return <TouchableOpacity key={assign.assignment_id} disabled={isEditing} style={[styles.assignmentChip,
+                clayCard(isDark, 'sm'),
+                { borderRadius: 9999, backgroundColor: isDark ? '#1A2332' : '#EFF2F9', borderWidth: 0 },
+                isSelected && {
+                  ...clayInset(isDark),
+                  borderRadius: 9999,
+                  borderColor: theme.colors.primary,
+                  backgroundColor: isDark ? 'rgba(99, 102, 241, 0.2)' : '#E0E7FF',
+                  borderWidth: 1,
+                }
+              ]} onPress={() => setSelectedAssignment(assign)}>
                 <Text style={[styles.assignmentText, {
                   color: theme.colors.textSecondary
-                }, selectedAssignment?.assignment_id === assign.assignment_id && {
+                }, isSelected && {
                   color: theme.colors.primary,
                   fontWeight: '700'
                 }]}>
@@ -384,10 +439,12 @@ export default function StaffDiary() {
             })}
           </ScrollView>
         </View>
-        <Animated.View entering={FadeInDown.delay(100).duration(600)} style={[styles.formCard, {
-          backgroundColor: theme.colors.card,
-          borderColor: theme.colors.border
-        }]}>
+        <Animated.View entering={FadeInDown.delay(100).duration(600)} style={[styles.formCard,
+          clayCard(isDark, 'md'),
+          {
+            backgroundColor: isDark ? '#1A2332' : '#EFF2F9',
+          }
+        ]}>
           <View style={styles.formHeader}>
             <Text style={[styles.cardTitle, {
               color: theme.colors.textStrong
@@ -398,7 +455,7 @@ export default function StaffDiary() {
               <Text style={styles.existingBadgeText}>{TE.existingEntry}</Text>
             </View>}
           </View>
-          <View style={[styles.teluguHint, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5', borderColor: isDark ? 'rgba(16,185,129,0.25)' : '#A7F3D0' }]}>
+          <View style={[styles.teluguHint, clayInset(isDark) as any, { backgroundColor: isDark ? 'rgba(16,185,129,0.12)' : '#ECFDF5', borderColor: isDark ? 'rgba(16,185,129,0.25)' : '#A7F3D0', borderWidth: 1.5, borderRadius: 14 }]}>
             <Ionicons name="language-outline" size={16} color={isDark ? '#34D399' : '#059669'} />
             <Text style={[styles.teluguHintText, { color: isDark ? '#6EE7B7' : '#047857' }]}>{TE.teluguHint}</Text>
           </View>
@@ -406,21 +463,25 @@ export default function StaffDiary() {
             <Text style={[styles.label, {
               color: theme.colors.textSecondary
             }]}>{TE.titleLabel}</Text>
-            <AppTextInput style={{
-              backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
-              borderColor: theme.colors.border,
+            <AppTextInput style={[{
+              backgroundColor: isDark ? '#0F1524' : '#E8EDF5',
+              borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)',
+              borderWidth: 1.5,
+              borderRadius: 14,
               color: theme.colors.text
-            }} placeholder={TE.titlePlaceholder} placeholderTextColor="#94A3B8" value={title} onChangeText={setTitle} />
+            }, clayInset(isDark) as any]} placeholder={TE.titlePlaceholder} placeholderTextColor="#94A3B8" value={title} onChangeText={setTitle} />
           </View>
           <View style={styles.inputGroup}>
             <Text style={[styles.label, {
               color: theme.colors.textSecondary
             }]}>{TE.descLabel}</Text>
             <AppTextInput style={[styles.textArea, {
-              backgroundColor: isDark ? theme.colors.background : '#F9FAFB',
-              borderColor: theme.colors.border,
+              backgroundColor: isDark ? '#0F1524' : '#E8EDF5',
+              borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)',
+              borderWidth: 1.5,
+              borderRadius: 14,
               color: theme.colors.text
-            }]} placeholder={TE.descPlaceholder} placeholderTextColor="#94A3B8" multiline numberOfLines={4} value={description} onChangeText={setDescription} textAlignVertical="top" />
+            }, clayInset(isDark) as any]} placeholder={TE.descPlaceholder} placeholderTextColor="#94A3B8" multiline numberOfLines={4} value={description} onChangeText={setDescription} textAlignVertical="top" />
           </View>
           <View style={styles.row}>
             <AppDatePicker
@@ -430,11 +491,13 @@ export default function StaffDiary() {
               minimumDate={new Date()}
               isDark={isDark}
               containerStyle={{ flex: 1, marginBottom: 0 }}
+              wrapperStyle={{ ...(clayInset(isDark) as any), backgroundColor: isDark ? '#0F1524' : '#E8EDF5', borderWidth: 1.5, borderColor: isDark ? 'rgba(99,102,241,0.2)' : 'rgba(99,102,241,0.15)', borderRadius: 14 }}
             />
           </View>
-          <TouchableOpacity style={[styles.postButton, {
+          <TouchableOpacity style={[styles.postButton, clay(isDark, 'sm'), {
             backgroundColor: theme.colors.primary,
-            opacity: submitting ? 0.7 : 1
+            opacity: submitting ? 0.7 : 1,
+            borderRadius: 16,
           }]} activeOpacity={0.8} onPress={handlePost} disabled={submitting}>
             {submitting ? <LogoLoader color="#fff" /> : <>
               <Text style={styles.postButtonText}>{existingEntry ? TE.updateHomework : TE.postHomework}</Text>
@@ -463,6 +526,7 @@ export default function StaffDiary() {
       </View>
       <HomeworkDayList
         theme={theme}
+        isDark={isDark}
         styles={styles}
         diaryEntries={diaryEntries}
         displayYmd={activeTab === 'today' ? todayYmd : historyDate}
@@ -484,6 +548,7 @@ export default function StaffDiary() {
 
 function HomeworkDayList({
   theme,
+  isDark,
   styles,
   diaryEntries,
   displayYmd,
@@ -491,6 +556,7 @@ function HomeworkDayList({
   labels,
 }: {
   theme: Theme;
+  isDark: boolean;
   styles: Record<string, object>;
   diaryEntries: DiaryEntry[];
   displayYmd: string;
@@ -526,9 +592,9 @@ function HomeworkDayList({
             entering={FadeInDown.delay(100 + index * 50).duration(600)}
             style={[
               styles.postCard,
+              clayCard(isDark, 'sm'),
               {
-                backgroundColor: theme.colors.card,
-                borderColor: theme.colors.border,
+                backgroundColor: isDark ? '#1A2332' : '#EFF2F9',
               },
             ]}
           >

@@ -1,8 +1,10 @@
 import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Platform } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { usePathname, useRouter } from 'expo-router';
+import Animated, {
+  useSharedValue, useAnimatedStyle, withTiming, withSpring, withSequence
+} from 'react-native-reanimated';
 import * as Haptics from '../utils/haptics';
 import { useTheme } from '../hooks/useTheme';
 import { SCHOOL_NAME } from '../constants/school';
@@ -64,6 +66,207 @@ const SECTION_LABELS: Record<'navigation' | 'manage' | 'reports', string> = {
   reports: 'REPORTS',
 };
 
+function getCategoryClayColors(category: string, isDark: boolean) {
+  let bg = '#4A72E6';
+  let shadowColor = '#253FA3';
+  if (category === 'Academic' || category === 'AI') {
+    bg = isDark ? '#3053C4' : '#4A72E6';
+    shadowColor = isDark ? '#1C318F' : '#253FA3';
+  } else if (category === 'Finance') {
+    bg = isDark ? '#1B7F5F' : '#2CB288';
+    shadowColor = isDark ? '#0D4E3A' : '#136146';
+  } else if (category === 'Analytics') {
+    bg = isDark ? '#5033B3' : '#825AE6';
+    shadowColor = isDark ? '#2F187A' : '#4925A3';
+  } else if (category === 'Comms') {
+    bg = isDark ? '#9B531C' : '#E58539';
+    shadowColor = isDark ? '#5C2D0B' : '#75390E';
+  } else if (category === 'Support') {
+    bg = isDark ? '#9E4437' : '#E06D5E';
+    shadowColor = isDark ? '#5B1E16' : '#7D2F23';
+  } else if (category === 'Ops') {
+    bg = isDark ? '#9E731D' : '#E6AE3C';
+    shadowColor = isDark ? '#5A3E08' : '#7D550A';
+  } else if (category === 'HR') {
+    bg = isDark ? '#9E333C' : '#E65A65';
+    shadowColor = isDark ? '#5E1015' : '#7D1B22';
+  } else if (category === 'Security') {
+    bg = isDark ? '#9E2833' : '#E64A57';
+    shadowColor = isDark ? '#5E0B11' : '#7D161F';
+  }
+  return { bg, shadowColor };
+}
+
+function SidebarRow({
+  item,
+  collapsed,
+  active,
+  isDark,
+  onNavigate,
+  styles,
+}: {
+  item: WebSidebarActionItem;
+  collapsed: boolean;
+  active: boolean;
+  isDark: boolean;
+  onNavigate: (route: string) => void;
+  styles: any;
+}) {
+  const scale = useSharedValue(1);
+  const translateY = useSharedValue(0);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { translateY: translateY.value }
+    ]
+  }));
+
+  const handlePressIn = () => {
+    scale.value = withTiming(0.98, { duration: 150 });
+    translateY.value = withTiming(1, { duration: 150 });
+  };
+
+  const handlePressOut = () => {
+    scale.value = withTiming(1, { duration: 150 });
+    translateY.value = withTiming(0, { duration: 150 });
+  };
+
+  const category = item.category ?? 'Academic';
+  const showBadge = item.badge !== undefined && item.badge > 0;
+  
+  const clayStyle = useMemo(() => {
+    if (!active) {
+      return {
+        backgroundColor: isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(15, 23, 42, 0.02)',
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(15, 23, 42, 0.04)',
+      };
+    }
+
+    const { bg, shadowColor } = getCategoryClayColors(category, isDark);
+    const borderRadius = 14;
+
+    if (Platform.OS === 'web') {
+      return {
+        backgroundColor: bg,
+        borderRadius,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.45)',
+        boxShadow:
+          `0px 6px 14px ${shadowColor}26, ` +
+          `-4px -4px 10px ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)'}, ` +
+          `inset 2px 2px 4px rgba(255, 255, 255, 0.45), ` +
+          `inset -2.5px -2.5px 5px rgba(0, 0, 0, 0.16)`
+      };
+    }
+
+    return {
+      backgroundColor: bg,
+      borderRadius,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.45)',
+      shadowColor,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: isDark ? 0.45 : 0.28,
+      shadowRadius: 10,
+      elevation: 4,
+    };
+  }, [category, active, isDark]);
+
+  return (
+    <Pressable
+      onPress={() => onNavigate(item.route)}
+      onHoverIn={() => {
+        scale.value = withTiming(1.02, { duration: 180 });
+        translateY.value = withTiming(-2, { duration: 180 });
+      }}
+      onHoverOut={() => {
+        scale.value = withTiming(1, { duration: 180 });
+        translateY.value = withTiming(0, { duration: 180 });
+      }}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[Platform.OS === 'web' && { cursor: 'pointer' }]}
+    >
+      <Animated.View
+        style={[
+          styles.row,
+          collapsed && styles.rowCollapsed,
+          animStyle,
+          clayStyle,
+        ]}
+      >
+        <View style={[
+          styles.iconWrap, 
+          collapsed && styles.iconWrapCollapsed, 
+          active && styles.iconWrapActive,
+          active && (Platform.OS === 'web' ? {
+            boxShadow: '1px 2px 4px rgba(0,0,0,0.12), inset 1px 1px 2px rgba(255,255,255,0.35)'
+          } : {
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 1.5 },
+            shadowOpacity: 0.1,
+            shadowRadius: 2,
+            elevation: 1.5
+          })
+        ]}>
+          <Ionicons
+            name={item.icon}
+            size={20}
+            color={
+              active
+                ? '#FFFFFF'
+                : isDark
+                  ? 'rgba(255,255,255,0.45)'
+                  : 'rgba(15,23,42,0.48)'
+            }
+          />
+          {collapsed && showBadge ? <View style={styles.badgeDot} /> : null}
+        </View>
+
+        {!collapsed ? (
+          <View style={styles.meta}>
+            <View style={styles.titleRow}>
+              <Text style={[styles.itemTitle, active && styles.itemTitleActive]} numberOfLines={2}>
+                {item.title}
+              </Text>
+              {showBadge ? (
+                <View style={[
+                  styles.badge, 
+                  { 
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.9)',
+                    borderColor: isDark ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.85)',
+                    borderWidth: 1,
+                    ...(Platform.OS === 'web' ? {
+                      boxShadow: '1px 1.5px 3px rgba(0,0,0,0.08), inset 1px 1px 1.5px rgba(255,255,255,0.35)'
+                    } : {
+                      shadowColor: '#000000',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.08,
+                      shadowRadius: 2,
+                      elevation: 1
+                    })
+                  }
+                ]}>
+                  <Text style={[styles.badgeText, { color: active ? '#FFFFFF' : (isDark ? '#FFFFFF' : '#0F172A') }]}>
+                    {item.badge! > 99 ? '99+' : item.badge}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+            {item.category ? (
+              <Text style={[styles.category, active && styles.categoryActive]} numberOfLines={1}>
+                {item.category.toUpperCase()}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 export default function DashboardWebSidebar({ collapsed, items }: DashboardWebSidebarProps) {
   const { isDark } = useTheme();
   const pathname = usePathname();
@@ -102,112 +305,87 @@ export default function DashboardWebSidebar({ collapsed, items }: DashboardWebSi
     [router],
   );
 
-  const accentTop = '#3B82F6';
+  const clayBrandPillStyle = useMemo(() => {
+    const bg = isDark ? '#3053C4' : '#4A72E6'; // Vibrant clay periwinkle blue
+    const shadowColor = isDark ? '#1C318F' : '#253FA3';
+    
+    if (Platform.OS === 'web') {
+      return {
+        backgroundColor: bg,
+        borderWidth: 1,
+        borderColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.45)',
+        boxShadow:
+          `0px 8px 18px ${shadowColor}33, ` +
+          `-4px -4px 10px ${isDark ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.85)'}, ` +
+          `inset 2px 2px 4px rgba(255, 255, 255, 0.45), ` +
+          `inset -2.5px -2.5px 5px rgba(0, 0, 0, 0.16)`
+      };
+    }
+
+    return {
+      backgroundColor: bg,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.45)',
+      shadowColor,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: isDark ? 0.45 : 0.28,
+      shadowRadius: 12,
+      elevation: 6,
+    };
+  }, [isDark]);
+
+  const clayBrandOrbStyle = useMemo(() => {
+    if (Platform.OS === 'web') {
+      return {
+        backgroundColor: 'rgba(255, 255, 255, 0.22)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.32)',
+        boxShadow: '1px 2px 4px rgba(0,0,0,0.12), inset 1px 1px 2px rgba(255,255,255,0.35)'
+      };
+    }
+    return {
+      backgroundColor: 'rgba(255, 255, 255, 0.22)',
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.32)',
+      shadowColor: '#000000',
+      shadowOffset: { width: 0, height: 1.5 },
+      shadowOpacity: 0.1,
+      shadowRadius: 2,
+      elevation: 1.5
+    };
+  }, []);
 
   const renderRow = (item: WebSidebarActionItem) => {
     const active = routeIsActive(pathname, item.route);
-    const [g0, g1] = item.gradient;
-    const showBadge = item.badge !== undefined && item.badge > 0;
-
     return (
-      <Pressable
+      <SidebarRow
         key={item.route}
-        onPress={() => onNavigate(item.route)}
-        style={[styles.row, collapsed && styles.rowCollapsed, Platform.OS === 'web' && { cursor: 'pointer' }]}
-      >
-        {active ? (
-          <>
-            <LinearGradient
-              colors={[g0, g1]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={[StyleSheet.absoluteFill, styles.rowActiveFill]}
-            />
-            <LinearGradient
-              colors={[`${g0}FF`, `${g0}00`]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={styles.activeLeftGlow}
-            />
-          </>
-        ) : (
-          <View style={styles.rowGhost} />
-        )}
-
-        <View style={[styles.iconWrap, collapsed && styles.iconWrapCollapsed, active && styles.iconWrapActive]}>
-          <Ionicons
-            name={item.icon}
-            size={22}
-            color={
-              active
-                ? '#FFFFFF'
-                : isDark
-                  ? 'rgba(255,255,255,0.38)'
-                  : 'rgba(15,23,42,0.42)'
-            }
-          />
-          {collapsed && showBadge ? <View style={styles.badgeDot} /> : null}
-        </View>
-
-        {!collapsed ? (
-          <View style={styles.meta}>
-            <View style={styles.titleRow}>
-              <Text style={[styles.itemTitle, active && styles.itemTitleActive]} numberOfLines={2}>
-                {item.title}
-              </Text>
-              {showBadge ? (
-                <View style={[styles.badge, { backgroundColor: g0 }]}>
-                  <Text style={styles.badgeText}>{item.badge! > 99 ? '99+' : item.badge}</Text>
-                </View>
-              ) : null}
-            </View>
-            {item.category ? (
-              <Text style={[styles.category, active && styles.categoryActive]} numberOfLines={1}>
-                {item.category.toUpperCase()}
-              </Text>
-            ) : null}
-          </View>
-        ) : null}
-      </Pressable>
+        item={item}
+        collapsed={collapsed}
+        active={active}
+        isDark={isDark}
+        onNavigate={onNavigate}
+        styles={styles}
+      />
     );
   };
 
   return (
     <View style={[styles.shell, { width }]}>
       <View
-        style={[StyleSheet.absoluteFill, { backgroundColor: isDark ? '#0D1120' : '#F8FAFF' }]}
-      />
-      <View
-        style={[
-          StyleSheet.absoluteFill,
-          {
-            backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.65)',
-            borderRightWidth: 0,
-          },
-        ]}
-      />
-      <LinearGradient
-        pointerEvents="none"
-        colors={[`${accentTop}55`, `${accentTop}00`]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
-        style={styles.rightBorderGradient}
+        style={[StyleSheet.absoluteFill, { 
+          backgroundColor: isDark ? '#0D1120' : '#F8FAFF',
+          borderRightWidth: 1,
+          borderRightColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)',
+          ...(Platform.OS === 'web' ? {
+            boxShadow: isDark ? '3px 0px 10px rgba(0,0,0,0.25)' : '3px 0px 10px rgba(100,116,139,0.08)'
+          } : {})
+        }]}
       />
 
       <View style={[styles.topBrand, !collapsed && styles.topBrandExpanded]}>
-        <LinearGradient
-          colors={isDark ? ['#3B82F6', '#7C3AED'] : ['#6366F1', '#8B5CF6']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.brandPill}
-        >
-          <View style={styles.brandOrbInner}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.25)', 'rgba(255,255,255,0)']}
-              style={StyleSheet.absoluteFill}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-            />
+        <View style={[styles.brandPill, clayBrandPillStyle]}>
+          <View style={[styles.brandOrbInner, clayBrandOrbStyle]}>
             <Ionicons name="school" size={collapsed ? 20 : 22} color="#FFFFFF" />
           </View>
           {!collapsed ? (
@@ -218,7 +396,7 @@ export default function DashboardWebSidebar({ collapsed, items }: DashboardWebSi
               <Text style={styles.brandSub}>Admin</Text>
             </View>
           ) : null}
-        </LinearGradient>
+        </View>
       </View>
 
       <ScrollView
@@ -248,15 +426,7 @@ function createStyles(isDark: boolean, collapsed: boolean) {
       alignSelf: 'stretch',
       flexShrink: 0,
       position: 'relative',
-      overflow: 'hidden',
-    },
-    rightBorderGradient: {
-      position: 'absolute',
-      top: 0,
-      right: 0,
-      width: 2,
-      bottom: 0,
-      zIndex: 4,
+      overflow: Platform.OS === 'web' ? 'visible' : 'hidden',
     },
     topBrand: {
       paddingHorizontal: collapsed ? 8 : 12,
@@ -329,31 +499,13 @@ function createStyles(isDark: boolean, collapsed: boolean) {
       flexDirection: 'row',
       alignItems: 'center',
       borderRadius: 14,
-      marginBottom: 4,
-      overflow: 'hidden',
+      marginBottom: 6,
       minHeight: 48,
       position: 'relative',
     },
     rowCollapsed: {
       justifyContent: 'center',
       paddingHorizontal: 0,
-    },
-    rowActiveFill: {
-      borderRadius: 14,
-    },
-    rowGhost: {
-      ...StyleSheet.absoluteFillObject,
-      borderRadius: 14,
-      backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : 'rgba(15,23,42,0.02)',
-    },
-    activeLeftGlow: {
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      bottom: 0,
-      width: 56,
-      borderRadius: 14,
-      zIndex: 1,
     },
     iconWrap: {
       width: 44,

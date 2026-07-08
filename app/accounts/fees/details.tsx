@@ -107,14 +107,23 @@ const progressStyles = {
 function FeeCard({
   fee, index, isDark,
   onPayment,
+  selectMode = false,
+  selected = false,
+  onToggleSelect,
 }: {
   fee: LedgerFeeItem; index: number; isDark: boolean;
   onPayment: (f: LedgerFeeItem) => void;
+  selectMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (f: LedgerFeeItem) => void;
 }) {
   const anim = useRef(new Animated.Value(0)).current;
   const isPaid = fee.status === 'paid';
   const due = fee.amount_due - fee.discount - fee.amount_paid;
   const paidRatio = fee.amount_due > 0 ? fee.amount_paid / fee.amount_due : 0;
+  // Transport fees post through a different endpoint and cannot join a combined
+  // tuition receipt; paid / zero-due lines have nothing to collect.
+  const selectable = !fee.isTransport && !isPaid && due > 0;
 
   const s = isDark
     ? STATUS_CONFIG_DARK[fee.status] || STATUS_CONFIG_DARK.pending
@@ -143,11 +152,29 @@ function FeeCard({
       }],
       marginBottom: 12,
     }}>
-      <View style={[fcStyles.card, { backgroundColor: cardBg, borderColor: border }]}>
+      <Pressable
+        style={[
+          fcStyles.card,
+          { backgroundColor: cardBg, borderColor: selectMode && selected ? '#10B981' : border },
+          selectMode && selected && { borderWidth: 2 },
+          selectMode && !selectable && { opacity: 0.5 },
+        ]}
+        onPress={selectMode && selectable ? () => onToggleSelect?.(fee) : undefined}
+        disabled={!selectMode || !selectable}
+      >
 
         {/* Header */}
         <View style={fcStyles.header}>
           <View style={fcStyles.headerLeft}>
+            {selectMode && (
+              <View style={[
+                fcStyles.checkbox,
+                selected && fcStyles.checkboxOn,
+                !selectable && { borderColor: isDark ? 'rgba(255,255,255,0.15)' : '#E5E7EB' },
+              ]}>
+                {selected && <Text style={fcStyles.checkboxTick}>✓</Text>}
+              </View>
+            )}
             <View style={[fcStyles.dot, { backgroundColor: s.dot }]} />
             <View style={{ flex: 1 }}>
               <Text style={[fcStyles.feeType, { color: textPri }]} numberOfLines={1}>
@@ -193,17 +220,33 @@ function FeeCard({
         <View style={[fcStyles.divider, { backgroundColor: border }]} />
 
         {/* Actions */}
-        <View style={fcStyles.actions}>
-          <ActionBtn
-            icon="cash-outline"
-            label="Collect"
-            color="#10B981"
-            disabled={isPaid}
-            isDark={isDark}
-            onPress={() => onPayment(fee)}
-          />
-        </View>
-      </View>
+        {selectMode ? (
+          <View style={fcStyles.actions}>
+            <View style={[
+              fcStyles.selectHintBtn,
+              selected && { backgroundColor: isDark ? 'rgba(16,185,129,0.18)' : '#ECFDF5' },
+            ]}>
+              <Text style={[
+                fcStyles.selectHintText,
+                { color: selectable ? (selected ? '#059669' : (isDark ? 'rgba(255,255,255,0.6)' : '#6B7280')) : (isDark ? 'rgba(255,255,255,0.3)' : '#9CA3AF') },
+              ]}>
+                {!selectable ? (fee.isTransport ? 'Collect separately' : 'Nothing due') : selected ? 'Selected ✓' : 'Tap to select'}
+              </Text>
+            </View>
+          </View>
+        ) : (
+          <View style={fcStyles.actions}>
+            <ActionBtn
+              icon="cash-outline"
+              label="Collect"
+              color="#10B981"
+              disabled={isPaid}
+              isDark={isDark}
+              onPress={() => onPayment(fee)}
+            />
+          </View>
+        )}
+      </Pressable>
     </Animated.View>
   );
 }
@@ -263,6 +306,17 @@ const fcStyles = StyleSheet.create({
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  checkbox: {
+    width: 22, height: 22, borderRadius: 7, borderWidth: 2, borderColor: '#10B981',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: '#10B981' },
+  checkboxTick: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  selectHintBtn: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: 10, borderRadius: 10,
+  },
+  selectHintText: { fontSize: 13, fontWeight: '700' },
   dot: { width: 8, height: 8, borderRadius: 4 },
   feeType: { fontSize: 15, fontWeight: '700' },
   feeSub: { fontSize: 11, fontWeight: '600', marginTop: 2 },
@@ -310,6 +364,50 @@ export default function StudentFeeLedger() {
   const [transportAmount, setTransportAmount] = useState('');
   const [transportMode, setTransportMode] = useState<'cash' | 'upi' | 'cheque'>('cash');
   const [transportSubmitting, setTransportSubmitting] = useState(false);
+
+  // ── Combined multi-fee-type collection ──
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedFees, setSelectedFees] = useState<LedgerFeeItem[]>([]);
+
+  const toggleSelectFee = (fee: LedgerFeeItem) => {
+    setSelectedFees((prev) =>
+      prev.some((f) => f.id === fee.id)
+        ? prev.filter((f) => f.id !== fee.id)
+        : [...prev, fee],
+    );
+  };
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedFees([]);
+  };
+
+  const selectedTotal = selectedFees.reduce(
+    (sum, f) => sum + Math.max(0, f.amount_due - f.discount - f.amount_paid),
+    0,
+  );
+
+  const goCollectMultiple = () => {
+    const items = selectedFees.map((f) => ({
+      id: f.id,
+      fee_type: f.fee_type,
+      due: Math.max(0, f.amount_due - f.discount - f.amount_paid),
+    }));
+    router.push({
+      pathname: '/accounts/fees/collect-multi' as any,
+      params: {
+        studentId,
+        name: studentName,
+        admissionNo: feeData?.student.admission_no,
+        className: feeData?.student.class_name,
+        sectionName: feeData?.student.section_name,
+        fatherName: feeData?.student.father_name || fatherNameParam,
+        fatherMobile: feeData?.student.father_mobile || fatherMobileParam,
+        items: JSON.stringify(items),
+      },
+    });
+    exitSelectMode();
+  };
 
   // Page-level animations
   const headerAnim = useRef(new Animated.Value(0)).current;
@@ -410,6 +508,9 @@ export default function StudentFeeLedger() {
     ...(feeData?.fees ?? []),
     ...(transportItem ? [transportItem] : []),
   ];
+  const selectableCount = ledgerItems.filter(
+    (f) => !f.isTransport && f.status !== 'paid' && (f.amount_due - f.discount - f.amount_paid) > 0,
+  ).length;
 
   const tuitionDue = parseFloat(String(summary?.total_due || 0));
   const tuitionPaid = parseFloat(String(summary?.total_paid || 0));
@@ -494,7 +595,13 @@ export default function StudentFeeLedger() {
         {/* ── Fee Cards ── */}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>FEE BREAKDOWN</Text>
-          <Text style={styles.sectionCount}>{ledgerItems.length} items</Text>
+          {selectableCount >= 2 ? (
+            <Pressable onPress={() => (selectMode ? exitSelectMode() : setSelectMode(true))} hitSlop={8}>
+              <Text style={styles.selectToggle}>{selectMode ? 'Cancel' : '☑ Select multiple'}</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.sectionCount}>{ledgerItems.length} items</Text>
+          )}
         </View>
 
         {ledgerItems.map((fee, index) => (
@@ -504,6 +611,9 @@ export default function StudentFeeLedger() {
             index={index}
             isDark={isDark}
             onPayment={handlePayment}
+            selectMode={selectMode}
+            selected={selectedFees.some((f) => f.id === fee.id)}
+            onToggleSelect={toggleSelectFee}
           />
         ))}
 
@@ -556,8 +666,23 @@ export default function StudentFeeLedger() {
           </Pressable>
         </Modal>
 
-        <View style={{ height: 32 }} />
+        <View style={{ height: selectMode ? 110 : 32 }} />
       </ScrollView>
+
+      {/* ── Combined-collection action bar ── */}
+      {selectMode && selectedFees.length > 0 && (
+        <View style={styles.multiBar}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.multiBarCount}>
+              {selectedFees.length} fee type{selectedFees.length === 1 ? '' : 's'} selected
+            </Text>
+            <Text style={styles.multiBarTotal}>₹{selectedTotal.toLocaleString('en-IN')}</Text>
+          </View>
+          <Pressable style={styles.multiBarBtn} onPress={goCollectMultiple}>
+            <Text style={styles.multiBarBtnText}>Collect together ▶</Text>
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
@@ -768,5 +893,56 @@ const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: isDark ? 'rgba(255,255,255,0.2)' : '#D1D5DB',
+  },
+  selectToggle: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#10B981',
+    letterSpacing: 0.3,
+  },
+  multiBar: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: isDark ? '#111827' : '#0F172A',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+      },
+      android: { elevation: 10 },
+    }),
+  },
+  multiBarCount: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.6)',
+    marginBottom: 2,
+  },
+  multiBarTotal: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#FFFFFF',
+  },
+  multiBarBtn: {
+    backgroundColor: '#10B981',
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+  },
+  multiBarBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
 });

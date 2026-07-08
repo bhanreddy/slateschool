@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Slate School Kosgi",
-    "slug": "slateschool",
-    "version": "1.0.0",
+    "name": "Vikas Model School Balampet",
+    "slug": "vikasmodelschoolbalampet",
+    "version": "1.5.0",
     "platforms": [
       "android",
       "ios",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.nexsyrussims.slateschool",
+      "bundleIdentifier": "com.nexsyrussims.vikasmodelschool",
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "package": "com.nexsyrussims.slateschool",
+      "package": "com.nexsyrussims.vikasmodelschool",
       "jsEngine": "hermes",
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
@@ -50,6 +50,9 @@
         "WAKE_LOCK",
         "RECEIVE_BOOT_COMPLETED"
       ]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
     },
     "notification": {
       "icon": "./assets/images/icon.png",
@@ -113,7 +116,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "092e54fd-6629-4c8c-ab8d-a21a3ea7633c"
+        "projectId": "431387a6-0e21-4d25-bf0f-5fdd3ad56585"
       }
     },
     "owner": "nexsyrus"

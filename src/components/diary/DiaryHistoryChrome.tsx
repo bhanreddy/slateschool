@@ -26,6 +26,56 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../../hooks/useTheme';
 import { Theme } from '../../theme/themes';
 
+function clay(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
+  const spread = raised === 'lg' ? 24 : raised === 'sm' ? 12 : 18;
+  const dy = raised === 'lg' ? 12 : raised === 'sm' ? 6 : 9;
+  if (Platform.OS === 'web') {
+    const drop = isDark ? 'rgba(0,0,0,0.60)' : 'rgba(166,180,200,0.55)';
+    const light = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,1)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.9)';
+    const innerLo = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(166,180,200,0.35)';
+    return {
+      boxShadow:
+        `${dy}px ${dy}px ${spread}px ${drop}, ` +
+        `-${dy}px -${dy}px ${spread}px ${light}, ` +
+        `inset 3px 3px 6px ${innerHi}, ` +
+        `inset -3px -3px 6px ${innerLo}`,
+    };
+  }
+  return {
+    shadowColor: isDark ? '#000000' : '#94A3B8',
+    shadowOffset: { width: 0, height: dy },
+    shadowOpacity: isDark ? 0.45 : 0.26,
+    shadowRadius: spread,
+    elevation: raised === 'lg' ? 10 : raised === 'sm' ? 4 : 7,
+  };
+}
+
+function clayInset(isDark: boolean): any {
+  if (Platform.OS === 'web') {
+    const innerLo = isDark ? 'rgba(0,0,0,0.4)' : 'rgba(166,180,200,0.45)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.95)';
+    return {
+      boxShadow: `inset 4px 4px 8px ${innerLo}, inset -4px -4px 8px ${innerHi}`,
+      borderWidth: 0,
+    };
+  }
+  return {
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)',
+  };
+}
+
+function clayCard(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): any {
+  return {
+    backgroundColor: isDark ? '#1A2332' : '#EFF2F9',
+    borderRadius: raised === 'lg' ? 30 : 24,
+    borderWidth: 1,
+    borderColor: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.7)',
+    ...clay(isDark, raised),
+  };
+}
+
 export const DIARY_HISTORY_PRIOR_DAYS = 14;
 
 export type DiaryHistoryTabId = 'today' | 'history';
@@ -351,9 +401,10 @@ export function DiaryHistoryTabSwitcher({
     <View
       style={[
         styles.tabBar,
+        clayInset(isDark),
         {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(15,23,42,0.05)',
-          borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)',
+          backgroundColor: isDark ? '#0F1524' : '#E8EDF5',
+          borderRadius: 20,
         },
       ]}
     >
@@ -369,18 +420,25 @@ export function DiaryHistoryTabSwitcher({
             {isActive && (
               <Animated.View
                 entering={FadeIn.duration(180)}
-                style={[StyleSheet.absoluteFill, { borderRadius: 12, overflow: 'hidden' }]}
-              >
-                <LinearGradient
-                  colors={['#4338CA', '#6366F1']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                />
-              </Animated.View>
+                style={[
+                  StyleSheet.absoluteFill,
+                  { borderRadius: 16, backgroundColor: theme.colors.primary },
+                  clay(isDark, 'sm'),
+                ]}
+              />
             )}
-            <Ionicons name={tab.icon} size={16} color={isActive ? '#FFFFFF' : theme.colors.textTertiary} />
-            <Text style={[styles.tabLabel, { color: isActive ? '#FFFFFF' : theme.colors.textTertiary }]}>
+            <Ionicons
+              name={tab.icon}
+              size={16}
+              color={isActive ? '#FFFFFF' : theme.colors.textSecondary}
+              style={{ zIndex: 1 }}
+            />
+            <Text
+              style={[
+                styles.tabLabel,
+                { color: isActive ? '#FFFFFF' : theme.colors.textSecondary, zIndex: 1 },
+              ]}
+            >
               {tab.label}
             </Text>
           </Pressable>
@@ -448,18 +506,12 @@ export function DiaryHistoryDateSelectorButton({
       style={styles.dateSelectorWrap}
     >
       <Pressable onPress={onPress} android_ripple={{ color: '#6366F1' + '18' }}>
-        <LinearGradient
-          colors={
-            isDark
-              ? ['rgba(99,102,241,0.2)', 'rgba(15,23,42,0.85)']
-              : ['rgba(99,102,241,0.08)', 'rgba(255,255,255,0.96)']
-          }
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
+        <View
           style={[
             styles.dateSelector,
+            clayCard(isDark, 'sm'),
             {
-              borderColor: isDark ? 'rgba(99,102,241,0.32)' : 'rgba(99,102,241,0.2)',
+              borderRadius: 20,
             },
           ]}
         >
@@ -484,7 +536,7 @@ export function DiaryHistoryDateSelectorButton({
           >
             <Ionicons name="chevron-down" size={14} color={theme.colors.textSecondary} />
           </View>
-        </LinearGradient>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -506,7 +558,7 @@ function chromeStyles(theme: Theme) {
       justifyContent: 'center',
       gap: 7,
       paddingVertical: 12,
-      borderRadius: 12,
+      borderRadius: 16,
       overflow: 'hidden',
     },
     tabLabel: { fontSize: 14, fontWeight: '700', letterSpacing: -0.2 },

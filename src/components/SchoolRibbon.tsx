@@ -33,6 +33,7 @@ import { SCHOOL_NAME } from '../constants/school';
 import {
   SCHOOL_CONFIG,
   schoolColorWithAlpha,
+  schoolTheme,
 } from '../constants/schoolConfig';
 
 const ribbonTheme = SCHOOL_CONFIG.theme;
@@ -781,19 +782,63 @@ export default function SchoolRibbon() {
 
 const shellStyles = StyleSheet.create({
   safeTop: {
-    backgroundColor: ribbonTheme.accent,
+    backgroundColor: 'transparent',
     flexShrink: 0,
   },
 });
 
 /* ------------------------------------------------------------------ */
-/* Web letterhead (unchanged behaviour)                                */
+/* Web letterhead — premium claymorphic lighting & extrusion stack     */
 /* ------------------------------------------------------------------ */
+
+/*
+ * Clay palette — sourced exclusively from `schoolTheme.light.colors`.
+ * No invented hex swatches: every tone below is a direct SchoolTheme token
+ * (or an alpha-blend of one), so the ribbon re-themes automatically if the
+ * school's brand colours ever change.
+ */
+const brand = schoolTheme.light.colors;
+const CLAY_BASE = brand.secondary;     // #F57964 — clay body hue
+const CLAY_DEEP = brand.primaryDark;   // #3A1155 — carve / ambient shadow
+const CLAY_SURFACE = brand.surface;    // #FFFFFF — logo puck & highlight sheen
+const CLAY_ACCENT = brand.accent;      // #0D8ECF — SchoolTheme's own "stripes / dividers" colour
+const CLAY_EDGE = brand.borderLight;   // #F0ECF6 — soft secondary stop for the logo puck
+
+/*
+ * Premium high-fidelity clay extrusion stack.
+ * Seamless distribution of micro-bevel edge paths, deep ambient occlusion,
+ * and continuous multi-tiered internal pillowing.
+ */
+const CLAY_CARD_SHADOW = [
+  `0 40px 90px -18px ${schoolColorWithAlpha(CLAY_DEEP, 0.48)}`, // Grand ambient drop shadow
+  `0 16px 36px -10px ${schoolColorWithAlpha(CLAY_DEEP, 0.38)}`, // Mid-field structural drop shadow
+  `0 4px 10px ${schoolColorWithAlpha(CLAY_DEEP, 0.22)}`,        // Direct contact occlusion lip
+  `inset 0 2.5px 3px ${schoolColorWithAlpha(CLAY_SURFACE, 0.72)}`, // Precise studio edge highlight rim
+  `inset 0 16px 32px ${schoolColorWithAlpha(CLAY_SURFACE, 0.18)}`, // Soft top-down primary puff volume illumination
+  `inset 0 -22px 42px ${schoolColorWithAlpha(CLAY_DEEP, 0.45)}`, // Heavy foundational core shadow mapping
+  `inset 0 -3px 8px ${schoolColorWithAlpha(CLAY_DEEP, 0.32)}`,  // Bottom bounce compression bevel
+].join(', ');
+
+/* Luxurious sculpted floating clay puck badge with realistic rim-lighting accents. */
+const CLAY_PUCK_SHADOW = [
+  `0 0 0 1px ${schoolColorWithAlpha(CLAY_SURFACE, 0.65)}`,          // Micro-surface rim highlight catch
+  `0 22px 40px -8px ${schoolColorWithAlpha(CLAY_DEEP, 0.45)}`,      // Dynamic elevation shadow throw
+  `0 6px 14px -2px ${schoolColorWithAlpha(CLAY_DEEP, 0.28)}`,       // Ground proximity soft shading
+  `inset 0 3px 6px ${schoolColorWithAlpha(CLAY_SURFACE, 1)}`,       // Soft specular top pillow highlight
+  `inset 0 -10px 18px ${schoolColorWithAlpha(CLAY_DEEP, 0.12)}`,    // Clean underside dropoff
+].join(', ');
+
+/* Inset pill with hyper-deep carved inner shadows and micro-reflected outer lips. */
+const CLAY_PILL_SHADOW = [
+  `inset 0 6px 12px ${schoolColorWithAlpha(CLAY_DEEP, 0.58)}`,   // Main interior cavernous shadow
+  `inset 0 2px 4px ${schoolColorWithAlpha(CLAY_DEEP, 0.48)}`,    // High-contrast debossed lip edge
+  `inset 0 -3px 6px ${schoolColorWithAlpha(CLAY_SURFACE, 0.12)}`, // Inner floor upward reflection bounce
+  `0 1.5px 1px ${schoolColorWithAlpha(CLAY_SURFACE, 0.28)}`,      // Outward bottom edge light catch
+].join(', ');
 
 function StaticLetterheadRibbon() {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
-  const [bannerHeight, setBannerHeight] = useState(0);
 
   const schoolName =
     SCHOOL_NAME || SCHOOL_CONFIG.name;
@@ -813,26 +858,29 @@ function StaticLetterheadRibbon() {
   const email =
     SCHOOL_CONFIG.email?.trim() || '';
 
-  const compactInfo = width < 380;
+  const compactInfo = width < 720;
   const titleFallbackWidth = compactInfo
-    ? Math.max(0, width - 76)
-    : Math.max(0, width * 0.44 - 62);
+    ? Math.max(0, width - 120)
+    : Math.max(0, width * 0.4 - 80);
 
   const columns = useMemo(() => {
     const items: {
       key: string;
+      label: string;
       body: string;
     }[] = [];
 
     if (motto)
       items.push({
         key: 'motto',
+        label: t('schoolRibbon.mottoLabel', 'Our Motto'),
         body: motto,
       });
 
     if (address)
       items.push({
         key: 'addr',
+        label: t('schoolRibbon.addressLabel', 'Campus'),
         body: address,
       });
 
@@ -848,6 +896,7 @@ function StaticLetterheadRibbon() {
     if (contactBlock)
       items.push({
         key: 'contact',
+        label: t('schoolRibbon.contactLabel', 'Contact'),
         body: contactBlock,
       });
 
@@ -856,37 +905,24 @@ function StaticLetterheadRibbon() {
 
   return (
     <View style={styles.column}>
-      <View
-        pointerEvents="none"
-        style={styles.ambientHalo}
-      />
-
-      <View
-        style={styles.letterheadShell}
-        onLayout={(e) =>
-          setBannerHeight(e.nativeEvent.layout.height)
-        }
-      >
-        {bannerHeight > 0 ? (
-          <BannerBackground
-            width={width}
-            height={bannerHeight}
-            showGoldStripe
-          />
-        ) : null}
+      <View style={styles.clayCard}>
+        {/* Radial key light falling on the top-left of the clay surface. */}
+        <View pointerEvents="none" style={styles.clayKeyLight} />
+        {/* Glossy sheen sweeping across the top of the clay surface. */}
+        <View pointerEvents="none" style={styles.claySheen} />
+        {/* Crisp accent cap — SchoolTheme's accent colour, used exactly for its documented role. */}
+        <View pointerEvents="none" style={styles.clayAccentCap} />
 
         <View
           style={[
             styles.inner,
             compactInfo && styles.innerCompact,
-            Platform.OS === 'web' && styles.ribbonTextReset,
           ]}
         >
           <View
             style={[
               styles.brandRow,
-              compactInfo &&
-                styles.brandRowCompact,
+              compactInfo && styles.brandRowCompact,
             ]}
           >
             <View style={styles.logoFrame}>
@@ -901,71 +937,39 @@ function StaticLetterheadRibbon() {
               <AdaptiveSchoolName
                 text={schoolName}
                 baseStyle={styles.schoolName}
-                maxFontSize={22}
+                maxFontSize={23}
                 minFontSize={11}
                 fallbackWidth={titleFallbackWidth}
               />
 
+              <View style={styles.titleUnderline} />
+
               {tagline ? (
-                <Text
-                  style={styles.tagline}
-                  numberOfLines={2}
-                >
-                  {`"${tagline}"`}
+                <Text style={styles.tagline} numberOfLines={2}>
+                  {`“${tagline}”`}
                 </Text>
               ) : null}
             </View>
           </View>
 
           {columns.length > 0 ? (
-            compactInfo ? (
-              <View style={styles.infoStack}>
-                {columns.map((col, i) => (
-                  <React.Fragment key={col.key}>
-                    {i > 0 ? (
-                      <View
-                        style={styles.hDivider}
-                      />
-                    ) : null}
-
-                    <Text
-                      style={
-                        styles.infoTextStacked
-                      }
-                      numberOfLines={4}
-                    >
-                      {col.body}
-                    </Text>
-                  </React.Fragment>
-                ))}
-              </View>
-            ) : (
-              <View
-                style={[
-                  styles.infoRow,
-                  styles.infoRowWide,
-                ]}
-              >
-                {columns.map((col, i) => (
-                  <React.Fragment key={col.key}>
-                    {i > 0 ? (
-                      <View
-                        style={styles.vDivider}
-                      />
-                    ) : null}
-
-                    <View style={styles.infoCol}>
-                      <Text
-                        style={styles.infoText}
-                        numberOfLines={4}
-                      >
-                        {col.body}
-                      </Text>
-                    </View>
-                  </React.Fragment>
-                ))}
-              </View>
-            )
+            <View
+              style={[
+                styles.infoWrap,
+                compactInfo && styles.infoWrapCompact,
+              ]}
+            >
+              {columns.map((col) => (
+                <View key={col.key} style={styles.infoChip}>
+                  <Text style={styles.infoLabel} numberOfLines={1}>
+                    {col.label.toUpperCase()}
+                  </Text>
+                  <Text style={styles.infoText} numberOfLines={4}>
+                    {col.body}
+                  </Text>
+                </View>
+              ))}
+            </View>
           ) : null}
         </View>
       </View>
@@ -976,48 +980,79 @@ function StaticLetterheadRibbon() {
 const styles = StyleSheet.create({
   column: {
     backgroundColor: 'transparent',
+    paddingHorizontal: 14,
+    paddingTop: 10,
+    paddingBottom: 14,
   },
 
-  ambientHalo: {
-    position: 'absolute',
-    left: '15%',
-    right: '15%',
-    top: -18,
-    height: 90,
-    borderRadius: 90,
-    backgroundColor: schoolColorWithAlpha(
-      ribbonTheme.accent,
-      0.14,
-    ),
+  /* Refined silk-matte volumetric clay body canvas. */
+  clayCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 30,
+    backgroundColor: CLAY_BASE,
+    flexShrink: 0,
+    borderWidth: 1,
+    borderColor: schoolColorWithAlpha(CLAY_SURFACE, 0.34),
 
     ...Platform.select({
       web: {
-        filter: 'blur(40px)',
+        backgroundImage: `linear-gradient(165deg, ${schoolColorWithAlpha(CLAY_SURFACE, 0.38)} 0%, ${schoolColorWithAlpha(CLAY_SURFACE, 0)} 34%, ${schoolColorWithAlpha(CLAY_DEEP, 0)} 60%, ${schoolColorWithAlpha(CLAY_DEEP, 0.26)} 100%)`,
+        boxShadow: CLAY_CARD_SHADOW,
+      } as object,
+
+      default: {
+        shadowColor: CLAY_DEEP,
+        shadowOffset: { width: 0, height: 12 },
+        shadowOpacity: 0.35,
+        shadowRadius: 22,
+      },
+    }),
+  },
+
+  /* Crisp accent cap along the top edge — the theme's accent colour used for its documented purpose. */
+  clayAccentCap: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    backgroundColor: CLAY_ACCENT,
+    opacity: 0.92,
+  },
+
+  /* Enhanced primary studio light projection map. */
+  clayKeyLight: {
+    ...StyleSheet.absoluteFillObject,
+
+    ...Platform.select({
+      web: {
+        backgroundImage: `radial-gradient(100% 100% at 12% -5%, ${schoolColorWithAlpha(CLAY_SURFACE, 0.42)} 0%, ${schoolColorWithAlpha(CLAY_SURFACE, 0.14)} 42%, ${schoolColorWithAlpha(CLAY_SURFACE, 0)} 72%)`,
       } as object,
 
       default: {},
     }),
   },
 
-  letterheadShell: {
-    position: 'relative',
-    paddingBottom: 10,
-    backgroundColor: 'transparent',
-    flexShrink: 0,
+  /* High-end ultra-smooth curved moulding satin diffuse sheen reflection. */
+  claySheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '52%',
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
 
     ...Platform.select({
       web: {
-        boxShadow: `0 10px 30px ${schoolColorWithAlpha(
-          ribbonTheme.ribbonGradient[0],
-          0.28,
-        )}`,
+        backgroundImage: `linear-gradient(180deg, ${schoolColorWithAlpha(CLAY_SURFACE, 0.32)} 0%, ${schoolColorWithAlpha(CLAY_SURFACE, 0.06)} 45%, ${schoolColorWithAlpha(CLAY_SURFACE, 0)} 100%)`,
       } as object,
 
       default: {
-        shadowColor: ribbonTheme.ribbonGradient[0],
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.25,
-        shadowRadius: 16,
+        backgroundColor: schoolColorWithAlpha(CLAY_SURFACE, 0.12),
       },
     }),
   },
@@ -1025,26 +1060,26 @@ const styles = StyleSheet.create({
   inner: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    gap: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    gap: 16,
   },
 
   innerCompact: {
     flexDirection: 'column',
     alignItems: 'stretch',
-    gap: 8,
-    paddingVertical: 8,
+    gap: 12,
+    paddingVertical: 14,
   },
 
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 14,
 
     flexShrink: 0,
-    maxWidth: '44%',
-    minWidth: 132,
+    maxWidth: '42%',
+    minWidth: 150,
   },
 
   brandRowCompact: {
@@ -1054,29 +1089,36 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
   },
 
+  /* Luxurious white porcelain clay puck holding the school crest. */
   logoFrame: {
-    width: 52,
-    height: 52,
-    borderRadius: 12,
-
-    backgroundColor:
-      'rgba(255,255,255,0.14)',
-
-    borderWidth: StyleSheet.hairlineWidth,
-
-    borderColor: schoolColorWithAlpha(
-      ribbonTheme.accent,
-      0.45,
-    ),
-
+    width: 64,
+    height: 64,
+    borderRadius: 22,
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 4,
+    padding: 7,
+    flexShrink: 0,
+
+    ...Platform.select({
+      web: {
+        backgroundImage: `linear-gradient(155deg, ${CLAY_SURFACE} 0%, ${CLAY_EDGE} 100%)`,
+        boxShadow: CLAY_PUCK_SHADOW,
+      } as object,
+
+      default: {
+        shadowColor: CLAY_DEEP,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 10,
+        elevation: 6,
+      },
+    }),
   },
 
   logo: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
   },
 
   titleBlock: {
@@ -1085,113 +1127,141 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
+  /* Enhanced premium title typography with organic drop-cast depth. */
   schoolName: {
     color: ribbonTheme.ribbonTitle,
     fontWeight: '800',
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
 
-    textShadowColor:
-      'rgba(0,0,0,0.35)',
-
-    textShadowOffset: {
-      width: 0,
-      height: 1,
-    },
-
-    textShadowRadius: 2,
+    ...Platform.select({
+      web: {
+        textShadow: `0 2px 4px ${schoolColorWithAlpha(CLAY_DEEP, 0.48)}`,
+      } as object,
+      default: {
+        textShadowColor: schoolColorWithAlpha(CLAY_DEEP, 0.55),
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 3,
+      },
+    }),
   },
 
+  /* Accent anchor line — the theme's own "divider" colour. */
+  titleUnderline: {
+    marginTop: 6,
+    marginBottom: 2,
+    height: 3,
+    width: 52,
+    borderRadius: 3,
+    backgroundColor: CLAY_ACCENT,
+    opacity: 0.9,
+
+    ...Platform.select({
+      web: {
+        backgroundImage: `linear-gradient(90deg, ${CLAY_ACCENT} 0%, ${schoolColorWithAlpha(CLAY_ACCENT, 0)} 100%)`,
+        boxShadow: `0 1.5px 2px ${schoolColorWithAlpha(CLAY_DEEP, 0.45)}`,
+      } as object,
+
+      default: {},
+    }),
+  },
+
+  /* Tagline — SchoolTheme's own ribbonTagline (white) for maximum legibility on the clay body. */
   tagline: {
-    marginTop: 2,
+    marginTop: 3,
     color: ribbonTheme.ribbonTagline,
     fontWeight: '600',
-    fontSize: 12,
-    letterSpacing: 0.2,
+    fontSize: 12.5,
+    letterSpacing: 0.3,
+    fontStyle: 'italic',
+    opacity: 0.96,
 
-    textShadowColor:
-      'rgba(0,0,0,0.25)',
-
-    textShadowOffset: {
-      width: 0,
-      height: 1,
-    },
-
-    textShadowRadius: 1,
+    ...Platform.select({
+      web: {
+        textShadow: `0 1px 2px ${schoolColorWithAlpha(CLAY_DEEP, 0.35)}`,
+      } as object,
+      default: {
+        textShadowColor: schoolColorWithAlpha(CLAY_DEEP, 0.4),
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 1,
+      },
+    }),
   },
 
-  infoRow: {
+  infoWrap: {
+    flex: 1,
     flexDirection: 'row',
-    alignItems: 'stretch',
-    minWidth: 0,
-    gap: 0,
-  },
-
-  infoRowWide: {
-    flex: 1,
+    flexWrap: 'wrap',
     justifyContent: 'flex-end',
-  },
-
-  infoCol: {
-    flex: 1,
+    alignItems: 'stretch',
+    gap: 10,
     minWidth: 0,
+  },
+
+  infoWrapCompact: {
+    flex: undefined,
+    justifyContent: 'flex-start',
+  },
+
+  /* Re-engineered hyper-realistic inset clay pill base matrix. */
+  infoChip: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 170,
+    maxWidth: '100%',
     justifyContent: 'center',
-    paddingHorizontal: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: schoolColorWithAlpha(CLAY_DEEP, 0.26),
+
+    ...Platform.select({
+      web: {
+        backgroundImage: `linear-gradient(180deg, ${schoolColorWithAlpha(
+          CLAY_DEEP,
+          0.38,
+        )} 0%, ${schoolColorWithAlpha(CLAY_DEEP, 0.16)} 100%)`,
+        boxShadow: CLAY_PILL_SHADOW,
+      } as object,
+
+      default: {},
+    }),
   },
 
+  /* Crisp tracking for small-caps structural headings — uses the theme's
+     ribbonTagline token (each school's designated "contrast on ribbon" colour)
+     rather than `accent`, since accent can sit too close to the ribbon body
+     hue on some school palettes (e.g. violet accent on a violet ribbon). */
+  infoLabel: {
+    color: ribbonTheme.ribbonTagline,
+    opacity: 0.95,
+    fontSize: 8.5,
+    lineHeight: 12,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 2,
+
+    ...Platform.select({
+      web: {
+        textShadow: `0 1px 1px ${schoolColorWithAlpha(CLAY_DEEP, 0.3)}`,
+      } as object,
+      default: {},
+    }),
+  },
+
+  /* Etched content copy typography. */
   infoText: {
-    color: '#FFFFFF',
-    opacity: 0.92,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '500',
+    color: CLAY_SURFACE,
+    opacity: 0.98,
+    fontSize: 11,
+    lineHeight: 15.5,
+    fontWeight: '600',
     letterSpacing: 0.15,
+
+    ...Platform.select({
+      web: {
+        textShadow: `0 1px 1.5px ${schoolColorWithAlpha(CLAY_DEEP, 0.55)}`,
+      } as object,
+      default: {},
+    }),
   },
-
-  vDivider: {
-    width: StyleSheet.hairlineWidth,
-
-    backgroundColor: schoolColorWithAlpha(
-      ribbonTheme.accent,
-      0.35,
-    ),
-
-    marginVertical: 2,
-  },
-
-  infoStack: {
-    width: '100%',
-    paddingTop: 2,
-
-    borderTopWidth:
-      StyleSheet.hairlineWidth,
-
-    borderTopColor: schoolColorWithAlpha(
-      ribbonTheme.accent,
-      0.25,
-    ),
-  },
-
-  hDivider: {
-    height: StyleSheet.hairlineWidth,
-
-    backgroundColor: schoolColorWithAlpha(
-      ribbonTheme.accent,
-      0.3,
-    ),
-
-    marginVertical: 6,
-  },
-
-  infoTextStacked: {
-    color: '#FFFFFF',
-    opacity: 0.9,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '500',
-  },
-
-  /* Web: block dark-theme body color from bleeding into ribbon copy */
-  ribbonTextReset: {
-    color: '#FFFFFF',
-  } as TextStyle,
 });

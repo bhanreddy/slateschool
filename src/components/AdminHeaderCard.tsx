@@ -9,7 +9,7 @@ import {
     ViewStyle,
     useWindowDimensions,
 } from 'react-native';
-import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5, MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
     FadeInDown,
@@ -29,6 +29,38 @@ import QuickAccountPickerSheet from './QuickAccountPickerSheet';
 const FALLBACK_AVATAR = 'https://cdn-icons-png.flaticon.com/512/4333/4333609.png';
 const SCHOOL_IMAGE = require('../../assets/images/schoolImage.png');
 const SCHOOL_ASPECT = 16 / 9;
+
+/** Faint school-themed icons layered behind card content */
+function SchoolDecorIcons({
+    isDark,
+    accent,
+    gold,
+    compact,
+}: {
+    isDark: boolean;
+    accent: string;
+    gold: string;
+    compact?: boolean;
+}) {
+    const iconColor = isDark ? 'rgba(255,255,255,0.11)' : `${accent}30`;
+    const goldSoft = isDark ? `${gold}44` : `${gold}55`;
+    return (
+        <>
+            <View style={{ position: 'absolute', top: compact ? 8 : 14, right: 14 }} pointerEvents="none">
+                <Ionicons name="school-outline" size={compact ? 22 : 30} color={iconColor} />
+            </View>
+            <View style={{ position: 'absolute', top: compact ? 38 : 48, right: 52 }} pointerEvents="none">
+                <Ionicons name="book-outline" size={14} color={iconColor} />
+            </View>
+            <View style={{ position: 'absolute', bottom: 20, right: 36 }} pointerEvents="none">
+                <Ionicons name="pencil" size={13} color={goldSoft} />
+            </View>
+            <View style={{ position: 'absolute', bottom: 16, left: '42%' }} pointerEvents="none">
+                <MaterialCommunityIcons name="certificate-outline" size={16} color={iconColor} />
+            </View>
+        </>
+    );
+}
 
 const DOUBLE_TAP_MS = 320;
 const LONG_PRESS_MS = 450;
@@ -120,6 +152,8 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
 
     const accent = SCHOOL_CONFIG.theme.ribbonGradient[1] || '#6B2FA0';
     const gold = SCHOOL_CONFIG.theme.accent;
+    const schoolCerulean = SCHOOL_CONFIG.theme.accent ?? '#0D8ECF';
+    const ribbonStart = SCHOOL_CONFIG.theme.ribbonGradient[0] ?? accent;
 
     const clay = useMemo(
         () =>
@@ -142,12 +176,13 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                       pillTop: 'rgba(255,255,255,0.14)',
                       pillBottom: 'rgba(0,0,0,0.28)',
                       orbA: 'rgba(107,47,160,0.22)',
-                      orbB: `${gold}14`,
+                      orbB: `${schoolCerulean}18`,
+                      orbC: `${gold}12`,
                       gold,
                       avatarRing: ['rgba(255,255,255,0.16)', 'rgba(255,255,255,0.06)'] as [string, string],
                       avatarInner: 'rgba(0,0,0,0.28)',
                       logoWrap: 'rgba(255,255,255,0.10)',
-                      schoolImageOpacity: 0.48,
+                      schoolImageOpacity: 0.58,
                       specularOpacity: 0.35,
                       shadowOpacity: 0.45,
                   }
@@ -168,17 +203,18 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                       pillBg: 'rgba(255,255,255,0.75)',
                       pillTop: 'rgba(255,255,255,0.98)',
                       pillBottom: 'rgba(107,47,160,0.08)',
-                      orbA: 'rgba(167,139,250,0.12)',
-                      orbB: `${gold}18`,
+                      orbA: 'rgba(167,139,250,0.14)',
+                      orbB: `${schoolCerulean}16`,
+                      orbC: `${gold}14`,
                       gold,
                       avatarRing: ['rgba(255,255,255,0.85)', 'rgba(235,227,247,0.55)'] as [string, string],
                       avatarInner: 'rgba(107,47,160,0.06)',
                       logoWrap: 'rgba(255,255,255,0.85)',
-                      schoolImageOpacity: 0.75,
+                      schoolImageOpacity: 0.88,
                       specularOpacity: 0.95,
                       shadowOpacity: 0.22,
                   },
-        [accent, gold, isDark, theme.colors.primaryLight, theme.colors.textSecondary, theme.colors.textStrong],
+        [accent, gold, isDark, schoolCerulean, theme.colors.primaryLight, theme.colors.textSecondary, theme.colors.textStrong],
     );
 
     const cardAnimatedStyle = useAnimatedStyle(() => ({
@@ -297,6 +333,13 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                     backgroundColor: clay.orbB,
                     bottom: -26,
                     left: 36,
+                },
+                orbC: {
+                    width: 56,
+                    height: 56,
+                    backgroundColor: clay.orbC,
+                    top: 28,
+                    right: 72,
                 },
                 // Molded inner bottom shadow
                 innerBottomShadow: {
@@ -417,6 +460,16 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                     color: clay.accent,
                     letterSpacing: 0.8,
                     textTransform: 'uppercase',
+                    flexShrink: 1,
+                },
+                schoolAccentRibbon: {
+                    position: 'absolute',
+                    top: 10,
+                    left: 28,
+                    right: 28,
+                    height: 3,
+                    borderRadius: 99,
+                    zIndex: 4,
                 },
                 profileRow: { flexDirection: 'row', alignItems: 'center' },
                 avatarPressable: { borderRadius: 22 },
@@ -577,6 +630,18 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                         {/* Volumetric Depth Elements */}
                         <View style={[styles.orb, styles.orbA]} pointerEvents="none" />
                         <View style={[styles.orb, styles.orbB]} pointerEvents="none" />
+                        <View style={[styles.orb, styles.orbC]} pointerEvents="none" />
+
+                        {/* School-brand accent ribbon */}
+                        {!isLogin && (
+                            <LinearGradient
+                                colors={[gold, schoolCerulean, ribbonStart]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 0 }}
+                                style={styles.schoolAccentRibbon}
+                                pointerEvents="none"
+                            />
+                        )}
 
                         {/* Claymorphic Bottom Inset Shadow */}
                         <LinearGradient
@@ -601,6 +666,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
 
                         {/* School illustration — atmospheric dissolve across full card */}
                         <View style={styles.schoolAtmosphere} pointerEvents="none">
+                            <SchoolDecorIcons isDark={isDark} accent={schoolCerulean} gold={gold} compact={compact} />
                             <View style={[styles.schoolImageClip, schoolImageStyle]}>
                                 <Image source={SCHOOL_IMAGE} style={styles.schoolImage} />
                             </View>
@@ -674,6 +740,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                         <View style={styles.schoolLogoWrap}>
                                             <Image source={SCHOOL_CONFIG.logo} style={styles.schoolLogo} />
                                         </View>
+                                        <MaterialCommunityIcons name="school" size={11} color={gold} style={{ marginLeft: 6 }} />
                                         <Text style={styles.schoolName} numberOfLines={1}>
                                             {t('schoolRibbon.brandName', {
                                                 defaultValue: SCHOOL_CONFIG.name,

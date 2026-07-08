@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import * as Haptics from '../utils/haptics';
 import { useRouter } from 'expo-router';
 
 import MenuOverlay from './MenuOverlay';
-import { SCHOOL_CONFIG } from '../constants/schoolConfig';
+import ClayIconButton from './ClayIconButton';
 import { SCHOOL_NAME } from '../constants/school';
+import { schoolColorWithAlpha } from '../constants/schoolConfig';
 import { useTheme } from '../hooks/useTheme';
-import { Spacing, Radii } from '../theme/themes';
+import { Spacing } from '../theme/themes';
 
 import Animated, { SharedValue, useAnimatedStyle, interpolateColor, interpolate, Extrapolation } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +40,8 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
     const [menuVisible, setMenuVisible] = useState(false);
     const insets = useSafeAreaInsets();
 
+    const accent = theme.colors.primary;
+
     const handleMenuPress = () => {
         if (onMenuPress) {
             onMenuPress();
@@ -48,25 +51,38 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
         }
     };
 
+    /* Solid clay tone the slab materializes into once the user scrolls. */
+    const claySolid = isDark ? '#1C1630' : '#F6F2FC';
+    const clayTransparent = isDark ? 'rgba(28,22,48,0)' : 'rgba(246,242,252,0)';
+
     const animatedStyle = useAnimatedStyle(() => {
-        if (!scrollY) return { backgroundColor: theme.colors.background, shadowOpacity: 0.1 };
+        if (!scrollY) {
+            return {
+                backgroundColor: claySolid,
+                shadowOpacity: isDark ? 0.4 : 0.16,
+                borderBottomWidth: 1,
+                borderBottomColor: schoolColorWithAlpha(accent, isDark ? 0.35 : 0.16),
+            };
+        }
 
         const bgColor = interpolateColor(
             scrollY.value,
             [0, 50],
-            ['rgba(255,255,255,0)', isDark ? 'rgba(30,41,59,0.95)' : 'rgba(255,255,255,0.95)']
+            [clayTransparent, claySolid]
         );
         const shadowOpacity = interpolate(
             scrollY.value,
             [0, 50],
-            [0, 0.1],
+            [0, isDark ? 0.4 : 0.18],
             Extrapolation.CLAMP
         );
+        const borderBottomWidth = interpolate(scrollY.value, [0, 50], [0, 1], Extrapolation.CLAMP);
+
         return {
             backgroundColor: bgColor,
             shadowOpacity,
-            borderBottomColor: theme.colors.borderLight,
-            borderBottomWidth: interpolate(scrollY.value, [0, 50], [0, 1], Extrapolation.CLAMP)
+            borderBottomWidth,
+            borderBottomColor: schoolColorWithAlpha(accent, isDark ? 0.35 : 0.16),
         };
     });
 
@@ -84,34 +100,40 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
     return (
         <Animated.View style={[
             styles.container,
-            { paddingTop: insets.top },
+            styles.claySlab,
+            { paddingTop: insets.top, shadowColor: accent },
             isAbsolute && styles.absoluteHeader,
             animatedStyle
         ]}>
+            {/* Soft gloss sweeping across the top of the clay slab. */}
+            {isWeb ? <View pointerEvents="none" style={styles.claySheen} /> : null}
+
             <View style={styles.contentRow}>
                 {/* Left: native = menu on home, back on inner; web = both when menu enabled */}
                 <View style={[styles.leftSection, showNavBack && showNavMenu && styles.leftSectionDual]}>
                     {showNavBack ? (
-                        <Pressable
-                            onPress={runBack}
-                            style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.borderLight }, Platform.OS === 'web' && { cursor: 'pointer' }]}
-                        >
-                            <Ionicons name="arrow-back" size={20} color={theme.colors.textStrong} />
-                        </Pressable>
+                        <ClayIconButton onPress={runBack} isDark={isDark} accent={accent}>
+                            <Ionicons name="arrow-back" size={19} color={accent} />
+                        </ClayIconButton>
                     ) : null}
                     {showNavMenu ? (
-                        <Pressable
-                            onPress={handleMenuPress}
-                            style={[styles.iconButton, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : theme.colors.borderLight }, Platform.OS === 'web' && { cursor: 'pointer' }]}
-                        >
-                            <Feather name="menu" size={20} color={theme.colors.textStrong} />
-                        </Pressable>
+                        <ClayIconButton onPress={handleMenuPress} isDark={isDark} accent={accent}>
+                            <Feather name="menu" size={19} color={accent} />
+                        </ClayIconButton>
                     ) : null}
                 </View>
 
-                {/* Center: Branding (Clean) */}
+                {/* Center: Branding */}
                 <View style={styles.centerSection}>
-                    <Text style={[styles.title, { color: theme.colors.textStrong }]}>{title}</Text>
+                    <Text
+                        style={[
+                            styles.title,
+                            { color: theme.colors.textStrong },
+                            { textShadowColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.85)' },
+                        ]}
+                    >
+                        {title}
+                    </Text>
                     {subtitle && (
                         <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>{subtitle}</Text>
                     )}
@@ -120,19 +142,15 @@ const StaffHeader: React.FC<StaffHeaderProps> = ({
                 {/* Right: Actions */}
                 <View style={styles.rightSection}>
                     {showProfileButton && (
-                        <Pressable
+                        <ClayIconButton
                             onPress={() => router.push('/staff/settings' as any)}
-                            style={[styles.profileButton, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                            isDark={isDark}
+                            accent={accent}
+                            round
+                            size={40}
                         >
-                            <View style={{
-                                width: 32, height: 32, borderRadius: 16,
-                                backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#F1F5F9',
-                                alignItems: 'center', justifyContent: 'center',
-                                borderWidth: 1, borderColor: theme.colors.border
-                            }}>
-                                <Ionicons name="settings-outline" size={20} color={theme.colors.textSecondary} />
-                            </View>
-                        </Pressable>
+                            <Ionicons name="settings-outline" size={18} color={accent} />
+                        </ClayIconButton>
                     )}
                 </View>
             </View>
@@ -147,55 +165,62 @@ const styles = StyleSheet.create({
         paddingHorizontal: Spacing.md,
         paddingBottom: Spacing.sm,
     },
+    /* Puffed clay slab: rounded bottom edge + soft lifted shadow. */
+    claySlab: {
+        borderBottomLeftRadius: 26,
+        borderBottomRightRadius: 26,
+        shadowOffset: { width: 0, height: 10 },
+        shadowRadius: 20,
+    },
+    claySheen: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '65%',
+        borderBottomLeftRadius: 26,
+        borderBottomRightRadius: 26,
+        backgroundImage: 'linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%)',
+    } as object,
     contentRow: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        height: 50,
+        height: 54,
     },
     leftSection: {
-        width: 80,
+        width: 84,
         alignItems: 'flex-start',
     },
     leftSectionDual: {
-        width: 96,
+        width: 100,
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
+        gap: 10,
     },
     centerSection: {
         flex: 1,
         alignItems: 'center',
     },
     rightSection: {
-        width: 40,
+        width: 44,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'flex-end',
     },
-    iconButton: {
-        width: 36,
-        height: 36,
-        borderRadius: Radii.sm,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
     title: {
-        fontSize: 16,
-        fontWeight: '700',
+        fontSize: 17,
+        fontWeight: '800',
         letterSpacing: -0.3,
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 0,
     },
     subtitle: {
-        fontSize: 12,
-        fontWeight: '500',
-    },
-    profileButton: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: 'transparent',
+        marginTop: 1,
+        fontSize: 12.5,
+        fontWeight: '600',
+        letterSpacing: 0.15,
+        opacity: 0.85,
     },
     absoluteHeader: {
         position: 'absolute',

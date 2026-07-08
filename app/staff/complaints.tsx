@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AppTextInput from '@/src/components/AppTextInput';
+import ClayInput from '@/src/components/ClayInput';
+import { clayCard, clayInset, clay } from '@/src/theme/clayStyles';
 import { styles as ds } from '@/src/theme/styles';
 
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Dimensions } from 'react-native';
@@ -68,6 +70,8 @@ function mapStudentRows(
   }));
 }
 
+
+
 // ─── Config ────────────────────────────────────────────────────────
 const CATEGORY_CFG: Record<string, { color: string; bg: string; icon: string; label: string }> = {
   disciplinary: { color: '#EF4444', bg: 'rgba(239,68,68,0.10)', icon: 'warning', label: 'Disciplinary' },
@@ -116,59 +120,7 @@ const PressChip = ({ onPress, children, style }: any) => {
   );
 };
 
-// ─── Styled Input ──────────────────────────────────────────────────
-const GlassInput = ({
-  label, value, onChange, placeholder, isDark,
-  multiline, icon, suffix,
-}: {
-  label: string; value: string; onChange: (v: string) => void;
-  placeholder: string; isDark: boolean;
-  multiline?: boolean; icon?: string; suffix?: React.ReactNode;
-}) => {
-  const [focused, setFocused] = useState(false);
-  return (
-    <View style={{ marginBottom: 18 }}>
-      <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>{label}</Text>
-      <View style={[
-        gi.wrap,
-        multiline && gi.multiWrap,
-        {
-          backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-          borderColor: focused
-            ? (isDark ? 'rgba(16,185,129,0.55)' : 'rgba(5,150,105,0.45)')
-            : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)'),
-        }
-      ]}>
-        {icon && (
-          <MaterialIcons name={icon as any} size={15}
-            color={focused ? (isDark ? '#34D399' : '#059669') : (isDark ? '#334155' : '#CBD5E1')}
-            style={{ marginTop: multiline ? 2 : 0 }}
-          />
-        )}
-        <AppTextInput
-          style={[ds.inputInChrome, gi.input, multiline && gi.multiInput, { color: isDark ? '#EEF2FF' : '#0F172A', fontFamily: FONT }]}
-          placeholder={placeholder}
-          placeholderTextColor={isDark ? '#2A3444' : '#C4CDD9'}
-          value={value}
-          onChangeText={onChange}
-          multiline={multiline}
-          textAlignVertical={multiline ? 'top' : 'center'}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          numberOfLines={multiline ? 4 : 1}
-        />
-        {suffix}
-      </View>
-    </View>
-  );
-};
-const gi = StyleSheet.create({
-  label: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  wrap: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 13, paddingVertical: 13, borderRadius: 14, borderWidth: 1 },
-  multiWrap: { alignItems: 'flex-start', paddingVertical: 12 },
-  input: { flex: 1, fontSize: 13, fontWeight: '600', letterSpacing: -0.2 },
-  multiInput: { minHeight: 90, lineHeight: 20 },
-});
+
 
 // ─── Complaint Card ────────────────────────────────────────────────
 const ComplaintCard = ({ item, index, isDark }: { item: UIComplaint; index: number; isDark: boolean }) => {
@@ -186,11 +138,8 @@ const ComplaintCard = ({ item, index, isDark }: { item: UIComplaint; index: numb
         onPressOut={() => { s.value = withSpring(1, { damping: 18, stiffness: 220 }); }}
         style={[useAnimatedStyle(() => ({ transform: [{ scale: s.value }] })), { marginBottom: 10 }]}
       >
-        <BlurView
-          intensity={isDark ? 28 : 35} tint={isDark ? 'dark' : 'light'}
-          style={[cc.blur, { borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.72)' }]}
-        >
-          <View style={[cc.inner, { backgroundColor: isDark ? 'rgba(8,12,26,0.55)' : 'rgba(255,255,255,0.62)' }]}>
+        <View style={[cc.blur, clayCard(isDark, 'sm') as any, { padding: 0 }]}>
+          <View style={[cc.inner, { backgroundColor: 'transparent' }]}>
 
             {/* Accent bar */}
             <View style={[cc.accentBar, { backgroundColor: cat.color }]} />
@@ -247,7 +196,7 @@ const ComplaintCard = ({ item, index, isDark }: { item: UIComplaint; index: numb
             </View>
 
           </View>
-        </BlurView>
+        </View>
       </AnimatedTouch>
     </Animated.View>
   );
@@ -327,36 +276,14 @@ const TabSwitcher = ({
         backgroundColor: isDark ? 'rgba(16,185,129,0.06)' : 'rgba(16,185,129,0.05)',
       }]} />
 
-      <BlurView
-        intensity={isDark ? 45 : 85}
-        tint={isDark ? 'dark' : 'light'}
-        style={[ts.blurWrap, {
-          backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(16,185,129,0.06)',
-          borderColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(255,255,255,0.8)',
-        }]}
-      >
-        {/* Inner shadow simulation for inset effect */}
-        <View style={[StyleSheet.absoluteFill, {
-          borderRadius: 22,
-          borderWidth: 1.5,
-          borderColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(16,185,129,0.03)'
-        }]} />
+      <View style={[ts.blurWrap, clayInset(isDark) as any]}>
 
         <View style={[ts.track, {
           backgroundColor: 'transparent',
         }]}>
 
           {/* Sliding pill */}
-          <Animated.View style={[ts.slidePill, pillStyle, {
-            shadowColor: isDark ? '#000000' : '#475569',
-            backgroundColor: isDark ? 'rgba(22,32,26,0.95)' : 'rgba(255,255,255,1)',
-          }]}>
-            {/* Solid Pill border */}
-            <View style={[ts.pillBorder, {
-              borderColor: isDark ? 'rgba(52,211,153,0.35)' : 'rgba(16,185,129,0.12)',
-              borderWidth: isDark ? 1 : 1,
-            }]} />
-          </Animated.View>
+          <Animated.View style={[ts.slidePill, pillStyle, clayCard(isDark, 'sm') as any, { borderRadius: 18 }]} />
 
           {/* Tab buttons */}
           {TAB_DEFS.map((tab, idx) => {
@@ -419,7 +346,7 @@ const TabSwitcher = ({
           })}
 
         </View>
-      </BlurView>
+      </View>
     </Animated.View>
   );
 };
@@ -834,11 +761,8 @@ export default function StaffComplaints() {
         {/* ── File New Tab ── */}
         {activeTab === 'FILE_NEW' && (
           <Animated.View entering={FadeInDown.delay(60).duration(300).easing(Easing.out(Easing.cubic))}>
-            <BlurView
-              intensity={isDark ? 40 : 60} tint={isDark ? 'dark' : 'light'}
-              style={[ms.formBlur, { borderColor: isDark ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.75)' }]}
-            >
-              <View style={[ms.formInner, { backgroundColor: isDark ? 'rgba(8,6,20,0.58)' : 'rgba(255,255,255,0.68)' }]}>
+            <View style={[ms.formBlur, clayCard(isDark, 'lg') as any]}>
+              <View style={[ms.formInner, { backgroundColor: 'transparent' }]}>
 
                 {/* Shimmer */}
                 <View style={[ms.formShimmer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.90)' }]} />
@@ -856,9 +780,9 @@ export default function StaffComplaints() {
 
                 {/* Student picker */}
                 <View style={{ marginBottom: 18 }}>
-                  <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>Students</Text>
+                  <Text style={[ms.sectionLabel, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>Students</Text>
 
-                  <View style={ms.modeRow}>
+                  <View style={[ms.modeRow, clayInset(isDark) as any]}>
                     {([
                       { key: 'single' as const, label: 'One Student', icon: 'person-outline' },
                       { key: 'multiple' as const, label: 'Multiple from Class', icon: 'people-outline' },
@@ -866,14 +790,10 @@ export default function StaffComplaints() {
                       const active = studentMode === mode.key;
                       return (
                         <PressChip key={mode.key} onPress={() => switchStudentMode(mode.key)} style={{ flex: 1 }}>
-                          <View style={[ms.modeChip, {
-                            backgroundColor: active
-                              ? (isDark ? 'rgba(16,185,129,0.18)' : 'rgba(5,150,105,0.10)')
-                              : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-                            borderColor: active
-                              ? (isDark ? 'rgba(16,185,129,0.40)' : 'rgba(5,150,105,0.30)')
-                              : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
-                          }]}>
+                          <View style={[
+                            ms.modeChip,
+                            active ? (clayCard(isDark, 'sm') as any) : { backgroundColor: 'transparent', borderWidth: 0 }
+                          ]}>
                             <Ionicons
                               name={mode.icon as any}
                               size={14}
@@ -914,26 +834,17 @@ export default function StaffComplaints() {
                     </View>
                   ) : (
                     <View>
-                      <View style={[gi.wrap, ds.searchBarWrapper, {
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-                        borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.09)',
-                      }]}>
-                        <Ionicons name="search-outline" size={15} color={isDark ? '#334155' : '#CBD5E1'} />
-                        <AppTextInput
-                          style={[ds.inputInChrome, gi.input, { color: isDark ? '#EEF2FF' : '#0F172A', fontFamily: FONT }]}
-                          placeholder="Search student name or roll…"
-                          placeholderTextColor={isDark ? '#2A3444' : '#C4CDD9'}
-                          value={studentSearch}
-                          onChangeText={setStudentSearch}
-                        />
-                        {isSearching && <LogoLoader size={30} color={isDark ? '#34D399' : '#059669'} />}
-                      </View>
+                      <ClayInput
+                        isDark={isDark}
+                        icon="search"
+                        placeholder="Search student name or roll…"
+                        value={studentSearch}
+                        onChangeText={setStudentSearch}
+                        suffix={isSearching ? <LogoLoader size={30} color={isDark ? '#34D399' : '#059669'} /> : null}
+                      />
 
                       {studentSearch.length > 2 && studentsList.length > 0 && (
-                        <BlurView
-                          intensity={isDark ? 40 : 55} tint={isDark ? 'dark' : 'light'}
-                          style={[ms.suggestBlur, { borderColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.80)' }]}
-                        >
+                        <View style={[ms.suggestBlur, clayCard(isDark, 'sm') as any]}>
                           {studentsList.map((s, i) => (
                             <TouchableOpacity
                               key={s.id}
@@ -952,7 +863,7 @@ export default function StaffComplaints() {
                               </View>
                             </TouchableOpacity>
                           ))}
-                        </BlurView>
+                        </View>
                       )}
                     </View>
                   )
@@ -960,7 +871,7 @@ export default function StaffComplaints() {
                     <View>
                       {classSections.length > 0 ? (
                         <>
-                          <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT, marginBottom: 8, marginTop: 4 }]}>
+                          <Text style={[ms.sectionLabel, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT, marginBottom: 8, marginTop: 4 }]}>
                             Class
                           </Text>
                           <ScrollView
@@ -973,21 +884,17 @@ export default function StaffComplaints() {
                               return (
                                 <TouchableOpacity
                                   key={section.class_section_id}
-                                  style={[ms.classChip, {
-                                    backgroundColor: active
-                                      ? (isDark ? 'rgba(16,185,129,0.18)' : 'rgba(5,150,105,0.10)')
-                                      : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)'),
-                                    borderColor: active
-                                      ? (isDark ? 'rgba(16,185,129,0.40)' : 'rgba(5,150,105,0.30)')
-                                      : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'),
-                                  }]}
+                                  style={[
+                                    ms.classChip,
+                                    active ? (clayCard(isDark, 'sm') as any) : (clayInset(isDark) as any)
+                                  ]}
                                   onPress={() => setSelectedClassSectionId(section.class_section_id)}
                                   activeOpacity={0.7}
                                 >
                                   <Text style={[ms.classChipText, {
                                     color: active ? (isDark ? '#34D399' : '#059669') : (isDark ? '#94A3B8' : '#64748B'),
                                     fontFamily: FONT,
-                                    fontWeight: active ? '700' : '600',
+                                    fontWeight: active ? '800' : '600',
                                   }]}>
                                     {section.label.replace('-', ' ')}
                                   </Text>
@@ -1048,15 +955,7 @@ export default function StaffComplaints() {
                                 key={s.id}
                                 style={[
                                   ms.studentCard,
-                                  {
-                                    backgroundColor: checked
-                                      ? (isDark ? 'rgba(16,185,129,0.14)' : '#ECFDF5')
-                                      : (isDark ? 'rgba(255,255,255,0.06)' : '#FFFFFF'),
-                                    borderColor: checked
-                                      ? (isDark ? '#34D399' : '#059669')
-                                      : (isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.08)'),
-                                  },
-                                  checked && ms.studentCardSelected,
+                                  checked ? (clayInset(isDark) as any) : (clayCard(isDark, 'sm') as any)
                                 ]}
                                 onPress={() => toggleStudentSelection(s)}
                                 activeOpacity={0.82}
@@ -1102,16 +1001,14 @@ export default function StaffComplaints() {
                 </View>
 
                 {/* Incident Title */}
-                <GlassInput label="Incident Title" value={title} onChange={setTitle} isDark={isDark}
-                  placeholder="e.g. Late Arrival, Uniform Violation" icon="title" />
-
-                {/* Description */}
-                <GlassInput label="Description" value={desc} onChange={setDesc} isDark={isDark}
-                  placeholder="Detailed description of the incident…" icon="notes" multiline />
+                <ClayInput label="Incident Title" value={title} onChangeText={setTitle} isDark={isDark}
+                  placeholder="E.g. Disruptive behavior in Class 10A" icon="title" />
+                <ClayInput label="Description" value={desc} onChangeText={setDesc} isDark={isDark}
+                  placeholder="Provide detailed context..." multiline icon="notes" />
 
                 {/* Severity */}
                 <View style={{ marginBottom: 20 }}>
-                  <Text style={[gi.label, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>Severity Level</Text>
+                  <Text style={[ms.sectionLabel, { color: isDark ? '#64748B' : '#94A3B8', fontFamily: FONT }]}>Severity Level</Text>
                   <View style={ms.severityRow}>
                     {SEVERITY_CFG.map(lvl => {
                       const isActive = severity === lvl.key;
@@ -1163,7 +1060,7 @@ export default function StaffComplaints() {
                 </AnimatedTouch>
 
               </View>
-            </BlurView>
+            </View>
           </Animated.View>
         )}
 
@@ -1184,6 +1081,9 @@ const ms = StyleSheet.create({
   countPill: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, borderWidth: 1 },
   countText: { fontSize: 13, fontWeight: '800', letterSpacing: -0.3 },
 
+  // Form labels
+  sectionLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+
   // Filter chips
   filterChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 13, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
   filterText: { fontSize: 12, fontWeight: '600', letterSpacing: -0.1 },
@@ -1202,17 +1102,16 @@ const ms = StyleSheet.create({
   formTitle: { fontSize: 17, fontWeight: '800', letterSpacing: -0.4 },
   formSub: { fontSize: 12, fontWeight: '500', marginTop: 1 },
 
-  modeRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  modeChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 12, borderWidth: 1 },
+  modeRow: { flexDirection: 'row', padding: 6, borderRadius: 18, marginBottom: 16 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 14 },
   modeChipText: { fontSize: 12, letterSpacing: -0.1 },
 
   classHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8, marginTop: 10 },
-  classChipRow: { flexDirection: 'row', gap: 8, paddingRight: 4 },
+  classChipRow: { flexDirection: 'row', gap: 12, paddingRight: 4, paddingBottom: 10 },
   classChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 20,
-    borderWidth: 1,
   },
   classChipText: { fontSize: 13 },
   classLabel: { fontSize: 13, fontWeight: '700' },
@@ -1223,39 +1122,18 @@ const ms = StyleSheet.create({
   classLoadingText: { fontSize: 13, fontWeight: '500' },
   classEmpty: { alignItems: 'center', paddingVertical: 24, gap: 10 },
   classEmptyText: { fontSize: 13, fontWeight: '500', textAlign: 'center', lineHeight: 19 },
-  studentCardScroll: { marginTop: 2, marginHorizontal: -2 },
-  studentCardRow: { gap: 12, paddingHorizontal: 2, paddingVertical: 10, paddingRight: 8 },
+  studentCardScroll: { marginTop: 6, marginHorizontal: -2 },
+  studentCardRow: { gap: 16, paddingHorizontal: 4, paddingVertical: 10, paddingRight: 8 },
   studentCard: {
     width: 128,
     minHeight: 148,
     paddingVertical: 14,
     paddingHorizontal: 12,
-    borderRadius: 18,
-    borderWidth: 1.5,
+    borderRadius: 20,
     alignItems: 'center',
     position: 'relative',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#0F172A',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.08,
-        shadowRadius: 10,
-      },
-      android: { elevation: 3 },
-      default: {
-        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.08)',
-      },
-    }),
   },
-  studentCardSelected: {
-    ...Platform.select({
-      ios: { shadowOpacity: 0.14, shadowRadius: 12 },
-      android: { elevation: 5 },
-      default: {
-        boxShadow: '0 10px 28px rgba(5, 150, 105, 0.18)',
-      },
-    }),
-  },
+  studentCardSelected: {},
   studentCardBadge: {
     position: 'absolute',
     top: 8,

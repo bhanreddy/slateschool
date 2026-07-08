@@ -13,6 +13,14 @@ import { useTheme } from '../hooks/useTheme';
 
 const { width } = Dimensions.get('window');
 
+/** Height of the floating pill tab bar (excludes bottom inset). */
+export const STAFF_TAB_BAR_HEIGHT = 64;
+
+/** Space to leave at the bottom so content/buttons clear the floating tab bar. */
+export function staffTabBarReserve(spacing: { xl: number; lg?: number }) {
+  return STAFF_TAB_BAR_HEIGHT + spacing.xl + (spacing.lg ?? 16) + 12;
+}
+
 // Map route names to icons and labels
 const TAB_CONFIG: Record<string, { icon: string; iconFilled: string; label: string }> = {
     'dashboard': { icon: 'grid-outline', iconFilled: 'grid', label: 'Home' },
@@ -75,7 +83,7 @@ export default function StaffFooter({ state, descriptors, navigation }: any) {
         barWrapper: {
             flexDirection: 'row',
             width: '100%',
-            height: 64,
+            height: STAFF_TAB_BAR_HEIGHT,
             borderRadius: theme.shape.borderRadiusFull,
             overflow: 'hidden',
             ...theme.shadows.md,

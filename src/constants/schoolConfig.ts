@@ -20,7 +20,7 @@ export function schoolColorWithAlpha(hex: string, alpha: number): string {
     h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
   }
   if (!/^[0-9a-fA-F]{6}$/.test(h)) {
-    return `rgba(212,175,55,${alpha})`;
+    return `rgba(124,58,237,${alpha})`;
   }
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
@@ -42,54 +42,54 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
     ...defaultLightTheme,
     colors: {
       ...defaultLightTheme.colors,
-      // Primary brand color – Deep Purple (from logo outer ring)
-      primary: '#665990',
-      primaryLight: '#665990',
-      primaryDark: '#3A1155',
-      // Secondary color – Lavender (from logo lower arc)
-      secondary: '#F57964',
-      // Accent color – Cerulean Blue (from logo globe & hands)
-      accent: '#0D8ECF',
-      // Backgrounds – subtle purple-tinted neutrals
-      background: '#F9F7FC',
+      // Primary brand color – Blue
+      primary: '#2563EB',
+      primaryLight: '#818CF8',
+      primaryDark: '#4338CA',
+      // Secondary color – Purple
+      secondary: '#7C3AED',
+      // Accent color – Violet highlight
+      accent: '#9333EA',
+      // Backgrounds – soft purple-tinted neutrals
+      background: '#F5F3FF',
       surface: '#FFFFFF',
-      card: '#FFFFFF',
-      // Text colors – deep purple-slate palette
-      textPrimary: '#2D2440',
-      textStrong: '#1A0E2E',
-      textSecondary: '#6B5F80',
-      textMuted: '#9B91AB',
-      text: '#2D2440',
-      textTertiary: '#9B91AB',
-      // Borders – purple-tinted
-      border: '#E4DFF0',
-      borderLight: '#F0ECF6',
+      card: '#FAFAFF',
+      // Text colors – cool slate with purple undertone
+      textPrimary: '#1E1B4B',
+      textStrong: '#0F0A2E',
+      textSecondary: '#6B7280',
+      textMuted: '#9CA3AF',
+      text: '#1E1B4B',
+      textTertiary: '#A78BFA',
+      // Borders – lavender-gray
+      border: '#DDD6FE',
+      borderLight: '#EDE9FE',
       // Semantic colors
       danger: '#EF4444',
       success: '#10B981',
       warning: '#F59E0B',
-      info: '#0D8ECF',
+      info: '#7C3AED',
       notification: '#EF4444',
       // Navigation – purple pill tints
-      navPill: '#F0EBF7',
-      navIconActive: '#4B1A6B',
-      navIconInactive: '#9B91AB',
+      navPill: '#EDE9FE',
+      navIconActive: '#7C3AED',
+      navIconInactive: '#A78BFA',
       // Header/Footer backgrounds (with transparency for glass effect)
-      headerBg: 'rgba(249,247,252, 0.88)',
-      footerBg: 'rgba(255,255,255, 0.92)',
+      headerBg: 'rgba(245,243,255, 0.92)',
+      footerBg: 'rgba(250,250,255, 0.94)',
       // Alert colors
-      alertBg: '#FEFCE8',
-      alertBorder: '#FEF08A',
-      alertIcon: '#EAB308',
-      alertText: '#854D0E',
+      alertBg: '#F5F3FF',
+      alertBorder: '#DDD6FE',
+      alertIcon: '#7C3AED',
+      alertText: '#5B21B6',
       alertBgDanger: '#FEF2F2',
       alertBorderDanger: '#FECACA',
       alertIconDanger: '#EF4444',
       alertTextDanger: '#991B1B',
-      alertBgInfo: '#EDF7FC',
-      alertBorderInfo: '#B3DFEF',
-      alertIconInfo: '#0D8ECF',
-      alertTextInfo: '#0A5F8A',
+      alertBgInfo: '#F5F3FF',
+      alertBorderInfo: '#DDD6FE',
+      alertIconInfo: '#7C3AED',
+      alertTextInfo: '#5B21B6',
     },
     typography: {
       fontFamily: 'System',
@@ -141,9 +141,9 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
         elevation: 6,
       },
       lg: {
-        shadowColor: '#0F172A',
+        shadowColor: '#7C3AED',
         shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.12,
+        shadowOpacity: 0.1,
         shadowRadius: 24,
         elevation: 12,
       },
@@ -153,54 +153,54 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
     ...defaultDarkTheme,
     colors: {
       ...defaultDarkTheme.colors,
-      // Primary – lighter purple for dark mode legibility
-      primary: '#B48FD9',
-      primaryLight: '#CDB3E8',
-      primaryDark: '#9A6CC4',
-      // Secondary – light lavender
-      secondary: '#C4B8D8',
-      // Accent – brighter cerulean blue
-      accent: '#3DB5E8',
-      // Dark backgrounds – deep purple-ink tones
-      background: '#0D0A14',
-      surface: '#1A1526',
-      card: '#1A1526',
+      // Primary – lighter blue-violet for dark mode legibility
+      primary: '#818CF8',
+      primaryLight: '#A5B4FC',
+      primaryDark: '#6366F1',
+      // Secondary – lighter purple
+      secondary: '#A78BFA',
+      // Accent – bright violet for dark backgrounds
+      accent: '#C084FC',
+      // Dark backgrounds – deep purple-indigo tones
+      background: '#1E1B4B',
+      surface: '#2E1065',
+      card: '#312E81',
       // Light text for dark backgrounds
-      textPrimary: '#E4DFF0',
-      textStrong: '#F3F0F8',
-      textSecondary: '#9B91AB',
-      textMuted: '#6B5F80',
-      text: '#E4DFF0',
-      textTertiary: '#6B5F80',
-      // Darker borders – purple-ink
-      border: '#2A2240',
-      borderLight: '#3D3358',
+      textPrimary: '#EDE9FE',
+      textStrong: '#F5F3FF',
+      textSecondary: '#C4B5FD',
+      textMuted: '#A78BFA',
+      text: '#EDE9FE',
+      textTertiary: '#8B5CF6',
+      // Darker borders – purple-slate
+      border: '#4C1D95',
+      borderLight: '#5B21B6',
       // Lighter semantic colors for dark mode
       danger: '#F87171',
       success: '#34D399',
       warning: '#FBBF24',
-      info: '#3DB5E8',
+      info: '#A78BFA',
       notification: '#F87171',
       // Navigation – purple tint
-      navPill: 'rgba(180,143,217, 0.15)',
-      navIconActive: '#B48FD9',
-      navIconInactive: '#4A3F62',
+      navPill: 'rgba(124,58,237, 0.2)',
+      navIconActive: '#C084FC',
+      navIconInactive: '#7C3AED',
       // Header/Footer with dark purple glass effect
-      headerBg: 'rgba(13,10,20, 0.88)',
-      footerBg: 'rgba(26,21,38, 0.92)',
+      headerBg: 'rgba(30,27,75, 0.92)',
+      footerBg: 'rgba(46,16,101, 0.94)',
       // Alert colors (dark mode)
-      alertBg: 'rgba(234,179,8, 0.1)',
-      alertBorder: 'rgba(234,179,8, 0.2)',
-      alertIcon: '#FBBF24',
-      alertText: '#FEF08A',
+      alertBg: 'rgba(124,58,237, 0.12)',
+      alertBorder: 'rgba(167,139,250, 0.3)',
+      alertIcon: '#C084FC',
+      alertText: '#EDE9FE',
       alertBgDanger: 'rgba(239,68,68, 0.1)',
       alertBorderDanger: 'rgba(239,68,68, 0.2)',
       alertIconDanger: '#F87171',
       alertTextDanger: '#FECACA',
-      alertBgInfo: 'rgba(13,142,207, 0.12)',
-      alertBorderInfo: 'rgba(13,142,207, 0.25)',
-      alertIconInfo: '#3DB5E8',
-      alertTextInfo: '#B3DFEF',
+      alertBgInfo: 'rgba(124,58,237, 0.12)',
+      alertBorderInfo: 'rgba(124,58,237, 0.25)',
+      alertIconInfo: '#A78BFA',
+      alertTextInfo: '#DDD6FE',
     },
     typography: {
       fontFamily: 'System',
@@ -252,9 +252,9 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
         elevation: 6,
       },
       lg: {
-        shadowColor: '#0F172A',
+        shadowColor: '#7C3AED',
         shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.15,
+        shadowOpacity: 0.2,
         shadowRadius: 24,
         elevation: 12,
       },
@@ -264,26 +264,26 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
 
 export const SCHOOL_CONFIG = {
   // The official name of the school displayed in headers and reports
-  name: "Slate School Kosgi",
+  name: "Vikas Model School Balampet",
 
-  // Short line under the school name on the header ribbon (gold text)
-  tagline: "You can learn something new everyday , If you listen",
+  // Short line under the school name on the header ribbon
+  tagline: "Arise Awake Stop Not till you reach the Goal",
 
   // Motto / core values shown in the first info column of the ribbon (letterhead)
-  motto: "You believe in us we will prove it ",
+  motto: "Wisdom, Knowledge and Victory",
 
   // The school logo used in headers and reports
   // Ensure the image exists in assets/images/
   logo: require('../../assets/images/icon.png'),
 
   // Optional: School Address for reports
-  address: "Slate School Kosgi , Hakeempet-Polepally road , Dist Narayanpet. Telangana-509339",
+  address: "Vikas Model School ,Balampet, Mandal Doulathabad, Dist Vikarabad, Telangana-509336",
 
   // Optional: Contact info for reports
-  contact: "9573530364",
+  contact: "9848981191",
 
   // Optional: School email for letterhead / reports
-  email: "slateschoolkosgi@gmail.com",
+  email: "vmsbalampet@gmail.com",
 
   // Website or Email
   website: "www.nexsyrus.com",
@@ -292,23 +292,23 @@ export const SCHOOL_CONFIG = {
   cbseAffiliationNo: "NA",
 
   // School Code (if applicable)
-  schoolCode: "SSK",
+  schoolCode: "VMS",
 
   /**
    * Colour theme for ribbon / letterhead chrome (SchoolRibbon, etc.).
-   * Adjust `ribbonGradient` stops for your brand; `accent` drives gold trim and taglines.
+   * Blue-to-purple gradient with violet accents.
    */
   theme: {
-    /** Stripes, tagline text, soft dividers – cerulean blue from logo globe */
-    accent: '#0D8ECF',
-    /** Four-stop diagonal ribbon – deep purple to lavender (logo ring) */
-    ribbonGradient: ['#F57964', '#F57964', '#F57964', '#F57964'] as const,
+    /** Violet stripes, dividers, and accent trim */
+    accent: '#9333EA',
+    /** Tagline text – warm gold accent for contrast on purple ribbon */
+    ribbonTagline: '#FEF08A',
+    /** Four-stop diagonal ribbon – indigo through deep purple */
+    ribbonGradient: ['#4338CA', '#6366F1', '#7C3AED', '#9333EA'] as const,
     /** Optional stops for expo-linear-gradient (length must match ribbonGradient) */
     ribbonGradientLocations: [0, 0.30, 0.65, 1] as const,
     /** Main title on the ribbon */
     ribbonTitle: '#FFFFFF',
-    /** Tagline under school name on the ribbon */
-    ribbonTagline: '#FFFFFF',
     /** Scrolling marquee dot separator */
     marqueeSeparator: 'rgba(255,255,255,0.85)',
     /** Letterhead / info column body */
