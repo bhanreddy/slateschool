@@ -20,7 +20,7 @@ export function schoolColorWithAlpha(hex: string, alpha: number): string {
     h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
   }
   if (!/^[0-9a-fA-F]{6}$/.test(h)) {
-    return `rgba(208,176,48,${alpha})`;
+    return `rgba(212,175,55,${alpha})`;
   }
   const r = parseInt(h.slice(0, 2), 16);
   const g = parseInt(h.slice(2, 4), 16);
@@ -42,54 +42,54 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
     ...defaultLightTheme,
     colors: {
       ...defaultLightTheme.colors,
-      // Primary – logo ring navy (cool blue, avoids olive when blended with gold)
-      primary: '#0F4C81',
-      primaryLight: '#38A3D9',
-      primaryDark: '#062240',
-      // Secondary – bright medal gold (cleaner than muddy #D0B030 on clay ribbon)
-      secondary: '#E8B923',
-      // Accent – logo wreath green
-      accent: '#15803D',
-      // Backgrounds – cool neutrals (less yellow cast on screens)
-      background: '#F8FAFC',
+      // Primary brand color – Deep Navy Blue (from logo)
+      primary: '#132345',
+      primaryLight: '#2A467D',
+      primaryDark: '#0A1428',
+      // Secondary color - Complementary Slate/Navy for banner background
+      secondary: '#2A467D',
+      // Accent color
+      accent: '#DF6625',
+      // Backgrounds – subtle blue-tinted cool gray
+      background: '#F4F6F9',
       surface: '#FFFFFF',
       card: '#FFFFFF',
-      // Text – navy-slate
-      textPrimary: '#0F2D52',
-      textStrong: '#061829',
-      textSecondary: '#475569',
-      textMuted: '#64748B',
-      text: '#0F2D52',
-      textTertiary: '#64748B',
-      // Borders – cool slate (no gold-brown bleed on cards)
-      border: '#CBD5E1',
-      borderLight: '#E2E8F0',
+      // Text colors – deep slate navy palette
+      textPrimary: '#112233',
+      textStrong: '#091420',
+      textSecondary: '#475D73',
+      textMuted: '#8092A6',
+      text: '#112233',
+      textTertiary: '#8092A6',
+      // Borders – blue-tinted gray
+      border: '#D1DCE5',
+      borderLight: '#E9EFF4',
       // Semantic colors
-      danger: '#DC2626',
-      success: '#15803D',
-      warning: '#D97706',
-      info: '#0284C7',
-      notification: '#DC2626',
-      // Navigation
-      navPill: '#EFF6FF',
-      navIconActive: '#0F4C81',
-      navIconInactive: '#64748B',
+      danger: '#EF4444',
+      success: '#10B981',
+      warning: '#F59E0B',
+      info: '#1D69A6',
+      notification: '#EF4444',
+      // Navigation – soft blue-gray pill tints
+      navPill: '#EBF2F7',
+      navIconActive: '#132345',
+      navIconInactive: '#8092A6',
       // Header/Footer backgrounds (with transparency for glass effect)
-      headerBg: 'rgba(248,250,252, 0.92)',
+      headerBg: 'rgba(244, 246, 249, 0.88)',
       footerBg: 'rgba(255,255,255, 0.92)',
       // Alert colors
-      alertBg: '#FFFBEB',
-      alertBorder: '#FDE68A',
-      alertIcon: '#D97706',
-      alertText: '#92400E',
+      alertBg: '#FEFCE8',
+      alertBorder: '#FEF08A',
+      alertIcon: '#EAB308',
+      alertText: '#854D0E',
       alertBgDanger: '#FEF2F2',
       alertBorderDanger: '#FECACA',
-      alertIconDanger: '#C41E3A',
+      alertIconDanger: '#EF4444',
       alertTextDanger: '#991B1B',
-      alertBgInfo: '#EDF6FC',
-      alertBorderInfo: '#B3D9EF',
-      alertIconInfo: '#3090D0',
-      alertTextInfo: '#0A4F7A',
+      alertBgInfo: '#EDF7FC',
+      alertBorderInfo: '#B3DFEF',
+      alertIconInfo: '#1D69A6',
+      alertTextInfo: '#0A5F8A',
     },
     typography: {
       fontFamily: 'System',
@@ -153,54 +153,54 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
     ...defaultDarkTheme,
     colors: {
       ...defaultDarkTheme.colors,
-      // Primary – sky blue from logo inner circle
-      primary: '#5BB8E8',
-      primaryLight: '#7DD3FC',
-      primaryDark: '#0284C7',
-      // Secondary – motto gold
-      secondary: '#FACC15',
-      // Accent – wreath green
-      accent: '#4ADE80',
-      // Dark backgrounds – deep navy
-      background: '#061829',
-      surface: '#0F2D52',
-      card: '#0F2D52',
+      // Primary – slate blue for dark mode legibility
+      primary: '#2A467D',
+      primaryLight: '#4B6CA6',
+      primaryDark: '#132345',
+      // Secondary – complementary navy for dark mode banner
+      secondary: '#1F3765',
+      // Accent – orange
+      accent: '#DF6625',
+      // Dark backgrounds – deep navy-tinted tones
+      background: '#09111C',
+      surface: '#111C2B',
+      card: '#111C2B',
       // Light text for dark backgrounds
-      textPrimary: '#E2E8F0',
-      textStrong: '#F8FAFC',
-      textSecondary: '#94A3B8',
-      textMuted: '#64748B',
-      text: '#E2E8F0',
-      textTertiary: '#64748B',
-      // Darker borders
-      border: '#1E3A5F',
-      borderLight: '#2A4A72',
+      textPrimary: '#E1E7EE',
+      textStrong: '#F1F4F8',
+      textSecondary: '#8B9EAF',
+      textMuted: '#576C7E',
+      text: '#E1E7EE',
+      textTertiary: '#576C7E',
+      // Darker borders – deep navy border
+      border: '#1E2D3F',
+      borderLight: '#2C3F54',
       // Lighter semantic colors for dark mode
       danger: '#F87171',
-      success: '#4ADE80',
+      success: '#34D399',
       warning: '#FBBF24',
-      info: '#5BB8E8',
+      info: '#1D69A6',
       notification: '#F87171',
-      // Navigation
-      navPill: 'rgba(91,184,232, 0.14)',
-      navIconActive: '#5BB8E8',
-      navIconInactive: '#64748B',
+      // Navigation – slate blue tint
+      navPill: 'rgba(136, 155, 172, 0.15)',
+      navIconActive: '#889BAC',
+      navIconInactive: '#415366',
       // Header/Footer with dark navy glass effect
-      headerBg: 'rgba(6,24,41, 0.92)',
-      footerBg: 'rgba(15,45,82, 0.92)',
+      headerBg: 'rgba(9, 17, 28, 0.88)',
+      footerBg: 'rgba(17, 28, 43, 0.92)',
       // Alert colors (dark mode)
-      alertBg: 'rgba(250,204,21, 0.12)',
-      alertBorder: 'rgba(250,204,21, 0.28)',
-      alertIcon: '#FACC15',
-      alertText: '#FEF3C7',
-      alertBgDanger: 'rgba(196,30,58, 0.12)',
-      alertBorderDanger: 'rgba(196,30,58, 0.25)',
+      alertBg: 'rgba(234,179,8, 0.1)',
+      alertBorder: 'rgba(234,179,8, 0.2)',
+      alertIcon: '#FBBF24',
+      alertText: '#FEF08A',
+      alertBgDanger: 'rgba(239,68,68, 0.1)',
+      alertBorderDanger: 'rgba(239,68,68, 0.2)',
       alertIconDanger: '#F87171',
       alertTextDanger: '#FECACA',
-      alertBgInfo: 'rgba(48,144,208, 0.12)',
-      alertBorderInfo: 'rgba(48,144,208, 0.25)',
-      alertIconInfo: '#50B0D0',
-      alertTextInfo: '#B3D9EF',
+      alertBgInfo: 'rgba(29, 105, 166, 0.12)',
+      alertBorderInfo: 'rgba(29, 105, 166, 0.25)',
+      alertIconInfo: '#1D69A6',
+      alertTextInfo: '#B3DFEF',
     },
     typography: {
       fontFamily: 'System',
@@ -264,25 +264,26 @@ export const schoolTheme: { light: SchoolTheme; dark: SchoolTheme } = {
 
 export const SCHOOL_CONFIG = {
   // The official name of the school displayed in headers and reports
-  name: "The Global School Ravulpally",
+  name: "Samskruthe School Nawabpet",
 
   // Short line under the school name on the header ribbon (gold text)
-  tagline: "A School for IIT , JEE , NEET & Olympiads Foundations",
+  tagline: "Enlighting young minds",
 
   // Motto / core values shown in the first info column of the ribbon (letterhead)
-  motto: "Knowledge is Power",
+  motto: "Education is not Business, it is a Mission",
 
-  // Letterhead crest for UI, PDFs, and certificates (launcher icon stays icon-v2 in app.json)
+  // The school logo used in headers and reports
+  // Ensure the image exists in assets/images/
   logo: require('../../assets/images/icon.png'),
 
   // Optional: School Address for reports
-  address: "The Global School , Ravulpally , Vikarabad , Telangana , 509336",
+  address: "Samskruthe School ,Nawabpet.,Nawabpet,Dist Vikarabad., Telangana-501111",
 
   // Optional: Contact info for reports
-  contact: "7780526027",
+  contact: "9000700973",
 
   // Optional: School email for letterhead / reports
-  email: "theglobalschool1@gmail.com",
+  email: "pjrsamskruthe@gmail.com",
 
   // Website or Email
   website: "www.nexsyrus.com",
@@ -291,28 +292,28 @@ export const SCHOOL_CONFIG = {
   cbseAffiliationNo: "NA",
 
   // School Code (if applicable)
-  schoolCode: "TGSRAVULPALLY",
+  schoolCode: "SSNAWABPET",
 
   /**
    * Colour theme for ribbon / letterhead chrome (SchoolRibbon, etc.).
-   * Palette extracted from the school logo: navy ring, green wreath, gold field, tricolor ribbon.
+   * Adjust `ribbonGradient` stops for your brand; `accent` drives gold trim and taglines.
    */
   theme: {
-    /** Top stripe & crest – bright gold from motto lettering */
-    accent: '#FFD54F',
-    /** Mobile banner – navy crest → wreath green → medal gold (no muddy saffron tail) */
-    ribbonGradient: ['#0F4C81', '#14532D', '#CA8A04', '#0F4C81'] as const,
+    /** Stripes, tagline text, soft dividers */
+    accent: '#F3BF0E',
+    /** Four-stop diagonal ribbon – deep navy to royal/slate blue */
+    ribbonGradient: ['#0A1428', '#132345', '#1F3765', '#2A467D'] as const,
     /** Optional stops for expo-linear-gradient (length must match ribbonGradient) */
-    ribbonGradientLocations: [0, 0.38, 0.72, 1] as const,
+    ribbonGradientLocations: [0, 0.30, 0.65, 1] as const,
     /** Main title on the ribbon */
     ribbonTitle: '#FFFFFF',
-    /** Tagline + inset pill labels (was missing — defaulted to black on web) */
-    ribbonTagline: '#F8FAFC',
+    /** Tagline and motto text colour */
+    ribbonTagline: '#F3BF0E',
     /** Scrolling marquee dot separator */
     marqueeSeparator: 'rgba(255,255,255,0.85)',
     /** Letterhead / info column body */
-    ribbonBody: 'rgba(255,255,255,0.95)',
-    ribbonBodyMuted: 'rgba(255,255,255,0.88)',
+    ribbonBody: 'rgba(255,255,255,0.92)',
+    ribbonBodyMuted: 'rgba(255,255,255,0.9)',
     /**
      * Icons over the ribbon / unsafe area (`expo-status-bar`).
      * Use `light` on dark gradients, `dark` if you switch to a light ribbon.
@@ -320,3 +321,6 @@ export const SCHOOL_CONFIG = {
     statusBarOnRibbon: 'light' as 'light' | 'dark',
   },
 };
+
+export const SCHOOL_RECOGNITION_LINE = 'Recognised by Govt. of Telangana';
+
