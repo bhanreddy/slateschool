@@ -116,8 +116,7 @@
       "@react-native-community/datetimepicker",
       "@maplibre/maplibre-react-native",
       "./plugins/withManifestMerger.js",
-      "./plugins/withAndroidSounds.js",
-      "react-native-keyboard-controller"
+      "./plugins/withAndroidSounds.js"
     ],
     "experiments": {
       "typedRoutes": true
