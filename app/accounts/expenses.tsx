@@ -26,7 +26,7 @@ import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
 import ExpenseDateFilterBar from '../../src/components/expenses/ExpenseDateFilterBar';
 import BulkExpenseSheet from '../../src/components/expenses/BulkExpenseSheet';
-import { monthStartInput, todayDateInput } from '../../src/components/expenses/expenseConstants';
+import { formatDateShort, monthStartInput, todayDateInput } from '../../src/components/expenses/expenseConstants';
 
 // ─── Category config ──────────────────────────────────────────────────────────
 const CATEGORY_CONFIG: Record<string, { icon: string; color: string; grad: [string, string] }> = {
@@ -49,10 +49,7 @@ const STATUS_CONFIG = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const fmtINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
-const fmtDate = (d: string) => {
-  try { return new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: '2-digit' }); }
-  catch { return d; }
-};
+const fmtDate = (d: string) => formatDateShort(d);
 
 // ─── Search Bar ───────────────────────────────────────────────────────────────
 const SearchBar = ({ value, onChange, isDark }: any) => {
@@ -424,8 +421,25 @@ export default function AccountsExpenses() {
                   <View style={[styles.emptyIconWrap, { backgroundColor: isDark ? '#1E293B' : '#EEF2FF' }]}>
                     <FontAwesome5 name="receipt" size={28} color={isDark ? '#374151' : '#A5B4FC'} />
                   </View>
-                  <Text style={[styles.emptyTitle, { color: isDark ? '#475569' : '#64748B' }]}>No expenses yet</Text>
-                  <Text style={[styles.emptySub, { color: isDark ? '#374151' : '#94A3B8' }]}>Tap + to record a new expense</Text>
+                  <Text style={[styles.emptyTitle, { color: isDark ? '#E2E8F0' : '#0F172A' }]}>
+                    {searchQuery ? 'No matching expenses' : 'No expenses yet'}
+                  </Text>
+                  <Text style={[styles.emptySub, { color: isDark ? '#64748B' : '#64748B', textAlign: 'center', paddingHorizontal: 24 }]}>
+                    {searchQuery
+                      ? `Nothing matched “${searchQuery}”. Try another search or widen the date range.`
+                      : 'Log school spending so balances stay accurate.'}
+                  </Text>
+                  {!searchQuery && (
+                    <Pressable
+                      style={({ pressed }) => [{ marginTop: 16, borderRadius: 14, overflow: 'hidden', opacity: pressed ? 0.9 : 1 }]}
+                      onPress={() => setIsAddModalVisible(true)}
+                    >
+                      <LinearGradient colors={['#4F46E5', '#6366F1']} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 13, paddingHorizontal: 20 }} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
+                        <Ionicons name="add" size={18} color="#fff" />
+                        <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>Add first expense</Text>
+                      </LinearGradient>
+                    </Pressable>
+                  )}
                 </Animated.View>
               }
             />

@@ -1,4 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
+import { usePathname } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TextStyle,
+  StyleProp,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -302,7 +304,7 @@ function AdaptiveSchoolName({
   maxLines = SCHOOL_NAME_MAX_LINES,
 }: {
   text: string;
-  baseStyle: TextStyle;
+  baseStyle: StyleProp<TextStyle>;
   maxFontSize: number;
   minFontSize: number;
   fallbackWidth: number;
@@ -838,6 +840,9 @@ const CLAY_PILL_SHADOW = [
 function StaticLetterheadRibbon() {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
+  const pathname = usePathname() || '';
+  /** Driver portal needs trip controls above the fold — drop motto/address chrome. */
+  const isDriverPortal = pathname.includes('/driver');
 
   const schoolName =
     SCHOOL_NAME || SCHOOL_CONFIG.name;
@@ -857,12 +862,16 @@ function StaticLetterheadRibbon() {
   const email =
     SCHOOL_CONFIG.email?.trim() || '';
 
-  const compactInfo = width < 720;
-  const titleFallbackWidth = compactInfo
-    ? Math.max(0, width - 120)
-    : Math.max(0, width * 0.4 - 80);
+  const compactInfo = width < 720 || isDriverPortal;
+  const titleFallbackWidth = isDriverPortal
+    ? Math.max(0, width - 100)
+    : compactInfo
+      ? Math.max(0, width - 120)
+      : Math.max(0, width * 0.4 - 80);
 
   const columns = useMemo(() => {
+    if (isDriverPortal) return [];
+
     const items: {
       key: string;
       label: string;
@@ -900,34 +909,36 @@ function StaticLetterheadRibbon() {
       });
 
     return items;
-  }, [motto, address, phone, email, t]);
+  }, [isDriverPortal, motto, address, phone, email, t]);
 
   return (
-    <View style={styles.column}>
-      <View style={styles.clayCard}>
+    <View style={[styles.column, isDriverPortal && styles.columnDriver]}>
+      <View style={[styles.clayCard, isDriverPortal && styles.clayCardDriver]}>
         {/* Radial key light falling on the top-left of the clay surface. */}
         <View pointerEvents="none" style={styles.clayKeyLight} />
         {/* Glossy sheen sweeping across the top of the clay surface. */}
         <View pointerEvents="none" style={styles.claySheen} />
         {/* Crisp accent cap — SchoolTheme's accent colour, used exactly for its documented role. */}
-        <View pointerEvents="none" style={styles.clayAccentCap} />
+        <View pointerEvents="none" style={[styles.clayAccentCap, isDriverPortal && styles.clayAccentCapDriver]} />
 
         <View
           style={[
             styles.inner,
             compactInfo && styles.innerCompact,
+            isDriverPortal && styles.innerDriver,
           ]}
         >
           <View
             style={[
               styles.brandRow,
               compactInfo && styles.brandRowCompact,
+              isDriverPortal && styles.brandRowDriver,
             ]}
           >
-            <View style={styles.logoFrame}>
+            <View style={[styles.logoFrame, isDriverPortal && styles.logoFrameDriver]}>
               <Image
                 source={SCHOOL_CONFIG.logo}
-                style={styles.logo}
+                style={[styles.logo, isDriverPortal && styles.logoDriver]}
                 resizeMode="contain"
               />
             </View>
@@ -935,17 +946,21 @@ function StaticLetterheadRibbon() {
             <View style={styles.titleBlock}>
               <AdaptiveSchoolName
                 text={schoolName}
-                baseStyle={styles.schoolName}
-                maxFontSize={23}
+                baseStyle={[styles.schoolName, isDriverPortal && styles.schoolNameDriver]}
+                maxFontSize={isDriverPortal ? 18 : 23}
                 minFontSize={11}
                 fallbackWidth={titleFallbackWidth}
               />
 
-              <View style={styles.titleUnderline} />
+              {!isDriverPortal ? <View style={styles.titleUnderline} /> : null}
 
-              {tagline ? (
+              {tagline && !isDriverPortal ? (
                 <Text style={styles.tagline} numberOfLines={2}>
                   {`“${tagline}”`}
+                </Text>
+              ) : isDriverPortal ? (
+                <Text style={styles.driverPortalHint} numberOfLines={1}>
+                  {t('driver_ui.portal_label', 'Driver Portal')}
                 </Text>
               ) : null}
             </View>
@@ -983,6 +998,11 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 14,
   },
+  columnDriver: {
+    paddingHorizontal: 12,
+    paddingTop: 6,
+    paddingBottom: 6,
+  },
 
   /* Refined silk-matte volumetric clay body canvas. */
   clayCard: {
@@ -1010,6 +1030,43 @@ const styles = StyleSheet.create({
         shadowRadius: 22,
       },
     }),
+  },
+  clayCardDriver: {
+    borderRadius: 20,
+  },
+  clayAccentCapDriver: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  innerDriver: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 0,
+  },
+  brandRowDriver: {
+    gap: 12,
+    alignItems: 'center',
+  },
+  logoFrameDriver: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+  },
+  logoDriver: {
+    width: 30,
+    height: 30,
+  },
+  schoolNameDriver: {
+    fontSize: 17,
+    lineHeight: 22,
+  },
+  driverPortalHint: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    color: schoolColorWithAlpha(CLAY_SURFACE, 0.88),
+    textTransform: 'uppercase',
   },
 
   /* Crisp accent cap along the top edge — the theme's accent colour used for its documented purpose. */

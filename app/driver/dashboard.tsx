@@ -27,7 +27,7 @@ import {
 } from '../../src/services/driverLocationTask';
 import { usePersistedSWR } from '../../src/hooks/usePersistedSWR';
 import LogoLoader from '../../src/components/LogoLoader';
-import DashboardHero from '../../src/components/DashboardHero';
+import AdminHeaderCard from '../../src/components/AdminHeaderCard';
 import { useTheme } from '../../src/hooks/useTheme';
 
 const PINK = '#EC4899';
@@ -595,7 +595,7 @@ export default function DriverDashboard() {
   if (loading) {
     return (
       <ScreenLayout>
-        <StudentHeader title="Dashboard" menuUserType="driver" />
+        <StudentHeader title="Dashboard" menuUserType="driver" showBackButton={false} />
         <View style={s.center}><LogoLoader size={60} color={PRIMARY} /></View>
       </ScreenLayout>);
 
@@ -604,85 +604,135 @@ export default function DriverDashboard() {
   return (
     <ScreenLayout>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F1A" />
-      <StudentHeader title={t('driver_ui.dashboard', 'Dashboard')} menuUserType="driver" />
+      <StudentHeader title={t('driver_ui.route', 'My Route')} menuUserType="driver" showBackButton={false} />
       <ScrollView
         contentContainerStyle={s.scroll}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refreshDriverData} tintColor="transparent" colors={['transparent']} progressBackgroundColor="transparent" />}>
 
         {refreshing &&
-          <View style={{ width: '100%', alignItems: 'center', paddingVertical: 20 }}>
-            <LogoLoader size={30} />
+          <View style={{ width: '100%', alignItems: 'center', paddingVertical: 12 }}>
+            <LogoLoader size={28} />
           </View>
         }
-        {/* ═══════ Greeting panel ═══════ */}
-        <View style={{ marginBottom: 16 }}>
-          <DashboardHero
-            eyebrow={new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }).toUpperCase()}
-            greeting={greeting}
-            name={displayName}
-          />
-        </View>
 
-        {/* ═══════ Trip Tracking Card ═══════ */}
-        <Animated.View entering={FadeInDown.delay(80).duration(500)} style={s.heroWrap}>
+        {/* ═══════ Compact identity ═══════ */}
+        <Animated.View entering={FadeInDown.duration(320)} style={s.identityBlock}>
+          <Text style={s.dateEyebrow}>
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase()}
+          </Text>
+          <Text style={s.greetingLine}>
+            {greeting}, <Text style={s.greetingName}>{displayName}</Text>
+          </Text>
+          <View style={s.identityCard}>
+            <AdminHeaderCard
+              compact
+              compactRole
+              embedded
+              dense
+              displayName={displayName}
+              photoUrl={user?.photoUrl}
+              roleLabel={user?.role?.name || t('driver_ui.driver', 'Driver')}
+              staffCode={user?.staff_code ?? undefined}
+              portalBadge="DRIVER"
+            />
+          </View>
+        </Animated.View>
+
+        {/* ═══════ Trip status (primary) ═══════ */}
+        <Animated.View entering={FadeInDown.delay(60).duration(360)} style={s.heroWrap}>
           <LinearGradient colors={PRIMARY_GRADIENT} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={s.hero}>
-            <View style={[s.heroDecor, { top: -30, right: -30, width: 120, height: 120 }]} />
-            <View style={[s.heroDecor, { bottom: -15, left: -15, width: 60, height: 60 }]} />
+            <View style={[s.heroDecor, { top: -24, right: -20, width: 100, height: 100 }]} />
+            <View style={[s.heroDecor, { bottom: -20, left: -16, width: 72, height: 72 }]} />
+
             <View style={s.heroTop}>
-              <View>
-                <Text style={s.heroGreet}>{t('driver_ui.on_duty', 'On duty')}</Text>
-                <Text style={s.heroName}>{t('driver_ui.todays_trip', 'Today\'s Trip')}</Text>
+              <View style={{ flex: 1, paddingRight: 12 }}>
+                <View style={s.heroDutyRow}>
+                  <Animated.View style={[s.liveDot, { backgroundColor: locationSharingPaused ? '#FCA5A5' : isTracking ? GREEN : '#FCD34D' }, isTracking && !locationSharingPaused && pulseStyle]} />
+                  <Text style={s.heroGreet}>
+                    {locationSharingPaused
+                      ? t('driver_ui.location_paused_short', 'Location paused')
+                      : isTracking
+                        ? t('driver_ui.on_trip', 'ON TRIP')
+                        : t('driver_ui.on_duty', 'On duty')}
+                  </Text>
+                </View>
+                <Text style={s.heroName}>{t('driver_ui.todays_trip', "Today's Trip")}</Text>
+                <Text style={s.heroRoute} numberOfLines={1}>
+                  {selectedRoute
+                    ? `${selectedRoute.name}${selectedRoute.direction ? ` · ${selectedRoute.direction}` : ''}`
+                    : t('driver_ui.pick_route_hint', 'Select a route to begin')}
+                </Text>
               </View>
               <View style={s.heroBusPill}>
-                <Ionicons name="bus" size={14} color="#FFF" />
-                <Text style={s.heroBusText}>{selectedBus?.bus_no || buses[0]?.bus_no || t('driver_ui.no_bus', 'No Bus')}</Text>
+                <Ionicons name="bus" size={16} color="#FFF" />
+                <Text style={s.heroBusText}>{selectedBus?.bus_no || buses[0]?.bus_no || '—'}</Text>
               </View>
             </View>
-            <View style={s.heroDivider} />
-            <View style={s.heroBottom}>
-              <View style={s.heroMini}>
-                <Ionicons name="time-outline" size={14} color="rgba(255,255,255,0.7)" />
-                <Text style={s.heroMiniText}>{isTracking ? `${elapsedMin} min` : t('driver_ui.ready', 'Ready')}</Text>
+
+            <View style={s.heroStats}>
+              <View style={s.heroStat}>
+                <Ionicons name="time-outline" size={16} color="rgba(255,255,255,0.85)" />
+                <Text style={s.heroStatValue}>{isTracking ? `${elapsedMin}m` : t('driver_ui.ready', 'Ready')}</Text>
+                <Text style={s.heroStatLabel}>{t('driver_ui.elapsed', 'Time')}</Text>
               </View>
-              <View style={s.heroMini}>
-                <Ionicons name="speedometer-outline" size={14} color="rgba(255,255,255,0.7)" />
-                <Text style={s.heroMiniText}>{isTracking ? `${speed.toFixed(0)} km/h` : '—'}</Text>
+              <View style={s.heroStatDivider} />
+              <View style={s.heroStat}>
+                <Ionicons name="speedometer-outline" size={16} color="rgba(255,255,255,0.85)" />
+                <Text style={s.heroStatValue}>{isTracking ? `${speed.toFixed(0)}` : '—'}</Text>
+                <Text style={s.heroStatLabel}>km/h</Text>
               </View>
-              <View style={[s.statusPill, { backgroundColor: isTracking ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.15)' }]}>
-                <Animated.View style={[s.statusDot, { backgroundColor: locationSharingPaused ? '#FCA5A5' : isTracking ? GREEN : '#FCD34D' }, isTracking && !locationSharingPaused && pulseStyle]} />
-                <Text style={s.statusPillText}>{locationSharingPaused ? 'LOCATION PAUSED' : isTracking ? t('driver_ui.on_trip', 'ON TRIP') : t('driver_ui.idle', 'IDLE')}</Text>
+              <View style={s.heroStatDivider} />
+              <View style={s.heroStat}>
+                <Ionicons name="flag-outline" size={16} color="rgba(255,255,255,0.85)" />
+                <Text style={s.heroStatValue}>
+                  {stops.length > 0 ? `${completedCount}/${stops.length}` : '—'}
+                </Text>
+                <Text style={s.heroStatLabel}>{t('driver_ui.stops', 'Stops')}</Text>
               </View>
             </View>
+
+            {currentStop && (
+              <View style={s.nextStopRow}>
+                <Ionicons name="navigate" size={14} color="#FDE68A" />
+                <Text style={s.nextStopText} numberOfLines={1}>
+                  {t('driver_ui.next_stop', 'Next')}: {currentStop.stop_name}
+                  {currentStop.student_count > 0 ? ` · ${currentStop.student_count}` : ''}
+                </Text>
+              </View>
+            )}
           </LinearGradient>
         </Animated.View>
+
         {isTracking && locationSharingPaused &&
-          <View style={{ marginTop: -8, marginBottom: 16, padding: 12, borderRadius: 12, backgroundColor: '#FFF1F2', borderWidth: 1, borderColor: '#FECDD3' }}>
-            <Text style={{ color: '#9F1239', fontWeight: '700' }}>Location sharing is paused</Text>
-            <Text style={{ color: '#9F1239', marginTop: 3 }}>Allow Precise + background location, then set battery use to Unrestricted. The trip remains open; GPS restarts when you return.</Text>
+          <View style={s.pauseAlert}>
+            <Text style={s.pauseAlertTitle}>Location sharing is paused</Text>
+            <Text style={s.pauseAlertBody}>Allow Precise + background location, then set battery use to Unrestricted. The trip remains open; GPS restarts when you return.</Text>
           </View>
         }
+
         {/* ═══════ No Bus State ═══════ */}
         {!selectedBus && buses.length === 0 &&
-          <Animated.View entering={FadeInDown.delay(150).duration(500)} style={s.emptyCard}>
+          <Animated.View entering={FadeInDown.delay(100).duration(360)} style={s.emptyCard}>
             <View style={s.emptyIcon}><Ionicons name="bus-outline" size={36} color="#CBD5E1" /></View>
             <Text style={s.emptyTitle}>{t('driver_ui.no_bus_assigned', 'No Bus Assigned')}</Text>
             <Text style={s.emptySub}>{t('driver_ui.contact_admin_bus', 'Contact admin to get a bus assigned to you.')}</Text>
           </Animated.View>
         }
-        {/* ═══════ Bus Selector (multi-bus drivers) ═══════ */}
+
+        {/* ═══════ Bus Selector ═══════ */}
         {buses.length > 1 && !isTracking &&
-          <Animated.View entering={FadeInDown.delay(140).duration(500)}>
+          <Animated.View entering={FadeInDown.delay(90).duration(360)}>
             <View style={s.secHeader}>
-              <View style={s.secIconBox}><Ionicons name="bus" size={14} color={PRIMARY} /></View>
+              <View style={s.secIconBox}><Ionicons name="bus" size={15} color={PRIMARY} /></View>
               <Text style={s.secTitle}>{t('driver_ui.select_bus', 'Select Bus')}</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.routeScroll}>
+            <View style={s.routeGrid}>
               {buses.map((b) =>
                 <TouchableOpacity
                   key={b.id}
-                  style={[s.routeChip, selectedBus?.id === b.id && s.routeChipActive]}
-                  activeOpacity={0.7}
+                  style={[s.routeCard, selectedBus?.id === b.id && s.routeCardActive]}
+                  activeOpacity={0.75}
                   onPress={() => {
                     setSelectedBus(b);
                     const busRoutes = routes.filter((r) => r.bus_id === b.id);
@@ -695,48 +745,50 @@ export default function DriverDashboard() {
                       setStops([]);
                     }
                   }}>
-
-                  <Ionicons name="bus-outline" size={14}
-                    color={selectedBus?.id === b.id ? '#FFF' : PRIMARY} />
-                  <Text style={[s.routeChipText, selectedBus?.id === b.id && { color: '#FFF' }]}>
-                    {b.bus_no}
-                  </Text>
+                  <Ionicons name="bus-outline" size={18} color={selectedBus?.id === b.id ? '#FFF' : PRIMARY} />
+                  <Text style={[s.routeCardTitle, selectedBus?.id === b.id && { color: '#FFF' }]}>{b.bus_no}</Text>
                 </TouchableOpacity>
               )}
-            </ScrollView>
+            </View>
           </Animated.View>
         }
-        {/* ═══════ Route Selector (pre-trip) ═══════ */}
+
+        {/* ═══════ Route Selector ═══════ */}
         {selectedBus && !isTracking && routesForSelectedBus.length > 0 &&
-          <Animated.View entering={FadeInDown.delay(150).duration(500)}>
+          <Animated.View entering={FadeInDown.delay(100).duration(360)}>
             <View style={s.secHeader}>
-              <View style={s.secIconBox}><Ionicons name="map" size={14} color={PRIMARY} /></View>
+              <View style={s.secIconBox}><Ionicons name="map" size={15} color={PRIMARY} /></View>
               <Text style={s.secTitle}>{t('driver_ui.select_route', 'Select Route')}</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.routeScroll}>
+            <View style={s.routeGrid}>
               {routesForSelectedBus.map((r) =>
                 <TouchableOpacity
                   key={r.id}
-                  style={[s.routeChip, selectedRoute?.id === r.id && s.routeChipActive]}
-                  activeOpacity={0.7}
+                  style={[s.routeCard, selectedRoute?.id === r.id && s.routeCardActive]}
+                  activeOpacity={0.75}
                   onPress={() => {
                     setSelectedRoute(r);
                     const leg = inferTripLeg(r.direction);
                     setTripLeg(leg);
                     fetchRouteStops(r.id, leg);
                   }}>
-
-                  <Ionicons name="navigate-outline" size={14}
-                    color={selectedRoute?.id === r.id ? '#FFF' : PRIMARY} />
-                  <Text style={[s.routeChipText, selectedRoute?.id === r.id && { color: '#FFF' }]}>
-                    {r.name}
-                  </Text>
-                  <Text style={[s.routeChipDir, selectedRoute?.id === r.id && { color: 'rgba(255,255,255,0.7)' }]}>
-                    {r.direction}
-                  </Text>
+                  <View style={s.routeCardLeft}>
+                    <Ionicons name="navigate-outline" size={18} color={selectedRoute?.id === r.id ? '#FFF' : PRIMARY} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={[s.routeCardTitle, selectedRoute?.id === r.id && { color: '#FFF' }]} numberOfLines={1}>
+                        {r.name}
+                      </Text>
+                      <Text style={[s.routeCardMeta, selectedRoute?.id === r.id && { color: 'rgba(255,255,255,0.78)' }]}>
+                        {r.direction}{r.total_stops ? ` · ${r.total_stops} stops` : ''}
+                      </Text>
+                    </View>
+                  </View>
+                  {selectedRoute?.id === r.id && (
+                    <Ionicons name="checkmark-circle" size={20} color="#FFF" />
+                  )}
                 </TouchableOpacity>
               )}
-            </ScrollView>
+            </View>
             {selectedRoute?.direction === 'both' &&
               <View style={s.legRow}>
                 {(['morning', 'evening'] as TripLeg[]).map((leg) =>
@@ -747,7 +799,6 @@ export default function DriverDashboard() {
                       setTripLeg(leg);
                       if (selectedRoute) fetchRouteStops(selectedRoute.id, leg);
                     }}>
-
                     <Text style={[s.legChipText, tripLeg === leg && { color: '#FFF' }]}>
                       {leg === 'morning' ? t('driver_ui.morning_pickup', 'Morning (pickup)') : t('driver_ui.evening_dropoff', 'Evening (drop-off)')}
                     </Text>
@@ -757,9 +808,10 @@ export default function DriverDashboard() {
             }
           </Animated.View>
         }
-        {/* ═══════ Trip Progress Bar ═══════ */}
+
+        {/* ═══════ Trip Progress ═══════ */}
         {isTracking &&
-          <Animated.View entering={FadeInDown.delay(150).duration(500)} style={s.progressCard}>
+          <Animated.View entering={FadeInDown.delay(100).duration(360)} style={s.progressCard}>
             <View style={s.progressHeader}>
               <Text style={s.progressTitle}>{t('driver_ui.trip_progress', 'Trip Progress')}</Text>
               <Text style={s.progressCount}>{completedCount}/{stops.length} {t('driver_ui.stops', 'stops')}</Text>
@@ -772,16 +824,19 @@ export default function DriverDashboard() {
             </Text>
           </Animated.View>
         }
-        {/* ═══════ Calibration badge (Phase A) ═══════ */}
+
+        {/* ═══════ Calibration ═══════ */}
         {selectedRoute && calibration && stops.length > 0 &&
           <Animated.View
-            entering={FadeInDown.delay(180).duration(400)}
+            entering={FadeInDown.delay(120).duration(320)}
             style={[s.calibCard, calibration.is_calibrated && s.calibCardDone]}>
-            <Ionicons
-              name={calibration.is_calibrated ? 'checkmark-circle' : 'compass-outline'}
-              size={18}
-              color={calibration.is_calibrated ? GREEN : '#B45309'}
-            />
+            <View style={[s.calibIcon, calibration.is_calibrated && s.calibIconDone]}>
+              <Ionicons
+                name={calibration.is_calibrated ? 'checkmark-circle' : 'compass-outline'}
+                size={20}
+                color={calibration.is_calibrated ? GREEN : '#B45309'}
+              />
+            </View>
             <View style={{ flex: 1 }}>
               <Text style={[s.calibTitle, calibration.is_calibrated && { color: '#065F46' }]}>
                 {calibration.is_calibrated
@@ -797,12 +852,13 @@ export default function DriverDashboard() {
             </View>
           </Animated.View>
         }
+
         {/* ═══════ Stop List ═══════ */}
         {stops.length > 0 &&
-          <Animated.View entering={FadeInUp.delay(200).duration(500)}>
+          <Animated.View entering={FadeInUp.delay(140).duration(360)}>
             <View style={s.secHeader}>
               <View style={[s.secIconBox, { backgroundColor: '#ECFDF5' }]}>
-                <Ionicons name="list" size={14} color={GREEN} />
+                <Ionicons name="list" size={15} color={GREEN} />
               </View>
               <Text style={s.secTitle}>{isTracking ? t('driver_ui.stop_execution', 'Stop Execution') : t('driver_ui.route_stops', 'Route Stops')}</Text>
             </View>
@@ -814,10 +870,8 @@ export default function DriverDashboard() {
               return (
                 <Animated.View
                   key={stop.stop_id}
-                  entering={FadeInDown.delay(250 + idx * 60).duration(400)}
+                  entering={FadeInDown.delay(160 + idx * 40).duration(300)}
                   style={[s.stopCard, isCurrent && s.stopCardCurrent]}>
-
-                  {/* Timeline connector */}
                   <View style={s.timeline}>
                     <View style={[s.timelineDot, { backgroundColor: cfg.colorKey === 'textMuted' ? theme.colors.textMuted : theme.colors[cfg.colorKey] }]}>
                       <Ionicons name={cfg.icon as any} size={12} color="#FFF" />
@@ -826,7 +880,6 @@ export default function DriverDashboard() {
                       backgroundColor: stop.status === 'completed' ? GREEN : '#E2E8F0'
                     }]} />}
                   </View>
-                  {/* Stop Info */}
                   <View style={s.stopContent}>
                     <View style={s.stopTop}>
                       <View style={{ flex: 1 }}>
@@ -839,66 +892,61 @@ export default function DriverDashboard() {
                     </View>
                     {stop.student_count > 0 &&
                       <View style={s.studentRow}>
-                        <Ionicons name="people" size={12} color="#94A3B8" />
+                        <Ionicons name="people" size={13} color="#64748B" />
                         <Text style={s.studentText}>{stop.student_count} student{stop.student_count > 1 ? 's' : ''}</Text>
                       </View>
                     }
-                    {/* Action Buttons (only during active trip, only for current stop) */}
                     {isTracking && isCurrent &&
                       <View style={s.stopActions}>
                         {stop.status === 'pending' &&
                           <>
                             <TouchableOpacity
-                              style={[s.stopBtn, { backgroundColor: '#FEF3C7' }]}
+                              style={[s.stopBtn, s.stopBtnArrive]}
                               onPress={() => handleArriveStop(stop.stop_id)}
                               disabled={actionLoading || !tripControlsEnabled}>
-
-                              <Ionicons name="location" size={14} color="#D97706" />
-                              <Text style={[s.stopBtnText, { color: '#D97706' }]}>{t('driver_ui.arrive', 'Arrive')}</Text>
+                              <Ionicons name="location" size={16} color="#B45309" />
+                              <Text style={[s.stopBtnText, { color: '#B45309' }]}>{t('driver_ui.arrive', 'Arrive')}</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                              style={[s.stopBtn, { backgroundColor: '#FEE2E2' }]}
+                              style={[s.stopBtn, s.stopBtnSkip]}
                               onPress={() => handleSkipStop(stop.stop_id)}
                               disabled={actionLoading || !tripControlsEnabled}>
-
-                              <Ionicons name="close-circle-outline" size={14} color={RED} />
+                              <Ionicons name="close-circle-outline" size={16} color={RED} />
                               <Text style={[s.stopBtnText, { color: RED }]}>{t('driver_ui.skip', 'Skip')}</Text>
                             </TouchableOpacity>
                           </>
                         }
                         {stop.status === 'arrived' &&
                           <TouchableOpacity
-                            style={[s.stopBtn, { backgroundColor: '#DCFCE7', flex: 1 }]}
+                            style={[s.stopBtn, s.stopBtnDone, { flex: 1 }]}
                             onPress={() => handleCompleteStop(stop.stop_id)}
                             disabled={actionLoading || !tripControlsEnabled}>
-
-                            <Ionicons name="checkmark-circle" size={14} color="#059669" />
-                            <Text style={[s.stopBtnText, { color: '#059669' }]}>{t('driver_ui.complete_stop', 'Complete Stop')}</Text>
+                            <Ionicons name="checkmark-circle" size={16} color="#047857" />
+                            <Text style={[s.stopBtnText, { color: '#047857' }]}>{t('driver_ui.complete_stop', 'Complete Stop')}</Text>
                           </TouchableOpacity>
                         }
                       </View>
                     }
                   </View>
-                </Animated.View>);
-
+                </Animated.View>
+              );
             })}
           </Animated.View>
         }
+
         {/* ═══════ Trip Control ═══════ */}
         {selectedBus &&
-          <Animated.View entering={FadeInUp.delay(400).duration(500)} style={s.controlSection}>
+          <Animated.View entering={FadeInUp.delay(200).duration(360)} style={s.controlSection}>
             {!isTracking ?
               <TouchableOpacity
-                style={s.startWrap}
+                style={[s.startWrap, (!selectedRoute || actionLoading || !tripControlsEnabled) && { opacity: 0.55 }]}
                 onPress={handleStartTrip}
-                activeOpacity={0.8}
+                activeOpacity={0.85}
                 disabled={actionLoading || !selectedRoute || !tripControlsEnabled}>
-
                 <LinearGradient colors={PRIMARY_GRADIENT} style={s.startGrad}
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}>
                   {actionLoading ?
                     <LogoLoader color="#FFF" /> :
-
                     <>
                       <Ionicons name="play" size={22} color="#FFF" />
                       <Text style={s.ctrlText}>{t('driver_ui.start_trip', 'START TRIP').toUpperCase()}</Text>
@@ -906,8 +954,7 @@ export default function DriverDashboard() {
                   }
                 </LinearGradient>
               </TouchableOpacity> :
-
-              <TouchableOpacity style={s.endBtn} onPress={handleEndTrip} activeOpacity={0.8} disabled={actionLoading || !tripControlsEnabled}>
+              <TouchableOpacity style={s.endBtn} onPress={handleEndTrip} activeOpacity={0.85} disabled={actionLoading || !tripControlsEnabled}>
                 {actionLoading ? <LogoLoader color="#FFF" /> :
                   <>
                     <Ionicons name="stop" size={22} color="#FFF" />
@@ -918,7 +965,7 @@ export default function DriverDashboard() {
             }
           </Animated.View>
         }
-        <View style={{ height: 100 }} />
+        <View style={{ height: 110 }} />
       </ScrollView>
     </ScreenLayout>);
 
@@ -927,163 +974,237 @@ export default function DriverDashboard() {
 /* ════════════════════════════ STYLES ════════════════════════════ */
 const getStyles = (theme: any) => StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scroll: { padding: 20 },
+  scroll: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 20 },
+
+  identityBlock: { marginBottom: 14 },
+  dateEyebrow: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    color: theme.colors.textMuted,
+    marginBottom: 4,
+  },
+  greetingLine: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    letterSpacing: -0.4,
+    marginBottom: 10,
+  },
+  greetingName: { color: theme.colors.primary, fontWeight: '800' },
+  identityCard: { marginBottom: 2 },
 
   /* Hero */
   heroWrap: {
-    borderRadius: 28,
+    borderRadius: 24,
     overflow: 'hidden',
-    marginBottom: 24,
-    backgroundColor: '#FFFFFF',
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
+    marginBottom: 18,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.primaryDark,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.28,
+        shadowRadius: 18,
+      },
+      android: { elevation: 5 },
+      default: {
+        shadowColor: theme.colors.primaryDark,
+        shadowOffset: { width: 0, height: 10 },
+        shadowOpacity: 0.22,
+        shadowRadius: 16,
+      },
+    }),
   },
-  hero: { padding: 24, overflow: 'hidden' },
+  hero: { padding: 18, overflow: 'hidden' },
   heroDecor: { position: 'absolute', borderRadius: 999, backgroundColor: 'rgba(255,255,255,0.08)' },
-  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  heroGreet: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
-  heroName: { color: '#FFF', fontSize: 24, fontWeight: '800', marginTop: 4, letterSpacing: -0.5 },
+  heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
+  heroDutyRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginBottom: 4 },
+  liveDot: { width: 8, height: 8, borderRadius: 4 },
+  heroGreet: { color: 'rgba(255,255,255,0.92)', fontSize: 12, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  heroName: { color: '#FFF', fontSize: 22, fontWeight: '800', letterSpacing: -0.4 },
+  heroRoute: { color: 'rgba(255,255,255,0.78)', fontSize: 13, fontWeight: '600', marginTop: 4 },
   heroBusPill: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16,
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 12, paddingVertical: 10, borderRadius: 14,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)',
+    minWidth: 56, justifyContent: 'center',
   },
-  heroBusText: { color: '#FFF', fontSize: 14, fontWeight: '800', letterSpacing: 0.5 },
-  heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginVertical: 18 },
-  heroBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  heroMini: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  heroMiniText: { color: 'rgba(255,255,255,0.85)', fontSize: 14, fontWeight: '600' },
-  statusPill: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 12
+  heroBusText: { color: '#FFF', fontSize: 15, fontWeight: '800', letterSpacing: 0.3 },
+  heroStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  statusDot: { width: 7, height: 7, borderRadius: 4 },
-  statusPillText: { color: '#FFF', fontSize: 11, fontWeight: '700', letterSpacing: 0.8 },
+  heroStat: { flex: 1, alignItems: 'center', gap: 2 },
+  heroStatValue: { color: '#FFF', fontSize: 17, fontWeight: '800', letterSpacing: -0.3, marginTop: 2 },
+  heroStatLabel: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '600' },
+  heroStatDivider: { width: 1, height: 36, backgroundColor: 'rgba(255,255,255,0.16)' },
+  nextStopRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginTop: 12, paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.18)',
+  },
+  nextStopText: { flex: 1, color: '#FEF3C7', fontSize: 13, fontWeight: '700' },
+
+  pauseAlert: {
+    marginBottom: 16, padding: 14, borderRadius: 14,
+    backgroundColor: '#FFF1F2', borderWidth: 1, borderColor: '#FECDD3',
+  },
+  pauseAlertTitle: { color: '#9F1239', fontWeight: '800', fontSize: 14 },
+  pauseAlertBody: { color: '#9F1239', marginTop: 4, fontSize: 13, lineHeight: 18, fontWeight: '500' },
 
   /* Empty */
   emptyCard: {
-    alignItems: 'center', paddingVertical: 48, paddingHorizontal: 24,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 28, marginBottom: 24,
-    shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08, shadowRadius: 20, elevation: 2,
-    borderWidth: 1, borderColor: 'rgba(226, 232, 240, 0.6)'
+    alignItems: 'center', paddingVertical: 40, paddingHorizontal: 24,
+    backgroundColor: theme.colors.surface,
+    borderRadius: 24, marginBottom: 18,
+    borderWidth: 1, borderColor: theme.colors.border,
   },
   emptyIcon: {
-    width: 64, height: 64, borderRadius: 32, backgroundColor: '#F8FAFC',
+    width: 64, height: 64, borderRadius: 32, backgroundColor: theme.colors.borderLight,
     justifyContent: 'center', alignItems: 'center', marginBottom: 12
   },
-  emptyTitle: { fontSize: 17, fontWeight: '700', color: '#64748B', marginBottom: 4 },
-  emptySub: { fontSize: 13, color: '#94A3B8', textAlign: 'center' },
+  emptyTitle: { fontSize: 17, fontWeight: '700', color: theme.colors.textSecondary, marginBottom: 4 },
+  emptySub: { fontSize: 13, color: theme.colors.textMuted, textAlign: 'center' },
 
   /* Sections */
-  secHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
+  secHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 },
   secIconBox: {
-    width: 32, height: 32, borderRadius: 12, backgroundColor: '#FDF2F8',
+    width: 34, height: 34, borderRadius: 12,
+    backgroundColor: theme.colors.primaryLight + '22',
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 4, elevation: 1
   },
-  secTitle: { fontSize: 18, fontWeight: '800', color: '#1E293B', letterSpacing: -0.3 },
+  secTitle: { fontSize: 17, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: -0.3 },
 
   /* Route selector */
-  routeScroll: { marginBottom: 24 },
-  routeChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: '#FFFFFF', paddingHorizontal: 18, paddingVertical: 14,
-    borderRadius: 16, marginRight: 12,
-    borderWidth: 1, borderColor: '#E2E8F0',
-    shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1
+  routeGrid: { gap: 10, marginBottom: 18 },
+  routeCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 16,
+    borderRadius: 18, minHeight: 56,
+    borderWidth: 1.5, borderColor: theme.colors.border,
   },
-  routeChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primaryDark, shadowOpacity: 0.15, shadowColor: theme.colors.primary },
-  routeChipText: { fontSize: 15, fontWeight: '700', color: '#1E293B' },
-  routeChipDir: { fontSize: 12, color: '#64748B', fontWeight: '600', textTransform: 'capitalize' },
-  legRow: { flexDirection: 'row', gap: 12, marginBottom: 24 },
+  routeCardActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primaryDark,
+  },
+  routeCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  routeCardTitle: { fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary },
+  routeCardMeta: { fontSize: 12, color: theme.colors.textMuted, fontWeight: '600', marginTop: 2, textTransform: 'capitalize' },
+  legRow: { flexDirection: 'row', gap: 10, marginBottom: 18, marginTop: -6 },
   legChip: {
-    flex: 1, paddingVertical: 12, borderRadius: 16, alignItems: 'center',
-    backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0',
-    shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 1
+    flex: 1, paddingVertical: 14, borderRadius: 16, alignItems: 'center', minHeight: 48,
+    backgroundColor: theme.colors.surface, borderWidth: 1.5, borderColor: theme.colors.border,
   },
-  legChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primaryDark, shadowOpacity: 0.15, shadowColor: theme.colors.primary },
-  legChipText: { fontSize: 14, fontWeight: '800', color: '#475569' },
+  legChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primaryDark },
+  legChipText: { fontSize: 13, fontWeight: '800', color: theme.colors.textSecondary },
 
   /* Progress */
   calibCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A',
-    borderRadius: 16, padding: 14, marginBottom: 16,
+    borderRadius: 16, padding: 14, marginBottom: 14,
   },
   calibCardDone: { backgroundColor: '#ECFDF5', borderColor: '#A7F3D0' },
-  calibTitle: { fontSize: 13, fontWeight: '800', color: '#92400E' },
-  calibSub: { fontSize: 11, color: '#B45309', marginTop: 2, fontWeight: '500' },
-  progressCard: {
-    backgroundColor: '#FFFFFF', borderRadius: 24, padding: 22, marginBottom: 24,
-    shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08, shadowRadius: 20, elevation: 3,
-    borderWidth: 1, borderColor: 'rgba(226, 232, 240, 0.6)'
+  calibIcon: {
+    width: 40, height: 40, borderRadius: 12,
+    backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center',
   },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 14, alignItems: 'center' },
-  progressTitle: { fontSize: 16, fontWeight: '800', color: '#1E293B', letterSpacing: -0.3 },
+  calibIconDone: { backgroundColor: '#D1FAE5' },
+  calibTitle: { fontSize: 14, fontWeight: '800', color: '#92400E' },
+  calibSub: { fontSize: 12, color: '#B45309', marginTop: 3, fontWeight: '500', lineHeight: 16 },
+  progressCard: {
+    backgroundColor: theme.colors.surface, borderRadius: 20, padding: 18, marginBottom: 16,
+    borderWidth: 1, borderColor: theme.colors.border,
+  },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12, alignItems: 'center' },
+  progressTitle: { fontSize: 15, fontWeight: '800', color: theme.colors.textPrimary },
   progressCount: { fontSize: 14, fontWeight: '700', color: theme.colors.primary },
-  progressBarBg: { height: 12, backgroundColor: '#F1F5F9', borderRadius: 6, overflow: 'hidden', marginBottom: 10 },
+  progressBarBg: { height: 10, backgroundColor: theme.colors.borderLight, borderRadius: 6, overflow: 'hidden', marginBottom: 10 },
   progressBarFill: { height: '100%', backgroundColor: theme.colors.success, borderRadius: 6 },
-  progressRoute: { fontSize: 13, color: '#64748B', fontWeight: '600' },
+  progressRoute: { fontSize: 13, color: theme.colors.textMuted, fontWeight: '600' },
 
   /* Stop Cards */
   stopCard: {
-    flexDirection: 'row', marginBottom: 8, padding: 6,
-    backgroundColor: 'transparent', borderRadius: 20
+    flexDirection: 'row', marginBottom: 6, padding: 4,
+    backgroundColor: 'transparent', borderRadius: 18
   },
   stopCardCurrent: {
-    backgroundColor: '#FFFFFF', borderRadius: 24, padding: 12,
-    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.12, shadowRadius: 16, elevation: 4,
-    borderWidth: 1, borderColor: '#FBCFE8'
+    backgroundColor: theme.colors.surface, borderRadius: 20, padding: 12,
+    borderWidth: 1.5, borderColor: theme.colors.primaryLight + '55',
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.primary,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.12,
+        shadowRadius: 12,
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
   },
-  timeline: { width: 40, alignItems: 'center', marginRight: 12 },
+  timeline: { width: 36, alignItems: 'center', marginRight: 10 },
   timelineDot: {
     width: 28, height: 28, borderRadius: 14,
     justifyContent: 'center', alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 3, elevation: 2
   },
   timelineLine: { width: 3, flex: 1, marginVertical: 4, borderRadius: 1.5 },
-  stopContent: { flex: 1, paddingBottom: 16 },
-  stopTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
-  stopOrder: { fontSize: 11, color: '#64748B', fontWeight: '700', letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 2 },
-  stopName: { fontSize: 17, fontWeight: '800', color: '#1E293B', letterSpacing: -0.3 },
-  stopBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, alignSelf: 'flex-start' },
-  stopBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.5 },
+  stopContent: { flex: 1, paddingBottom: 14 },
+  stopTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 4 },
+  stopOrder: { fontSize: 11, color: theme.colors.textMuted, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase', marginBottom: 2 },
+  stopName: { fontSize: 16, fontWeight: '800', color: theme.colors.textPrimary, letterSpacing: -0.2 },
+  stopBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, alignSelf: 'flex-start' },
+  stopBadgeText: { fontSize: 11, fontWeight: '800', letterSpacing: 0.3 },
   studentRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
-  studentText: { fontSize: 13, color: '#64748B', fontWeight: '600' },
-  stopActions: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  studentText: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '600' },
+  stopActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
   stopBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, gap: 5, flex: 1
+    paddingHorizontal: 14, paddingVertical: 14, borderRadius: 14, gap: 6, flex: 1, minHeight: 48,
   },
-  stopBtnText: { fontSize: 13, fontWeight: '600' },
+  stopBtnArrive: { backgroundColor: '#FEF3C7' },
+  stopBtnSkip: { backgroundColor: '#FEE2E2' },
+  stopBtnDone: { backgroundColor: '#D1FAE5' },
+  stopBtnText: { fontSize: 14, fontWeight: '800' },
 
   /* Control */
-  controlSection: { marginTop: 12, marginBottom: 12 },
+  controlSection: { marginTop: 8, marginBottom: 8 },
   startWrap: {
-    borderRadius: 36, overflow: 'hidden',
-    shadowColor: theme.colors.primary, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 20, elevation: 8
+    borderRadius: 22, overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.primary,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.32,
+        shadowRadius: 16,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
   startGrad: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 64, gap: 12, borderRadius: 36
+    height: 58, gap: 10, borderRadius: 22
   },
   endBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    height: 64, borderRadius: 36, backgroundColor: theme.colors.danger, gap: 12,
-    shadowColor: theme.colors.danger, shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35, shadowRadius: 20, elevation: 8
+    height: 58, borderRadius: 22, backgroundColor: theme.colors.danger, gap: 10,
+    ...Platform.select({
+      ios: {
+        shadowColor: theme.colors.danger,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.3,
+        shadowRadius: 16,
+      },
+      android: { elevation: 6 },
+      default: {},
+    }),
   },
-  ctrlText: { color: '#FFF', fontSize: 18, fontWeight: '800', letterSpacing: 1.5 }
+  ctrlText: { color: '#FFF', fontSize: 16, fontWeight: '800', letterSpacing: 1.2 }
 });

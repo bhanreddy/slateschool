@@ -9,7 +9,7 @@ import { Theme } from '../../src/theme/themes';
 import AdminHeader from '../../src/components/AdminHeader';
 import Animated, { FadeInUp, useSharedValue, useAnimatedScrollHandler } from 'react-native-reanimated';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { FeeService } from '../../src/services/feeService';
+import { FeeService, PendingFeeFilterOptions } from '../../src/services/feeService';
 import { useAuth } from '../../src/hooks/useAuth';
 import LogoLoader from '../../src/components/LogoLoader';
 import { printCollectionReport, exportCollectionCsv } from '../../src/utils/collectionReport';
@@ -60,6 +60,12 @@ export default function AdminFinanceScreen() {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [modeFilter, setModeFilter] = useState<string>('All');
+  const [dueListOptions, setDueListOptions] = useState<PendingFeeFilterOptions | null>(null);
+  const [dueClassId, setDueClassId] = useState<string>('');
+  const [dueSectionId, setDueSectionId] = useState<string>('');
+  const [dueVillageId, setDueVillageId] = useState<string>('');
+  const [dueOverdueOnly, setDueOverdueOnly] = useState(false);
+  const [dueExporting, setDueExporting] = useState(false);
 
   const scrollY = useSharedValue(0);
   const onScroll = useAnimatedScrollHandler({
@@ -123,6 +129,13 @@ export default function AdminFinanceScreen() {
     fetchData();
   }, [authChecked, selectedDate]);
 
+  useEffect(() => {
+    if (!authChecked) return;
+    FeeService.getPendingFeeFilterOptions()
+      .then(setDueListOptions)
+      .catch((error) => console.warn('Failed to load due-list filter options:', error?.message));
+  }, [authChecked]);
+
   const onRefresh = () => {
     setRefreshing(true);
     fetchData();
@@ -153,6 +166,43 @@ export default function AdminFinanceScreen() {
       ...options.map((opt) => ({ text: opt, onPress: () => setModeFilter(opt) })),
       { text: 'Cancel', style: 'cancel' }]
     );
+  };
+
+  const selectDueFilter = (
+    title: string,
+    items: { id: string; name: string; label?: string }[],
+    onSelect: (id: string) => void,
+  ) => {
+    alertCompat(title, 'Select a filter', [
+      { text: 'All', onPress: () => onSelect('') },
+      ...items.map((item) => ({
+        text: item.label || item.name,
+        onPress: () => onSelect(item.id),
+      })),
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  };
+
+  const selectedDueClass = dueListOptions?.classes.find((item) => item.id === dueClassId);
+  const selectedDueSection = dueListOptions?.sections.find((item) => item.id === dueSectionId);
+  const selectedDueVillage = dueListOptions?.villages.find((item) => item.id === dueVillageId);
+
+  const exportDueList = async () => {
+    if (!dueListOptions || dueExporting) return;
+    setDueExporting(true);
+    try {
+      await FeeService.exportPendingFeesDueList({
+        academic_year_id: dueListOptions.academic_year.id,
+        class_id: dueClassId || undefined,
+        section_id: dueSectionId || undefined,
+        village_id: dueVillageId || undefined,
+        overdue_only: dueOverdueOnly || undefined,
+      });
+    } catch (error: any) {
+      alertCompat('Download failed', error?.message || 'Unable to download the pending-fees due list.');
+    } finally {
+      setDueExporting(false);
+    }
   };
 
 
@@ -295,6 +345,69 @@ export default function AdminFinanceScreen() {
                 </View>
               );
             })}
+          </View>
+
+          {/* ── Pending fees due-list export ── */}
+          <View style={styles.dueListCard}>
+            <View style={styles.dueListHeader}>
+              <View style={[styles.dueListIcon, { backgroundColor: '#F59E0B18' }]}>
+                <Ionicons name="document-text-outline" size={22} color="#D97706" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.dueListTitle}>Pending Fees Due List</Text>
+                <Text style={styles.dueListSubtitle}>
+                  {dueListOptions ? `${dueListOptions.academic_year.code} · One row per student` : 'Loading available filters…'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.dueListDescription}>
+              Download school total fee, discount given, final fee, paid fee and due amount. Village is taken from the student’s active transport stop.
+            </Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.dueFilterChips}>
+              <TouchableOpacity
+                disabled={!dueListOptions}
+                style={[styles.filterChip, dueClassId && styles.filterChipActive]}
+                onPress={() => selectDueFilter('Filter by Class', dueListOptions?.classes || [], (id) => setDueClassId(id))}
+              >
+                <Ionicons name="school-outline" size={13} color={dueClassId ? theme.colors.primary : theme.colors.textSecondary} style={{ marginRight: 5 }} />
+                <Text style={[styles.filterChipText, dueClassId && { color: theme.colors.primary }]}>Class: {selectedDueClass?.name || 'All'}</Text>
+                <Ionicons name="chevron-down" size={13} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={!dueListOptions}
+                style={[styles.filterChip, dueSectionId && styles.filterChipActive]}
+                onPress={() => selectDueFilter('Filter by Section', dueListOptions?.sections || [], (id) => setDueSectionId(id))}
+              >
+                <Ionicons name="layers-outline" size={13} color={dueSectionId ? theme.colors.primary : theme.colors.textSecondary} style={{ marginRight: 5 }} />
+                <Text style={[styles.filterChipText, dueSectionId && { color: theme.colors.primary }]}>Section: {selectedDueSection?.name || 'All'}</Text>
+                <Ionicons name="chevron-down" size={13} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                disabled={!dueListOptions}
+                style={[styles.filterChip, dueVillageId && styles.filterChipActive]}
+                onPress={() => selectDueFilter('Filter by Village', dueListOptions?.villages || [], (id) => setDueVillageId(id))}
+              >
+                <Ionicons name="location-outline" size={13} color={dueVillageId ? theme.colors.primary : theme.colors.textSecondary} style={{ marginRight: 5 }} />
+                <Text style={[styles.filterChipText, dueVillageId && { color: theme.colors.primary }]}>Village: {selectedDueVillage?.label || 'All'}</Text>
+                <Ionicons name="chevron-down" size={13} color={theme.colors.textSecondary} style={{ marginLeft: 4 }} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterChip, dueOverdueOnly && styles.filterChipActive]}
+                onPress={() => setDueOverdueOnly((value) => !value)}
+              >
+                <Ionicons name={dueOverdueOnly ? 'checkbox-outline' : 'square-outline'} size={14} color={dueOverdueOnly ? theme.colors.primary : theme.colors.textSecondary} style={{ marginRight: 5 }} />
+                <Text style={[styles.filterChipText, dueOverdueOnly && { color: theme.colors.primary }]}>Overdue only</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            <TouchableOpacity
+              disabled={!dueListOptions || dueExporting}
+              style={[styles.dueDownloadButton, (!dueListOptions || dueExporting) && styles.dueDownloadButtonDisabled]}
+              onPress={exportDueList}
+              activeOpacity={0.85}
+            >
+              <Ionicons name={dueExporting ? 'hourglass-outline' : 'download-outline'} size={18} color="#fff" />
+              <Text style={styles.dueDownloadButtonText}>{dueExporting ? 'Preparing Excel…' : 'Download Excel Due List'}</Text>
+            </TouchableOpacity>
           </View>
 
           {/* ── Filters ── */}
@@ -632,6 +745,73 @@ const getStyles = (theme: Theme, isWide: boolean) => StyleSheet.create({
     fontWeight: '800',
     letterSpacing: -0.5,
     color: theme.colors.text,
+  },
+
+  /* Pending fee due-list export */
+  dueListCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: isWide ? 20 : 16,
+    marginBottom: 22,
+    shadowColor: theme.colors.text,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 2,
+  },
+  dueListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  dueListIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dueListTitle: {
+    color: theme.colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  dueListSubtitle: {
+    color: theme.colors.textSecondary,
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 3,
+  },
+  dueListDescription: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 14,
+  },
+  dueFilterChips: {
+    gap: 8,
+    paddingTop: 14,
+    paddingBottom: 14,
+  },
+  dueDownloadButton: {
+    minHeight: 46,
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: '#7C3AED',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  dueDownloadButtonDisabled: {
+    opacity: 0.55,
+  },
+  dueDownloadButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800',
   },
 
   /* Filters */

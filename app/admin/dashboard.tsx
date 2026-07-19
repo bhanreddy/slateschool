@@ -32,6 +32,8 @@ import DashboardWebSidebar, {
   DASHBOARD_SIDEBAR_EXPANDED,
   type WebSidebarActionItem,
 } from '../../src/components/DashboardWebSidebar';
+import { useAdminWebChrome } from '../../src/contexts/AdminWebChromeContext';
+import { buildAdminNavActions } from '../../src/constants/adminNav';
 import { useAnalytics } from '../../src/hooks/useAnalytics';
 import { usePersistedSWR } from '../../src/hooks/usePersistedSWR';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1167,12 +1169,17 @@ export default function AdminDashboard() {
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [webSidebarCollapsed, setWebSidebarCollapsed] = useState(false);
+  // On wide web the persistent sidebar lives in the admin layout shell; the
+  // dashboard drops its own in-page sidebar but still reserves its width for
+  // the (window-width based) content layout math below.
+  const { shellActive, sidebarCollapsed: shellSidebarCollapsed, setSidebarCollapsed: setShellSidebarCollapsed } = useAdminWebChrome();
+  const effectiveSidebarCollapsed = shellActive ? shellSidebarCollapsed : webSidebarCollapsed;
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   const isWideScreen = isWeb && windowWidth >= 768;
   const sidebarW = isWideScreen
-    ? (webSidebarCollapsed ? DASHBOARD_SIDEBAR_COLLAPSED : DASHBOARD_SIDEBAR_EXPANDED)
+    ? (effectiveSidebarCollapsed ? DASHBOARD_SIDEBAR_COLLAPSED : DASHBOARD_SIDEBAR_EXPANDED)
     : 0;
   const webPad = isWideScreen ? 24 : 20;
   const contentWidth = isWideScreen
@@ -1277,32 +1284,19 @@ export default function AdminDashboard() {
     },
   ], [t, loading, dashboardData, financials, staff]);
 
-  const quickActions: ActionItem[] = useMemo(() => [
-    { title: t('admin_dashboard_v2.academic_structure', 'Academics'), icon: 'school-outline', route: '/admin/academics', tier: 'PRIMARY', gradient: ['#172554', '#2563EB'], category: 'Academic', badge: dashboardData?.diaryEntriesToday ?? 0 },
-    { title: 'Class Diary', icon: 'book-outline', route: '/admin/diary/viewer', tier: 'PRIMARY', gradient: ['#0F3A5F', '#0284C7'], category: 'Academic' },
-    { title: t('admin_dashboard_v2.timetable_manager', 'Timetable'), icon: 'calendar-outline', route: '/admin/timetable', tier: 'PRIMARY', gradient: ['#312E81', '#4F46E5'], category: 'Academic' },
-    { title: 'Year Upgrade', icon: 'refresh-circle-outline', route: '/admin/academic-year-upgrade', tier: 'PRIMARY', gradient: ['#1E3A8A', '#7C3AED'], category: 'Academic' },
-    { title: t('admin_dashboard_v2.certificates', 'Certs'), icon: 'ribbon-outline', route: '/admin/certificate-generator', tier: 'PRIMARY', gradient: ['#1E40AF', '#06B6D4'], category: 'Academic' },
-    { title: t('admin_dashboard_v2.progress_reports', 'Progress'), icon: 'stats-chart-outline', route: '/admin/progress-report-generator', tier: 'PRIMARY', gradient: ['#4338CA', '#A855F7'], category: 'Academic' },
-    { title: t('admin_dashboard_v2.expense_tracker', 'Expenses'), icon: 'receipt-outline', route: '/admin/expenses', tier: 'FINANCE', gradient: ['#14532D', '#22C55E'], category: 'Finance' },
-    { title: t('admin_dashboard_v2.fee_structure', 'Fee Setup'), icon: 'wallet-outline', route: '/admin/fees/set-class-fee', tier: 'FINANCE', gradient: ['#064E3B', '#14B8A6'], category: 'Finance' },
-    { title: 'Fee Adjustments', icon: 'cut-outline', route: '/admin/fees/adjustments', tier: 'FINANCE', gradient: ['#365314', '#84CC16'], category: 'Finance' },
-    { title: 'Fee Approvals', icon: 'shield-checkmark-outline', route: '/admin/fee-approvals', tier: 'FINANCE', gradient: ['#92400E', '#F59E0B'], category: 'Finance' },
-    { title: 'UPI Settings', icon: 'qr-code-outline', route: '/admin/upi-settings', tier: 'FINANCE', gradient: ['#0F766E', '#06B6D4'], category: 'Finance' },
-    { title: 'Dashboard Visibility', icon: 'eye-outline', route: '/admin/fees/visibility', tier: 'FINANCE', gradient: ['#166534', '#65A30D'], category: 'Finance' },
-    { title: 'Payroll', icon: 'card-outline', route: '/admin/payroll', tier: 'FINANCE', gradient: ['#312E81', '#6366F1'], category: 'Finance' },
-    { title: t('admin_dashboard_v2.view_reports', 'Reports'), icon: 'bar-chart-outline', route: '/admin/reports', tier: 'ACADEMIC', gradient: ['#581C87', '#7C3AED'], category: 'Analytics' },
-    { title: t('admin_dashboard_v2.smart_insights', 'Insights'), icon: 'bulb-outline', route: '/admin/smart-insights', tier: 'ACADEMIC', gradient: ['#4C1D95', '#2563EB'], category: 'AI' },
-    { title: t('admin_dashboard_v2.notices', 'Notices'), icon: 'megaphone-outline', route: '/admin/notices', tier: 'OPS', gradient: ['#7C2D12', '#F97316'], category: 'Comms' },
-    { title: t('messages.title', 'Messages'), icon: 'chatbubbles-outline', route: '/admin/messages', tier: 'OPS', gradient: ['#4F46E5', '#6366F1'], category: 'Comms' },
-    { title: t('admin_dashboard_v2.complaints', 'Complaints'), icon: 'chatbubble-ellipses-outline', route: '/admin/complaints', tier: 'OPS', gradient: ['#991B1B', '#F59E0B'], category: 'Support' },
-    { title: t('admin_dashboard_v2.transport', 'Transport'), icon: 'bus-outline', route: '/admin/transport', tier: 'OPS', gradient: ['#92400E', '#EAB308'], category: 'Ops' },
-    { title: t('admin_dashboard_v2.leaves', 'Leaves'), icon: 'document-text-outline', route: '/admin/leaves', tier: 'OPS', gradient: ['#9A3412', '#FB923C'], category: 'HR' },
-    { title: t('admin_dashboard_v2.manage_staff', 'Staff'), icon: 'people-outline', route: '/admin/manage-staff', tier: 'OPS', gradient: ['#7C3AED', '#EC4899'], category: 'HR' },
-    { title: t('admin_dashboard_v2.add_staff', 'Add Staff'), icon: 'person-add-outline', route: '/admin/addStaff', tier: 'OPS', gradient: ['#6D28D9', '#8B5CF6'], category: 'HR', permission: 'staff.create' },
-    { title: t('admin_dashboard_v2.add_accounts_staff', 'Accounts Portal'), icon: 'wallet-outline', route: '/admin/add-accounts-staff', tier: 'OPS', gradient: ['#BE123C', '#F97316'], category: 'HR' },
-    { title: 'Access Requests', icon: 'key-outline', route: '/admin/access-requests', tier: 'ADMIN', gradient: ['#881337', '#E11D48'], category: 'Security', badge: pendingRequestsCount },
-  ], [t, dashboardData?.diaryEntriesToday, pendingRequestsCount]);
+  const quickActions: ActionItem[] = useMemo(
+    () =>
+      buildAdminNavActions(t).map((item) => ({
+        ...item,
+        badge:
+          item.route === '/admin/academics'
+            ? dashboardData?.diaryEntriesToday ?? 0
+            : item.route === '/admin/access-requests'
+              ? pendingRequestsCount
+              : undefined,
+      })),
+    [t, dashboardData?.diaryEntriesToday, pendingRequestsCount],
+  );
 
   const visibleQuickActions = useMemo(
     () => quickActions.filter((item) => !item.permission || hasPermission(item.permission)),
@@ -1413,6 +1407,7 @@ export default function AdminDashboard() {
     <AdminHeaderCard
       compact
       compactRole
+      embedded
       displayName={user?.displayName || 'Admin User'}
       photoUrl={user?.photoUrl}
       roleLabel={user?.role?.name || 'Admin'}
@@ -1830,12 +1825,16 @@ export default function AdminDashboard() {
         title={currentHeaderTitle}
         showNotification
         scrollY={isAndroid ? undefined : scrollY}
-        onMenuPress={() => (isWideScreen ? setWebSidebarCollapsed((c) => !c) : setIsMenuOpen(true))}
+        onMenuPress={() =>
+          isWideScreen
+            ? (shellActive ? setShellSidebarCollapsed((c) => !c) : setWebSidebarCollapsed((c) => !c))
+            : setIsMenuOpen(true)
+        }
       />
 
       {isWideScreen ? (
         <View style={{ flex: 1, flexDirection: 'row', paddingTop: headerOffset }}>
-          <DashboardWebSidebar collapsed={webSidebarCollapsed} items={sidebarItems} />
+          {!shellActive && <DashboardWebSidebar collapsed={webSidebarCollapsed} items={sidebarItems} />}
           <Animated.ScrollView
             style={{ flex: 1 }}
             contentContainerStyle={[styles.content, { paddingTop: 20 }]}

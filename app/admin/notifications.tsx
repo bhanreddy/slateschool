@@ -167,6 +167,19 @@ const TRIGGERS: TriggerCard[] = [
 
 const POLL_INTERVAL_MS = 2500;
 const POLL_MAX_ATTEMPTS = 120;
+// A flaky network shouldn't tear down the live delivery view — keep polling
+// through short blips and only surface a failure after this many in a row.
+const POLL_MAX_CONSECUTIVE_ERRORS = 5;
+
+/**
+ * Per-send idempotency key. A double-tap, a React re-render, or the API client
+ * transparently retrying a 502/503/429 all reuse this exact value, so the
+ * backend collapses them into a single broadcast instead of sending twice.
+ */
+function makeIdempotencyKey(): string {
+  const rand = Math.random().toString(36).slice(2);
+  return `bc_${Date.now().toString(36)}_${rand}`;
+}
 
 const STATUS_COLORS = {
   sent: '#16A34A',
@@ -592,7 +605,12 @@ function DeliveryStatusModal({
     total > 0 ? Math.min(accounted / total, 1) : isProcessing ? 0 : 1;
   const progressPercent = `${Math.round(progressRatio * 100)}%` as `${number}%`;
   const successRate = accounted > 0 ? Math.round((sent / accounted) * 100) : 0;
-  const canRetry = status.status === 'completed' && failed > 0;
+  // Recoverable = confirmed-failed plus anyone the server never got to (a crash
+  // or redeploy mid-send leaves them un-attempted; the batch reaper flips such a
+  // broadcast to 'failed'). Retry re-sends to everyone not confirmed delivered.
+  const isTerminal = status.status === 'completed' || status.status === 'failed';
+  const resendCount = failed + (status.status === 'failed' ? remaining : 0);
+  const canRetry = isTerminal && resendCount > 0;
   const allClean = status.status === 'completed' && failed === 0 && noDevice === 0;
   const failureBreakdown = summarizeFailures(status.failed_recipients);
 
@@ -675,6 +693,17 @@ function DeliveryStatusModal({
                 </View>
               </View>
 
+              {status.status === 'failed' && (
+                <View style={styles.interruptedNote}>
+                  <Ionicons name="warning-outline" size={15} color={STATUS_COLORS.noDevice} />
+                  <Text style={styles.interruptedNoteText}>
+                    This send was interrupted before it finished. {resendCount} parent
+                    {resendCount === 1 ? '' : 's'} still need it — tap Resend to deliver to
+                    everyone who hasn’t received it yet.
+                  </Text>
+                </View>
+              )}
+
               <View style={styles.deliveryBar}>
                 {sent > 0 && <View style={{ flex: sent, backgroundColor: STATUS_COLORS.sent }} />}
                 {failed > 0 && <View style={{ flex: failed, backgroundColor: STATUS_COLORS.failed }} />}
@@ -740,7 +769,11 @@ function DeliveryStatusModal({
                 ) : (
                   <>
                     <Ionicons name="refresh" size={14} color="#FFF" style={{ marginRight: 6 }} />
-                    <Text style={styles.modalRetryText}>Resend failed ({failed})</Text>
+                    <Text style={styles.modalRetryText}>
+                      {status.status === 'failed'
+                        ? `Resend to ${resendCount}`
+                        : `Resend failed (${resendCount})`}
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -855,25 +888,46 @@ export default function NotificationsTriggerPage() {
     (batchId: string, channel: TriggerCard) => {
       clearPollTimer();
       let attempts = 0;
+      let consecutiveErrors = 0;
 
       const poll = async () => {
         attempts += 1;
         try {
           const status = await api.get<BroadcastStatus>(
-            `/admin/notifications/broadcast/${batchId}`
+            `/admin/notifications/broadcast/${batchId}`,
+            undefined,
+            { silent: true }
           );
+          consecutiveErrors = 0;
           setActiveStatus(status);
-          if (status.status !== 'processing' || attempts >= POLL_MAX_ATTEMPTS) {
+          if (status.status !== 'processing') {
             clearPollTimer();
             setLoadingType(null);
             if (status.status === 'completed' && (status.failure_count ?? 0) === 0) {
               Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             }
+            return;
+          }
+          if (attempts >= POLL_MAX_ATTEMPTS) {
+            // The send is still running on the server; the batch keeps advancing
+            // and the stuck-batch reaper backstops a crash. Stop polling but keep
+            // the last known progress on screen instead of raising a hard error.
+            clearPollTimer();
+            setLoadingType(null);
           }
         } catch {
-          clearPollTimer();
-          setLoadingType(null);
-          alertCompat('Failed', 'Could not fetch broadcast status.');
+          // Tolerate transient blips (auth refresh, brief 5xx, offline moment).
+          // Only give up after several failures in a row — one bad poll must not
+          // collapse an otherwise-healthy live view.
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= POLL_MAX_CONSECUTIVE_ERRORS) {
+            clearPollTimer();
+            setLoadingType(null);
+            alertCompat(
+              'Connection issue',
+              "We couldn't refresh the delivery status. The send is still running — reopen this notification shortly to see the final report."
+            );
+          }
         }
       };
 
@@ -909,7 +963,10 @@ export default function NotificationsTriggerPage() {
       Haptics.selectionAsync();
       setLoadingType(type);
       try {
-        const payload: { type: TriggerType; class_ids?: string[] } = { type };
+        const payload: { type: TriggerType; class_ids?: string[]; idempotency_key: string } = {
+          type,
+          idempotency_key: makeIdempotencyKey(),
+        };
         if (classIds.length > 0) payload.class_ids = classIds;
 
         const result = await api.post<BroadcastResult>('/admin/notifications/broadcast', payload);
@@ -991,13 +1048,19 @@ export default function NotificationsTriggerPage() {
             0
           ),
       });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // A large recovery run may come back still processing — keep the live
+      // view counting down instead of freezing on a partial report.
+      if (result.status === 'processing') {
+        pollBroadcastStatus(result.batch_id, activeChannel);
+      } else {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
     } catch (error: any) {
       alertCompat('Retry failed', error.message || error.response?.data?.error || 'Could not retry');
     } finally {
       setRetrying(false);
     }
-  }, [activeBatchId, activeChannel]);
+  }, [activeBatchId, activeChannel, pollBroadcastStatus]);
 
   const closeStatusModal = useCallback(() => {
     clearPollTimer();
@@ -1862,6 +1925,23 @@ const getStyles = (
       color: THEME_COLORS.textMuted,
       lineHeight: 17,
       marginBottom: 16,
+    },
+    interruptedNote: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      backgroundColor: isDark ? 'rgba(217,119,6,0.10)' : 'rgba(217,119,6,0.06)',
+      borderRadius: 14,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: 'rgba(217,119,6,0.22)',
+      marginBottom: 14,
+    },
+    interruptedNoteText: {
+      flex: 1,
+      fontSize: 12.5,
+      lineHeight: 18,
+      color: THEME_COLORS.textMuted,
     },
     failBox: {
       backgroundColor: isDark ? 'rgba(220,38,38,0.08)' : 'rgba(220,38,38,0.04)',

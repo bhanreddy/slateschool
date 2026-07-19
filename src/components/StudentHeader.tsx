@@ -165,8 +165,11 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
     }, [isDark]);
 
     const isAbsolute = !!scrollY;
-    const showNavBack = showBackButton || isWeb;
-    const showNavMenu = !showBackButton || isWeb;
+    /** Driver tabs already have bottom nav — hide redundant web back unless explicitly requested. */
+    const showNavBack = menuUserType === 'driver'
+      ? showBackButton
+      : (showBackButton || isWeb);
+    const showNavMenu = !showBackButton || isWeb || menuUserType === 'driver';
 
     const fontColorStyle = useAnimatedStyle(() => {
         if (!scrollY) return { color: '#FFFFFF' };
@@ -276,7 +279,7 @@ const StudentHeader: React.FC<StudentHeaderProps & { showBackButton?: boolean, t
                         }
                         thumbColor={isTeluguLang ? '#FFFFFF' : '#FFFFFF'}
                         ios_backgroundColor={isDark ? 'rgba(255,255,255,0.15)' : 'rgba(15,23,42,0.12)'}
-                        style={{ transform: [{ scaleX: 0.75 }, { scaleY: 0.75 }] }}
+                        style={{ transform: [{ scaleX: menuUserType === 'driver' ? 0.95 : 0.75 }, { scaleY: menuUserType === 'driver' ? 0.95 : 0.75 }] }}
                     />
                     <Animated.Text
                         style={[

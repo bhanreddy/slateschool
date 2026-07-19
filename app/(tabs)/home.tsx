@@ -35,7 +35,6 @@ import {
   Image,
 } from 'react-native';
 import Animated, {
-  FadeInDown,
   FadeInUp,
   useAnimatedStyle,
   useSharedValue,
@@ -45,6 +44,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AdminHeaderCard from '../../src/components/AdminHeaderCard';
+import DashboardHero from '../../src/components/DashboardHero';
 import LogoLoader from '../../src/components/LogoLoader';
 import ScreenLayout from '../../src/components/ScreenLayout';
 import StudentHeader from '../../src/components/StudentHeader';
@@ -1010,8 +1010,7 @@ const HomeScreen = () => {
 
           {/* ── HERO ── */}
           <View style={[S.hero, { paddingTop: HEADER_HEIGHT + 14, backgroundColor: P.bg }]}>
-            <Animated.View
-              entering={FadeInDown.delay(40).duration(520)}
+            <View
               style={[
                 S.heroOuter,
                 {
@@ -1021,35 +1020,16 @@ const HomeScreen = () => {
                 },
               ]}
             >
-              <LinearGradient
-                colors={
-                  isDark
-                    ? ['rgba(99,102,241,0.16)', 'rgba(20,24,36,0.62)', 'rgba(99,102,241,0.08)']
-                    : ['rgba(255,255,255,0.92)', 'rgba(244,247,255,0.96)', 'rgba(238,242,255,0.78)']
-                }
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[S.heroPanel, { borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(99,102,241,0.12)' }]}
-              >
-                <View style={[S.heroOrb, { backgroundColor: isDark ? 'rgba(129,140,248,0.18)' : 'rgba(129,140,248,0.20)' }]} pointerEvents="none" />
-                <View style={[S.greetingBlock, isWideWeb && S.webGreetingBlock]}>
-                  <View style={[S.datePill, {
-                    backgroundColor: isDark ? 'rgba(99,102,241,0.16)' : 'rgba(99,102,241,0.09)',
-                    borderColor: isDark ? 'rgba(129,140,248,0.28)' : 'rgba(99,102,241,0.18)',
-                  }]}>
-                    <View style={S.datePillDot} />
-                    <Text style={S.datePillText}>{todayLabel.toUpperCase()}</Text>
-                  </View>
-                  <Text style={[S.greetingTitle, { color: P.textPrimary }]}>
-                    {gIco} {gStr},{' '}
-                    <Text style={{ color: isDark ? '#A5B4FC' : '#4F46E5' }}>{firstName}</Text> 👋
-                  </Text>
-                  <Text style={[S.greetingSub, { color: P.textSecondary }]}>{classSec}</Text>
-                </View>
-
-                <View style={S.headerCardWrap}>
+              <DashboardHero
+                eyebrow={`${gIco}  ${todayLabel}`.toUpperCase()}
+                greeting={gStr}
+                name={firstName}
+                subtitle={classSec}
+                stacks
+                card={
                   <AdminHeaderCard
                     compact
+                    embedded
                     displayName={student?.display_name || user?.displayName || t('studentHome.studentFallback')}
                     roleLabel={classSec}
                     staffCode={student?.current_enrollment?.roll_number ? `Roll ${student.current_enrollment.roll_number}` : undefined}
@@ -1057,9 +1037,9 @@ const HomeScreen = () => {
                     portalBadge="STUDENT"
                     onAccountSwitched={onRefresh}
                   />
-                </View>
-              </LinearGradient>
-            </Animated.View>
+                }
+              />
+            </View>
           </View>
 
           {/* ── BODY ── */}
@@ -1170,64 +1150,6 @@ const S = StyleSheet.create({
 
   hero: { paddingBottom: 18, overflow: 'hidden' },
   heroOuter: { width: '100%' },
-  heroPanel: {
-    borderRadius: tokens.radius['3xl'],
-    borderWidth: 1,
-    padding: tokens.space[5],
-    overflow: 'hidden',
-    gap: tokens.space[4],
-    ...Platform.select({
-      web: {
-        boxShadow: '0 18px 45px rgba(79,70,229,0.10)',
-      } as any,
-      default: {
-        shadowColor: '#4F46E5',
-        shadowOffset: { width: 0, height: 12 },
-        shadowOpacity: 0.10,
-        shadowRadius: 24,
-        elevation: 4,
-      },
-    }),
-  },
-  heroOrb: {
-    position: 'absolute',
-    right: -70,
-    top: -80,
-    width: 190,
-    height: 190,
-    borderRadius: 95,
-  },
-  greetingBlock: { marginBottom: tokens.space[1], zIndex: 2 },
-  webGreetingBlock: { paddingHorizontal: tokens.space[1] },
-  datePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    alignSelf: 'flex-start',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    marginBottom: 10,
-  },
-  datePillDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: '#6366F1' },
-  datePillText: { fontSize: 9.5, fontWeight: '700', letterSpacing: 1.6, color: '#6366F1' },
-  greetingTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    letterSpacing: -0.6,
-    lineHeight: 30,
-  },
-  greetingSub: {
-    fontSize: 14,
-    fontWeight: '500',
-    marginTop: 4,
-  },
-  headerCardWrap: {
-    width: '100%',
-    alignSelf: 'stretch',
-    paddingHorizontal: 0,
-  },
 
   body: {
     marginTop: 0,

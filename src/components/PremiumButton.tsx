@@ -14,6 +14,8 @@ interface PremiumButtonProps {
     icon?: React.ReactNode;
     style?: ViewStyle;
     textStyle?: TextStyle;
+    /** Button height — default 60; use 48 for compact modals */
+    height?: number;
 }
 
 const MOTION = {
@@ -31,6 +33,7 @@ const PremiumButton: React.FC<PremiumButtonProps> = ({
     icon,
     style,
     textStyle,
+    height = 60,
 }) => {
     const scale = useSharedValue(1);
 
@@ -66,7 +69,7 @@ const PremiumButton: React.FC<PremiumButtonProps> = ({
                     colors={disabled ? ['#E2E8F0', '#CBD5E1'] : colors}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 0 }}
-                    style={styles.gradient}
+                    style={[styles.gradient, { height }]}
                 >
                     {loading ? (
                         <LogoLoader color={disabled ? '#94A3B8' : '#FFFFFF'} />
@@ -100,7 +103,6 @@ const styles = StyleSheet.create({
     },
     gradient: {
         width: '100%',
-        height: 60,
         flexDirection: 'row',
         justifyContent: 'center',
         alignItems: 'center',

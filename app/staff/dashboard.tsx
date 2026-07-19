@@ -88,6 +88,8 @@ interface DashboardMetrics {
   absentToday: number;
   pendingLeaves: number;
   classId?: string;
+  className?: string;
+  sectionName?: string;
   session?: 'morning' | 'afternoon';
 }
 
@@ -409,6 +411,7 @@ const AttendanceHero = React.memo(function AttendanceHero({ data, onPress, isDar
   });
 
   const sessionLabel = data?.session === 'afternoon' ? 'Afternoon' : 'Morning';
+  const classLabel = [data?.className, data?.sectionName].filter(Boolean).join(' · ');
   let statusText = total === 0
     ? `No ${sessionLabel.toLowerCase()} class assigned`
     : unmarked === 0
@@ -419,6 +422,9 @@ const AttendanceHero = React.memo(function AttendanceHero({ data, onPress, isDar
   const cardBg = isDark ? '#111827' : '#FFFFFF';
   const textColor = isDark ? '#FFFFFF' : '#1E293B';
   const subTextColor = isDark ? 'rgba(255,255,255,0.6)' : '#64748B';
+  const classChipBg = isDark ? 'rgba(99, 102, 241, 0.22)' : '#EEF0FF';
+  const classChipText = isDark ? '#C7D2FE' : '#4338CA';
+  const classChipIcon = isDark ? '#A5B4FC' : '#4F46E5';
 
   const handlePressIn = () => {
     pressScale.value = withTiming(0.98, { duration: 150 });
@@ -468,11 +474,63 @@ const AttendanceHero = React.memo(function AttendanceHero({ data, onPress, isDar
         >
           {/* 1. Header Section */}
           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
-            <View style={{ flex: 1 }}>
+            <View style={{ flex: 1, paddingRight: 12 }}>
               <Text style={{ fontSize: 24, fontWeight: '800', color: textColor, letterSpacing: -0.5 }}>{"Today's Roll Call"}</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 8 }}>
+              {!!classLabel && (
+                <View
+                  style={{
+                    alignSelf: 'flex-start',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    marginTop: 10,
+                    maxWidth: '100%',
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                    borderRadius: 18,
+                    backgroundColor: classChipBg,
+                    ...(Platform.OS === 'web' ? {
+                      boxShadow: isDark
+                        ? 'inset 2px 2px 5px rgba(0,0,0,0.35), inset -2px -2px 4px rgba(255,255,255,0.06), 0px 2px 8px rgba(99,102,241,0.15)'
+                        : 'inset 3px 3px 7px rgba(79,70,229,0.14), inset -3px -3px 6px rgba(255,255,255,1), 0px 2px 8px rgba(99,102,241,0.08)'
+                    } : {
+                      borderWidth: 1,
+                      borderColor: isDark ? 'rgba(165,180,252,0.18)' : 'rgba(99,102,241,0.14)',
+                    }),
+                  }}
+                >
+                  <View style={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: 11,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 8,
+                    backgroundColor: isDark ? 'rgba(165,180,252,0.16)' : '#FFFFFF',
+                    ...(Platform.OS === 'web' ? {
+                      boxShadow: isDark
+                        ? '0px 2px 4px rgba(0,0,0,0.25), inset 1px 1px 2px rgba(255,255,255,0.1)'
+                        : '0px 2px 5px rgba(99,102,241,0.18), inset 1.5px 1.5px 3px rgba(255,255,255,1), inset -1px -1px 2px rgba(79,70,229,0.1)'
+                    } : {
+                      shadowColor: '#6366F1',
+                      shadowOffset: { width: 0, height: 1 },
+                      shadowOpacity: 0.15,
+                      shadowRadius: 2,
+                      elevation: 1,
+                    }),
+                  }}>
+                    <Ionicons name="school-outline" size={13} color={classChipIcon} />
+                  </View>
+                  <Text
+                    style={{ fontSize: 13, fontWeight: '700', color: classChipText, letterSpacing: -0.2, flexShrink: 1 }}
+                    numberOfLines={1}
+                  >
+                    {classLabel}
+                  </Text>
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: classLabel ? 10 : 8, gap: 8 }}>
                 <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: statusColor }} />
-                <Text style={{ fontSize: 14, fontWeight: '600', color: subTextColor }}>{statusText}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: subTextColor, flexShrink: 1 }} numberOfLines={1}>{statusText}</Text>
               </View>
             </View>
 
@@ -1215,8 +1273,12 @@ export default function StaffDashboard() {
       ]);
       let studentCount = 0, presentCount = 0, absentCount = 0;
       let detectedClassId: string | undefined;
+      let className: string | undefined;
+      let sectionName: string | undefined;
       if (myClass) {
         detectedClassId = myClass.class_section_id;
+        className = myClass.class_name || undefined;
+        sectionName = myClass.section_name || undefined;
         studentCount = myClass.total_students;
         const sessionKey = myClass.session === 'afternoon' ? 'afternoon_status' : 'morning_status';
         presentCount = myClass.students.filter((student: any) =>
@@ -1230,6 +1292,8 @@ export default function StaffDashboard() {
         absentToday: absentCount,
         pendingLeaves: pendingLeaves.length,
         classId: detectedClassId,
+        className,
+        sectionName,
         session,
       };
     },
@@ -1303,6 +1367,7 @@ export default function StaffDashboard() {
     <AdminHeaderCard
       compact
       compactRole
+      embedded
       displayName={(isViewingAsAdmin ? (viewedStaff?.display_name || viewAsName) : user?.displayName) || 'Staff Member'}
       photoUrl={isViewingAsAdmin ? viewedStaff?.photo_url : user?.photoUrl}
       roleLabel={

@@ -432,6 +432,7 @@ const hasActiveStudentFilters = (filters: {
   submittedAdmissionNo: string;
   submittedFatherName: string;
   submittedMobile: string;
+  submittedVillage: string;
   activeFilter: FilterType;
 }) =>
   filters.activeFilter !== 'All'
@@ -439,7 +440,8 @@ const hasActiveStudentFilters = (filters: {
   || !!filters.selectedClassId
   || filters.submittedAdmissionNo.length > 0
   || filters.submittedFatherName.length > 0
-  || filters.submittedMobile.length > 0;
+  || filters.submittedMobile.length > 0
+  || filters.submittedVillage.length > 0;
 
 /** Narrow enough to query the API — avoids loading the full student roster on open. */
 const hasStudentQueryCriteria = (filters: {
@@ -448,12 +450,14 @@ const hasStudentQueryCriteria = (filters: {
   submittedAdmissionNo: string;
   submittedFatherName: string;
   submittedMobile: string;
+  submittedVillage: string;
 }) =>
   filters.submittedSearch.length > 0
   || !!filters.selectedClassId
   || filters.submittedAdmissionNo.length > 0
   || filters.submittedFatherName.length > 0
-  || filters.submittedMobile.length > 0;
+  || filters.submittedMobile.length > 0
+  || filters.submittedVillage.length > 0;
 
 // ─── Class Structure Card ─────────────────────────────────────────────────────
 const ClassStructureCard = React.memo(function ClassStructureCard({
@@ -627,6 +631,8 @@ function StudentFiltersPanel({
   onFatherNameChange,
   mobile,
   onMobileChange,
+  village,
+  onVillageChange,
   onClear,
   onSubmit,
   hasActiveFilters,
@@ -643,6 +649,8 @@ function StudentFiltersPanel({
   onFatherNameChange: (value: string) => void;
   mobile: string;
   onMobileChange: (value: string) => void;
+  village: string;
+  onVillageChange: (value: string) => void;
   onClear: () => void;
   onSubmit: () => void;
   hasActiveFilters: boolean;
@@ -878,55 +886,108 @@ function StudentFiltersPanel({
             </View>
           </View>
 
-          <Text style={[filterPanelStyles.label, { color: chipText }]}>MOBILE</Text>
-          <View style={[
-            filterPanelStyles.inputFrame,
-            {
-              backgroundColor: isDark ? '#2A3142' : '#EEF1F8',
-              borderTopWidth: 1.5,
-              borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.85)',
-              borderBottomWidth: 2.5,
-              borderBottomColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(76,90,120,0.15)',
-              shadowColor: isDark ? '#000' : '#6B7A99',
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: isDark ? 0.22 : 0.08,
-              shadowRadius: 5,
-              elevation: 1,
-            }
-          ]}>
-            <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
-              <LinearGradient
-                colors={isDark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-            </View>
-            <AppTextInput
-              style={[
-                filterPanelStyles.input, 
-                filterPanelStyles.mobileInput, 
-                { 
-                  backgroundColor: isDark ? '#0A0B12' : '#D5E0ED', 
-                  color: isDark ? '#F9FAFB' : '#111827', 
-                  borderWidth: 0,
+          <View style={filterPanelStyles.inputRow}>
+            <View style={filterPanelStyles.inputCell}>
+              <Text style={[filterPanelStyles.label, { color: chipText }]}>MOBILE</Text>
+              <View style={[
+                filterPanelStyles.inputFrame,
+                {
+                  backgroundColor: isDark ? '#2A3142' : '#EEF1F8',
                   borderTopWidth: 1.5,
-                  borderTopColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
-                  borderBottomWidth: 1,
-                  borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
-                  borderRadius: 10,
-                  height: 38,
-                  zIndex: 2,
+                  borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.85)',
+                  borderBottomWidth: 2.5,
+                  borderBottomColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(76,90,120,0.15)',
+                  shadowColor: isDark ? '#000' : '#6B7A99',
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: isDark ? 0.22 : 0.08,
+                  shadowRadius: 5,
+                  elevation: 1,
                 }
-              ]}
-              placeholder="Parent phone number"
-              placeholderTextColor={isDark ? 'rgba(255,255,255,0.25)' : '#9CA3AF'}
-              value={mobile}
-              onChangeText={onMobileChange}
-              keyboardType="phone-pad"
-              returnKeyType="search"
-              onSubmitEditing={onSubmit}
-            />
+              ]}>
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
+                  <LinearGradient
+                    colors={isDark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
+                    start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
+                </View>
+                <AppTextInput
+                  style={[
+                    filterPanelStyles.input,
+                    {
+                      backgroundColor: isDark ? '#0A0B12' : '#D5E0ED',
+                      color: isDark ? '#F9FAFB' : '#111827',
+                      borderWidth: 0,
+                      borderTopWidth: 1.5,
+                      borderTopColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
+                      borderRadius: 10,
+                      height: 38,
+                      zIndex: 2,
+                    }
+                  ]}
+                  placeholder="Parent phone number"
+                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.25)' : '#9CA3AF'}
+                  value={mobile}
+                  onChangeText={onMobileChange}
+                  keyboardType="phone-pad"
+                  returnKeyType="search"
+                  onSubmitEditing={onSubmit}
+                />
+              </View>
+            </View>
+            <View style={filterPanelStyles.inputCell}>
+              <Text style={[filterPanelStyles.label, { color: chipText }]}>VILLAGE</Text>
+              <View style={[
+                filterPanelStyles.inputFrame,
+                {
+                  backgroundColor: isDark ? '#2A3142' : '#EEF1F8',
+                  borderTopWidth: 1.5,
+                  borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.85)',
+                  borderBottomWidth: 2.5,
+                  borderBottomColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(76,90,120,0.15)',
+                  shadowColor: isDark ? '#000' : '#6B7A99',
+                  shadowOffset: { width: 0, height: 3 },
+                  shadowOpacity: isDark ? 0.22 : 0.08,
+                  shadowRadius: 5,
+                  elevation: 1,
+                }
+              ]}>
+                <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
+                  <LinearGradient
+                    colors={isDark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
+                    start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="none"
+                  />
+                </View>
+                <AppTextInput
+                  style={[
+                    filterPanelStyles.input,
+                    {
+                      backgroundColor: isDark ? '#0A0B12' : '#D5E0ED',
+                      color: isDark ? '#F9FAFB' : '#111827',
+                      borderWidth: 0,
+                      borderTopWidth: 1.5,
+                      borderTopColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
+                      borderBottomWidth: 1,
+                      borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
+                      borderRadius: 10,
+                      height: 38,
+                      zIndex: 2,
+                    }
+                  ]}
+                  placeholder="Transport stop / village"
+                  placeholderTextColor={isDark ? 'rgba(255,255,255,0.25)' : '#9CA3AF'}
+                  value={village}
+                  onChangeText={onVillageChange}
+                  returnKeyType="search"
+                  onSubmitEditing={onSubmit}
+                />
+              </View>
+            </View>
           </View>
 
           <Pressable 
@@ -1021,7 +1082,6 @@ const filterPanelStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  mobileInput: { marginTop: 0 },
 });
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
@@ -1043,6 +1103,8 @@ export default function AccountsFees() {
   const [submittedFatherName, setSubmittedFatherName] = useState('');
   const [mobileInput, setMobileInput] = useState('');
   const [submittedMobile, setSubmittedMobile] = useState('');
+  const [villageInput, setVillageInput] = useState('');
+  const [submittedVillage, setSubmittedVillage] = useState('');
   const [activeView, setActiveView] = useState<ViewMode>('Students');
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1159,6 +1221,7 @@ export default function AccountsFees() {
         admission_no: submittedAdmissionNo || undefined,
         father_name: submittedFatherName || undefined,
         mobile: submittedMobile || undefined,
+        village: submittedVillage || undefined,
         status: activeFilter === 'All' ? undefined : activeFilter,
       });
 
@@ -1201,6 +1264,7 @@ export default function AccountsFees() {
     submittedFatherName,
     submittedMobile,
     submittedSearch,
+    submittedVillage,
     mapFeeSummary,
     selectedClassId,
     user,
@@ -1223,7 +1287,9 @@ export default function AccountsFees() {
     setSubmittedFatherName(father.length >= 2 ? father : '');
     const digits = mobileInput.trim().replace(/\D/g, '');
     setSubmittedMobile(digits.length >= 3 ? digits : '');
-  }, [admissionNoInput, fatherNameInput, mobileInput, searchQuery]);
+    const village = villageInput.trim();
+    setSubmittedVillage(village.length >= 2 ? village : '');
+  }, [admissionNoInput, fatherNameInput, mobileInput, searchQuery, villageInput]);
 
   // Class Structures view filters locally on searchQuery, so submit only
   // matters for the Students view.
@@ -1242,6 +1308,7 @@ export default function AccountsFees() {
     submittedAdmissionNo,
     submittedFatherName,
     submittedMobile,
+    submittedVillage,
     activeFilter,
   });
 
@@ -1251,6 +1318,7 @@ export default function AccountsFees() {
     submittedAdmissionNo,
     submittedFatherName,
     submittedMobile,
+    submittedVillage,
   });
 
   const clearStudentFilters = useCallback(() => {
@@ -1261,6 +1329,8 @@ export default function AccountsFees() {
     setSubmittedFatherName('');
     setMobileInput('');
     setSubmittedMobile('');
+    setVillageInput('');
+    setSubmittedVillage('');
     setSearchQuery('');
     setSubmittedSearch('');
     setActiveFilter('All');
@@ -1404,6 +1474,8 @@ export default function AccountsFees() {
             onFatherNameChange={setFatherNameInput}
             mobile={mobileInput}
             onMobileChange={setMobileInput}
+            village={villageInput}
+            onVillageChange={setVillageInput}
             onClear={clearStudentFilters}
             onSubmit={commitStudentSearch}
             hasActiveFilters={studentFiltersActive}
@@ -1432,6 +1504,7 @@ export default function AccountsFees() {
                 {submittedAdmissionNo ? ` · Adm ${submittedAdmissionNo}` : ''}
                 {submittedFatherName ? ` · ${submittedFatherName}` : ''}
                 {submittedMobile ? ` · ${submittedMobile}` : ''}
+                {submittedVillage ? ` · ${submittedVillage}` : ''}
               </Text>
             </Animated.View>
           )}
@@ -1458,6 +1531,7 @@ export default function AccountsFees() {
     submittedFatherName,
     submittedMobile,
     submittedSearch,
+    submittedVillage,
     filterCounts,
     filteredStructures.length,
     filtersExpanded,
@@ -1476,6 +1550,7 @@ export default function AccountsFees() {
     styles.resultsCount,
     styles.viewModeRow,
     summaryStats,
+    villageInput,
   ]);
 
   const ListFooter = useMemo(() => (
@@ -1514,7 +1589,7 @@ export default function AccountsFees() {
         <Text style={styles.emptySubtitle}>
           {hasQuery
             ? 'Try different filters or clear them to see more students'
-            : 'Type a name, admission number or mobile, then press Enter (or tap Search) to load students.'}
+            : 'Type a name, admission number, mobile or village, then press Enter (or tap Search) to load students.'}
         </Text>
       </View>
     );

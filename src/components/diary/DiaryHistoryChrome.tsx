@@ -403,8 +403,9 @@ export function DiaryHistoryTabSwitcher({
         styles.tabBar,
         clayInset(isDark),
         {
-          backgroundColor: isDark ? '#0F1524' : '#E8EDF5',
+          backgroundColor: isDark ? '#0F1524' : '#E4E9F2',
           borderRadius: 20,
+          borderColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(148,163,184,0.18)',
         },
       ]}
     >
@@ -420,12 +421,22 @@ export function DiaryHistoryTabSwitcher({
             {isActive && (
               <Animated.View
                 entering={FadeIn.duration(180)}
-                style={[
-                  StyleSheet.absoluteFill,
-                  { borderRadius: 16, backgroundColor: theme.colors.primary },
-                  clay(isDark, 'sm'),
-                ]}
-              />
+                style={[StyleSheet.absoluteFill, { borderRadius: 16, overflow: 'hidden' }, clay(isDark, 'sm')]}
+              >
+                <LinearGradient
+                  colors={['#4338CA', '#6366F1']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.2)', 'rgba(255,255,255,0)']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+              </Animated.View>
             )}
             <Ionicons
               name={tab.icon}

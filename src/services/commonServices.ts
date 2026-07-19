@@ -210,7 +210,8 @@ export interface DiaryEntry {
 }
 
 export type DiaryWritePayload = Partial<Omit<DiaryEntry, 'id' | 'created_at'>> & {
-    input_language?: 'te' | 'en';
+    // 'auto' = backend detects Telugu vs English from the text and translates.
+    input_language?: 'te' | 'en' | 'auto';
 };
 
 export const DiaryService = {
@@ -226,7 +227,7 @@ export const DiaryService = {
         return api.get<DiaryEntry[]>('/diary', params);
     },
 
-    create: async (data: Omit<DiaryEntry, 'id' | 'created_at'> & { input_language?: 'te' | 'en' }): Promise<DiaryEntry> => {
+    create: async (data: Omit<DiaryEntry, 'id' | 'created_at'> & { input_language?: 'te' | 'en' | 'auto' }): Promise<DiaryEntry> => {
         return api.post<DiaryEntry>('/diary', data);
     },
 
@@ -271,6 +272,9 @@ export const EventService = {
 export interface BusItem {
     id: string;
     route_name: string;
+    route_id?: string | null;
+    route_count?: number;
+    driver_id?: string | null;
     driver_name: string;
     driver_phone: string;
     registration_no: string;
@@ -286,9 +290,17 @@ export const TransportService = {
 
     updateBus: async (
         id: string,
-        data: { bus_no?: string; registration_no?: string; capacity?: number; is_active?: boolean },
+        data: { bus_no?: string; registration_no?: string; capacity?: number; is_active?: boolean; driver_id?: string | null },
     ): Promise<void> => {
         await api.put(`/transport/buses/${id}`, data);
+    },
+
+    assignBus: async (
+        id: string,
+        data: { driver_id?: string | null; route_id?: string | null },
+    ): Promise<BusItem> => {
+        const res = await api.put<{ message: string; bus: BusItem }>(`/transport/buses/${id}/assignment`, data);
+        return res.bus;
     },
 
     deleteBus: async (id: string): Promise<void> => {

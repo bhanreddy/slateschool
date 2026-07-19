@@ -24,15 +24,7 @@ import LogoLoader from '../../src/components/LogoLoader';
 // Types & Constants
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ExamCategory {
-  key: string;
-  title: string;
-  icon: any;
-  color: string;
-  description: string;
-  examPrefix: string;
-  subExams?: string[];
-}
+import { ExamCategory, EXAM_CATEGORIES } from '@/src/constants/examCategories';
 
 const EXTRA_SUB_EXAMS_KEY = 'staffExtraSubExams';
 
@@ -119,53 +111,6 @@ function FilterLabelPill({ icon, label, color }: { icon: keyof typeof Ionicons.g
     </View>
   );
 }
-
-const EXAM_CATEGORIES: ExamCategory[] = [
-  {
-    key: 'slip_test',
-    title: 'Slip Tests',
-    icon: 'document-text',
-    color: '#3B82F6',
-    description: 'Weekly slip tests and unit tests',
-    examPrefix: 'ST',
-    subExams: ['ST-1', 'ST-2', 'ST-3', 'ST-4', 'ST-5']
-  },
-  {
-    key: 'fa_results',
-    title: 'Formative Assessment',
-    icon: 'analytics',
-    color: '#10B981',
-    description: 'FA-1 to FA-4 Internal Exams',
-    examPrefix: 'FA',
-    subExams: ['FA-1', 'FA-2', 'FA-3', 'FA-4']
-  },
-  {
-    key: 'sa_results',
-    title: 'Summative Assessment',
-    icon: 'school',
-    color: '#F59E0B',
-    description: 'Half-yearly and Annual Exams',
-    examPrefix: 'SA',
-    subExams: ['SA-1', 'SA-2']
-  },
-  {
-    key: 'special',
-    title: 'Special Exams',
-    icon: 'star',
-    color: '#8B5CF6',
-    description: 'Talent tests and special evaluations',
-    examPrefix: 'Special',
-    subExams: ['Special-1', 'Special-2']
-  },
-  {
-    key: 'weekend',
-    title: 'Weekend Exams',
-    icon: 'calendar',
-    color: '#EC4899',
-    description: 'Weekly practice (IIT/NEET)',
-    examPrefix: 'W',
-    subExams: ['W-1', 'W-2', 'W-3', 'W-4']
-  }];
 
 function parseExamIndex(name: string, prefix: string): number | null {
   const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

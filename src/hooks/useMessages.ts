@@ -43,13 +43,27 @@ export function useMessageUserId(): string | null {
 const sortAsc = (list: Message[]): Message[] =>
   [...list].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-/** Merge incoming messages into prev, de-duping by id; returns prev unchanged if nothing new. */
-const mergeUnique = (prev: Message[], incoming: Message[]): Message[] => {
+const messageChangeTimestamp = (message: Message): string => {
+  const timestamps = [message.created_at, message.edited_at, message.deleted_at].filter(Boolean) as string[];
+  return timestamps.reduce((latest, candidate) =>
+    new Date(candidate).getTime() > new Date(latest).getTime() ? candidate : latest
+  );
+};
+
+const latestChangeTimestamp = (messages: Message[]): string | null =>
+  messages.reduce<string | null>((latest, message) => {
+    const changedAt = messageChangeTimestamp(message);
+    return !latest || new Date(changedAt).getTime() > new Date(latest).getTime()
+      ? changedAt
+      : latest;
+  }, null);
+
+/** Merge incoming messages by id. Existing rows are replaced so edits/deletes sync too. */
+const mergeMessages = (prev: Message[], incoming: Message[]): Message[] => {
   if (incoming.length === 0) return prev;
-  const ids = new Set(prev.map((m) => m.id));
-  const add = incoming.filter((m) => !ids.has(m.id));
-  if (add.length === 0) return prev;
-  return sortAsc([...prev, ...add]);
+  const byId = new Map(prev.map((message) => [message.id, message]));
+  incoming.forEach((message) => byId.set(message.id, message));
+  return sortAsc([...byId.values()]);
 };
 
 // ─── Conversations list ───────────────────────────────────────────────────────
@@ -98,7 +112,7 @@ export function useThreadMessages(conversationId: string | null) {
     const mem = threadMemCache.get(mk);
     if (mem && mem.length > 0) {
       setMessages(mem);
-      latestTimestampRef.current = mem[mem.length - 1].created_at;
+      latestTimestampRef.current = latestChangeTimestamp(mem);
       setLoading(false);
     } else {
       setMessages([]);
@@ -115,7 +129,7 @@ export function useThreadMessages(conversationId: string | null) {
           const sorted = sortAsc(cached.data);
           threadMemCache.set(mk, sorted);
           setMessages(sorted);
-          latestTimestampRef.current = sorted[sorted.length - 1].created_at;
+          latestTimestampRef.current = latestChangeTimestamp(sorted);
           setLoading(false);
         }
       }
@@ -131,8 +145,8 @@ export function useThreadMessages(conversationId: string | null) {
         if (cancelled || !mountedRef.current) return;
         if (fetched.length > 0 || !since) {
           setMessages((prev) => {
-            const merged = mergeUnique(prev, fetched);
-            if (merged.length > 0) latestTimestampRef.current = merged[merged.length - 1].created_at;
+            const merged = mergeMessages(prev, fetched);
+            latestTimestampRef.current = latestChangeTimestamp(merged);
             return merged;
           });
         }
@@ -181,13 +195,8 @@ export function useThreadMessages(conversationId: string | null) {
         if (!mountedRef.current || newMsgs.length === 0) return;
 
         setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id));
-          const unique = newMsgs.filter((m) => !existingIds.has(m.id));
-          if (unique.length === 0) return prev;
-          const merged = [...prev, ...unique].sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
-          );
-          latestTimestampRef.current = merged[merged.length - 1].created_at;
+          const merged = mergeMessages(prev, newMsgs);
+          latestTimestampRef.current = latestChangeTimestamp(merged);
           return merged;
         });
       } catch {
@@ -242,7 +251,7 @@ export function useThreadMessages(conversationId: string | null) {
 
   // Optimistic send
   const sendMessage = useCallback(
-    async (body: string) => {
+    async (body: string, replyTo?: Message | null) => {
       if (!conversationId) return null;
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const optimistic: Message = {
@@ -251,6 +260,10 @@ export function useThreadMessages(conversationId: string | null) {
         sender_user_id: userId ?? '',
         sender_name: '',
         body,
+        reply_to_message_id: replyTo?.id || null,
+        reply_to_body: replyTo?.body || null,
+        reply_to_sender_user_id: replyTo?.sender_user_id || null,
+        reply_to_sender_name: replyTo?.sender_name || null,
         created_at: new Date().toISOString(),
         edited_at: null,
         deleted_at: null,
@@ -262,7 +275,12 @@ export function useThreadMessages(conversationId: string | null) {
 
       try {
         // tempId doubles as the idempotency key so a retry never duplicates.
-        const saved = await MessagesService.sendMessage(conversationId, body, tempId);
+        const saved = await MessagesService.sendMessage(
+          conversationId,
+          body,
+          tempId,
+          replyTo ? { replyToMessageId: replyTo.id } : undefined,
+        );
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? { ...saved, _status: 'sent' as const } : m)),
         );
@@ -291,7 +309,12 @@ export function useThreadMessages(conversationId: string | null) {
       try {
         // Same tempId key → idempotent: if the first attempt actually landed, the
         // server returns that same row instead of creating a duplicate.
-        const saved = await MessagesService.sendMessage(conversationId, msg.body, tempId);
+        const saved = await MessagesService.sendMessage(
+          conversationId,
+          msg.body,
+          tempId,
+          msg.reply_to_message_id ? { replyToMessageId: msg.reply_to_message_id } : undefined,
+        );
         setMessages((prev) =>
           prev.map((m) => (m.id === tempId ? { ...saved, _status: 'sent' as const } : m)),
         );
@@ -302,6 +325,36 @@ export function useThreadMessages(conversationId: string | null) {
       }
     },
     [conversationId, messages],
+  );
+
+  const editMessage = useCallback(
+    async (messageId: string, body: string) => {
+      if (!conversationId) return null;
+      try {
+        const saved = await MessagesService.editMessage(conversationId, messageId, body);
+        setMessages((prev) => prev.map((message) => (message.id === messageId ? saved : message)));
+        latestTimestampRef.current = messageChangeTimestamp(saved);
+        return saved;
+      } catch {
+        return null;
+      }
+    },
+    [conversationId],
+  );
+
+  const deleteMessage = useCallback(
+    async (messageId: string) => {
+      if (!conversationId) return null;
+      try {
+        const saved = await MessagesService.deleteMessage(conversationId, messageId);
+        setMessages((prev) => prev.map((message) => (message.id === messageId ? saved : message)));
+        latestTimestampRef.current = messageChangeTimestamp(saved);
+        return saved;
+      } catch {
+        return null;
+      }
+    },
+    [conversationId],
   );
 
   // Load older messages
@@ -323,7 +376,17 @@ export function useThreadMessages(conversationId: string | null) {
     }
   }, [conversationId, messages]);
 
-  return { messages, loading, live, sendMessage, retryMessage, loadOlder, notifyTyping };
+  return {
+    messages,
+    loading,
+    live,
+    sendMessage,
+    editMessage,
+    deleteMessage,
+    retryMessage,
+    loadOlder,
+    notifyTyping,
+  };
 }
 
 // ─── Unread total (for badge) ─────────────────────────────────────────────────

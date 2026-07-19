@@ -27,6 +27,7 @@ export default function StaffMessages() {
         <View>
           <StaffHeader
             title={t('messages.title', 'Messages')}
+            subtitle={t('messages.staff_subtitle', 'Stay close to your class')}
             showBackButton
             showMenuButton={false}
             onBack={onBack}

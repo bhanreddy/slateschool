@@ -16,6 +16,7 @@ import LogoLoader from '../../src/components/LogoLoader'; // OPT: Loading spinne
 import { useStudentQuery } from '../../src/hooks/useStudentQuery'; // OPT: TTL cache + focus refetch.
 import type { Student } from '../../src/types/models'; // OPT: Profile typing.
 import { ErrorBoundary } from '../../src/components/ErrorBoundary'; // OPT: Isolate runtime errors (same component as Screen/_layout).
+import { isTelugu } from '../../src/utils/lang'; // OPT: Locale for date formatting.
 
 const getStatusColor = (status: string) => { // OPT: Pure palette helper (unchanged behavior).
   switch (status.toLowerCase()) { // OPT:
@@ -94,19 +95,40 @@ const AttendanceStatsBanner = memo(function AttendanceStatsBanner({ // OPT: Pure
   );
 });
 
+const STATUS_FALLBACKS: Record<string, string> = {
+  present: 'Present',
+  absent: 'Absent',
+  leave: 'On Leave',
+  holiday: 'Holiday',
+  late: 'Late',
+  half_day: 'Half Day',
+};
+
 const AttendanceRecordRow = memo(function AttendanceRecordRow({ // OPT: Pure row — memoized for FlatList perf.
   item, // OPT: One attendance day.
   index, // OPT: Stagger index.
   styles, // OPT: Themed styles.
+  t, // OPT: i18n for status labels.
+  dateLocale, // OPT: Active language locale for dates.
 }: {
   item: AttendanceRecord; // OPT:
   index: number; // OPT:
   styles: ReturnType<typeof getStyles>; // OPT:
+  t: (k: string, d?: string) => any; // OPT:
+  dateLocale: string; // OPT:
 }) {
   const color = getStatusColor(item.status); // OPT: Row accent from status.
+  const statusKey = item.status.toLowerCase(); // OPT: Normalize API status for i18n key.
+  const statusLabel = t(`attendance_screen.${statusKey}`, STATUS_FALLBACKS[statusKey] ?? item.status); // OPT: Localized status.
   const dateObj = new Date(item.attendance_date); // OPT: Parse server date.
-  const day = dateObj.toLocaleDateString('en-US', { weekday: 'short' }); // OPT: Short weekday.
+  const day = dateObj.toLocaleDateString(dateLocale, { weekday: 'short' }); // OPT: Short weekday in active locale.
   const dayNum = dateObj.getDate(); // OPT: Day of month.
+  const fullDate = dateObj.toLocaleDateString(dateLocale, { // OPT: Full date in active locale.
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
   return (
     <Animated.View entering={FadeInDown.delay(index * 50).duration(500)} style={styles.card}>
       <View style={[styles.dateBox, { backgroundColor: color + '15' }]}>
@@ -115,8 +137,8 @@ const AttendanceRecordRow = memo(function AttendanceRecordRow({ // OPT: Pure row
       </View>
       <View style={styles.cardContent}>
         <View>
-          <Text style={styles.fullDate}>{dateObj.toDateString()}</Text>
-          <Text style={[styles.statusMain, { color }]}>{item.status.toUpperCase()}</Text>
+          <Text style={styles.fullDate}>{fullDate}</Text>
+          <Text style={[styles.statusMain, { color }]}>{statusLabel}</Text>
         </View>
         <Ionicons name={getStatusIcon(item.status)} size={28} color={color} />
       </View>
@@ -127,7 +149,8 @@ const AttendanceRecordRow = memo(function AttendanceRecordRow({ // OPT: Pure row
 function AttendanceScreenInner() { // OPT: Inner tree wrapped by ErrorBoundary below.
   const { theme } = useTheme(); // OPT: Theme for styles.
   const styles = React.useMemo(() => getStyles(theme), [theme]); // OPT: Memoized stylesheet.
-  const { t } = useTranslation(); // OPT: i18n.
+  const { t, i18n } = useTranslation(); // OPT: i18n.
+  const dateLocale = isTelugu(i18n.language) ? 'te-IN' : 'en-IN'; // OPT: Date formatting locale.
   const { user } = useAuth(); // OPT: Auth.
   const roleCode = typeof user?.role === 'object' && user?.role !== null ? (user.role as { code: string }).code : user?.role; // OPT: Role code.
   const isStudent = roleCode === 'student'; // OPT: Student-only.
@@ -176,17 +199,21 @@ function AttendanceScreenInner() { // OPT: Inner tree wrapped by ErrorBoundary b
   }, [refetch]); // OPT: refetch identity from useStudentQuery.
 
   const renderItem = useCallback( // OPT: Stable FlatList renderItem reference.
-    ({ item, index }: { item: AttendanceRecord; index: number }) => <AttendanceRecordRow item={item} index={index} styles={styles} />, // OPT: Delegate to memo row.
-    [styles] // OPT: Recreate when theme styles change.
+    ({ item, index }: { item: AttendanceRecord; index: number }) => (
+      <AttendanceRecordRow item={item} index={index} styles={styles} t={tStable} dateLocale={dateLocale} />
+    ), // OPT: Delegate to memo row.
+    [styles, tStable, dateLocale] // OPT: Recreate when theme, language, or locale changes.
   );
 
   const keyExtractor = useCallback((item: AttendanceRecord) => item.attendance_date, []); // OPT: Stable keys by date string.
 
   const listEmpty = useCallback( // OPT: Stable empty component factory for FlatList.
     () => (
-      <Text style={{ textAlign: 'center', marginTop: 20, color: '#999' }}>No attendance records found.</Text> // OPT: Empty copy.
+      <Text style={{ textAlign: 'center', marginTop: 20, color: '#999' }}>
+        {t('attendance_screen.no_records', 'No attendance records found.')}
+      </Text> // OPT: Localized empty copy.
     ),
-    [] // OPT: Static subtree.
+    [t] // OPT: Recreate when language changes.
   );
 
   const refreshCtl = useMemo( // OPT: Memo RefreshControl to avoid re-instantiating each render.

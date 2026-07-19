@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import AppTextInput from '@/src/components/AppTextInput';
 import { styles as ds } from '@/src/theme/styles';
@@ -8,11 +8,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  Pressable,
   StatusBar,
   ScrollView,
   Modal,
   Animated,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
@@ -216,6 +218,13 @@ const countTeachingPeriods = (periods: Period[]) =>
 
 const nextDefaultPeriodName = (periods: Period[]) => `Period ${countTeachingPeriods(periods) + 1}`;
 
+const personInitials = (name: string) => {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+};
+
 // ─── Animated Row ──────────────────────────────────────────────────────────────
 function AnimatedRow({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const opacity = useRef(new Animated.Value(0)).current;
@@ -336,6 +345,12 @@ export default function TimetableManagement() {
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+  const [subjectQuery, setSubjectQuery] = useState('');
+  const [teacherQuery, setTeacherQuery] = useState('');
+  const [slotSaving, setSlotSaving] = useState(false);
+  const [assignTab, setAssignTab] = useState<'subject' | 'teacher'>('subject');
+  const { width: windowWidth } = useWindowDimensions();
+  const assignSplit = windowWidth >= 640;
 
   const [managePeriodsVisible, setManagePeriodsVisible] = useState(false);
   const [editedPeriods, setEditedPeriods] = useState<Period[]>([]);
@@ -574,6 +589,9 @@ export default function TimetableManagement() {
       const ct = staff.find(s => (s.display_name || s.first_name || '') === classTeacherName);
       setSelectedTeacherId(ct?.id || '');
     } else { setSelectedTeacherId(existing?.teacher_id || ''); }
+    setSubjectQuery('');
+    setTeacherQuery('');
+    setAssignTab('subject');
     setModalVisible(true);
   };
 
@@ -582,6 +600,7 @@ export default function TimetableManagement() {
       alertCompat('Error', 'Please select a subject'); return;
     }
     try {
+      setSlotSaving(true);
       const csId = classSectionId;
       const yId = yearId;
       await TimetableService.createSlot({
@@ -607,6 +626,8 @@ export default function TimetableManagement() {
       await reloadSlotsForCurrentSelection(csId, yId);
     } catch (error: any) {
       alertCompat('Error', error?.message || 'Failed to save slot');
+    } finally {
+      setSlotSaving(false);
     }
   };
 
@@ -1072,6 +1093,43 @@ export default function TimetableManagement() {
     : 'Select class & section';
   const contextSub = `${selectedYearObj?.code ?? '—'} · ${timetableMode === 'per_day' ? TIMETABLE_DAY_LABELS[selectedDay] : 'All 6 days'}`;
 
+  const activePeriodDef = activeSlotData
+    ? periods.find(p => p.sort_order === activeSlotData.period)
+    : undefined;
+  const existingActiveSlot = activeSlotData
+    ? slots.find(s => s.period_number === activeSlotData.period)
+    : undefined;
+  const selectedSubject = subjects.find(s => s.id === selectedSubjectId);
+  const selectedTeacher = staff.find(s => s.id === selectedTeacherId);
+  const selectedTeacherName = selectedTeacher
+    ? (selectedTeacher.display_name || selectedTeacher.first_name || selectedTeacher.staff_code || '')
+    : '';
+  const isPeriod1ClassTeacherSlot =
+    activeSlotData?.period === 1 && (timetableMode !== 'per_day' || selectedDay === 'monday');
+  const canSaveSlot = !!selectedSubjectId && !slotSaving;
+
+  const filteredSubjects = useMemo(() => {
+    const q = subjectQuery.trim().toLowerCase();
+    if (!q) return subjects;
+    return subjects.filter(s =>
+      (s.name || '').toLowerCase().includes(q) || (s.code || '').toLowerCase().includes(q)
+    );
+  }, [subjects, subjectQuery]);
+
+  const filteredStaff = useMemo(() => {
+    const q = teacherQuery.trim().toLowerCase();
+    if (!q) return staff;
+    return staff.filter(st => {
+      const name = (st.display_name || st.first_name || st.staff_code || '').toLowerCase();
+      return name.includes(q);
+    });
+  }, [staff, teacherQuery]);
+
+  const closeAssignModal = () => {
+    if (slotSaving) return;
+    setModalVisible(false);
+  };
+
   // ─── Render ───────────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
@@ -1409,103 +1467,268 @@ export default function TimetableManagement() {
       </Modal>
 
       {/* ════════════════════ MODAL: Assign Slot ════════════════════ */}
-      <Modal transparent visible={modalVisible} onRequestClose={() => setModalVisible(false)} animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <View style={styles.sheetHandle} />
+      <Modal transparent visible={modalVisible} onRequestClose={closeAssignModal} animationType="slide">
+        <View style={[styles.modalOverlay, assignSplit && styles.modalOverlayCenter]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeAssignModal} accessibilityRole="button" accessibilityLabel="Dismiss" />
+          <View style={[styles.assignSheet, assignSplit && styles.assignSheetWide]}>
+            {!assignSplit && <View style={styles.sheetHandle} />}
 
-            <View style={styles.modalHeaderRow}>
-              <View style={styles.modalTitleGroup}>
-                <Text style={styles.modalTitle}>Assign Slot</Text>
-                <View style={styles.modalBadge}>
-                  <Text style={styles.modalBadgeText}>Period {activeSlotData?.period}</Text>
+            <View style={[styles.modalHeaderRow, assignSplit && { marginTop: 4 }]}>
+              <View style={{ flex: 1, paddingRight: 8 }}>
+                <View style={styles.modalTitleGroup}>
+                  <Text style={styles.modalTitle}>
+                    {existingActiveSlot ? 'Edit assignment' : 'Assign slot'}
+                  </Text>
+                  <View style={styles.modalBadge}>
+                    <Text style={styles.modalBadgeText}>P{activeSlotData?.period}</Text>
+                  </View>
                 </View>
+                <Text style={styles.assignMeta} numberOfLines={1}>
+                  {activePeriodDef
+                    ? `${fmt(activePeriodDef.start_time)} – ${fmt(activePeriodDef.end_time)}${getDurationLabel(activePeriodDef.start_time, activePeriodDef.end_time) ? ` · ${getDurationLabel(activePeriodDef.start_time, activePeriodDef.end_time)}` : ''}`
+                    : 'Select subject & teacher'}
+                  {selectedClassObj && selectedSectionObj
+                    ? ` · ${selectedClassObj.name}-${selectedSectionObj.name}`
+                    : ''}
+                </Text>
               </View>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.modalCloseBtn}>
+              <TouchableOpacity onPress={closeAssignModal} style={styles.modalCloseBtn} hitSlop={8}>
                 <Ionicons name="close" size={16} color={c.textMuted} />
               </TouchableOpacity>
             </View>
 
-            {activeSlotData?.period === 1 && (
-              <View style={styles.noteCard}>
-                <Ionicons name="information-circle" size={16} color={c.warning} />
-                <Text style={styles.noteText}>
-                  The Period 1 teacher becomes this class's Class Teacher{classTeacherName ? ` (currently ${classTeacherName})` : ''} and marks its attendance. Changing it here updates the student list in that teacher's portal.
+            {isPeriod1ClassTeacherSlot && (
+              <View style={styles.ctHintSlim}>
+                <Ionicons name="shield-checkmark" size={13} color={c.warning} />
+                <Text style={styles.ctHintSlimText} numberOfLines={1}>
+                  Period 1 teacher becomes Class Teacher
+                  {classTeacherName ? ` · now ${classTeacherName}` : ''}
                 </Text>
               </View>
             )}
 
-            <Text style={styles.modalSectionLabel}>Subject</Text>
-            <ScrollView style={styles.selectList} nestedScrollEnabled>
-              {subjects.map(sub => {
-                const sp = subjectPalette(sub.id || sub.name || '', isDark);
-                const active = selectedSubjectId === sub.id;
-                return (
-                  <TouchableOpacity
-                    key={sub.id}
-                    style={[styles.selectItem, active && styles.selectItemActive]}
-                    onPress={() => setSelectedSubjectId(sub.id)}
-                  >
-                    <View style={[styles.subjectSwatch, { backgroundColor: sp.solid }]} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.selectItemText, active && styles.selectItemTextActive]}>
-                        {sub.name}
-                      </Text>
-                      {sub.code ? <Text style={styles.selectItemSub}>{sub.code}</Text> : null}
-                    </View>
-                    {active && (
-                      <Ionicons name="checkmark-circle" size={18} color={c.accent} />
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            <Text style={styles.modalSectionLabel}>
-              Teacher <Text style={styles.optionalLabel}>(optional)</Text>
-            </Text>
-            <ScrollView style={styles.selectList} nestedScrollEnabled>
-              <TouchableOpacity
-                onPress={() => setSelectedTeacherId('')}
-                style={[styles.selectItem, selectedTeacherId === '' && styles.selectItemActive]}
-              >
-                <View style={[styles.selectRadio, selectedTeacherId === '' && styles.selectRadioActive]}>
-                  {selectedTeacherId === '' && <View style={styles.selectRadioDot} />}
-                </View>
-                <Text style={[styles.selectItemText, selectedTeacherId === '' && styles.selectItemTextActive]}>
-                  No Teacher
-                </Text>
-              </TouchableOpacity>
-              {staff.map(st => (
+            {!assignSplit && (
+              <View style={styles.assignTabs}>
                 <TouchableOpacity
-                  key={st.id}
-                  style={[styles.selectItem, selectedTeacherId === st.id && styles.selectItemActive]}
-                  onPress={() => setSelectedTeacherId(st.id)}
+                  style={[styles.assignTab, assignTab === 'subject' && styles.assignTabActive]}
+                  onPress={() => setAssignTab('subject')}
+                  activeOpacity={0.75}
                 >
-                  <View style={[styles.selectRadio, selectedTeacherId === st.id && styles.selectRadioActive]}>
-                    {selectedTeacherId === st.id && <View style={styles.selectRadioDot} />}
-                  </View>
-                  <Text style={[styles.selectItemText, selectedTeacherId === st.id && styles.selectItemTextActive]}>
-                    {st.display_name || st.first_name || st.staff_code}
+                  <Text style={[styles.assignTabLabel, assignTab === 'subject' && styles.assignTabLabelActive]} numberOfLines={1}>
+                    {selectedSubject?.name || 'Subject'}
                   </Text>
-                  {selectedTeacherId === st.id && (
-                    <Ionicons name="checkmark-circle" size={18} color={c.accent} />
+                  {selectedSubjectId ? (
+                    <Ionicons name="checkmark-circle" size={14} color={assignTab === 'subject' ? c.accent : c.success} />
+                  ) : null}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.assignTab, assignTab === 'teacher' && styles.assignTabActive]}
+                  onPress={() => setAssignTab('teacher')}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.assignTabLabel, assignTab === 'teacher' && styles.assignTabLabelActive]} numberOfLines={1}>
+                    {selectedTeacherName || 'Teacher'}
+                  </Text>
+                  {selectedTeacherId ? (
+                    <Ionicons name="checkmark-circle" size={14} color={assignTab === 'teacher' ? c.accent : c.success} />
+                  ) : (
+                    <Text style={styles.assignTabOptional}>opt</Text>
                   )}
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+              </View>
+            )}
 
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.actionBtnDanger} onPress={handleDeleteSlot}>
-                <Ionicons name="trash-outline" size={15} color={c.danger} />
-                <Text style={styles.actionBtnDangerText}>Clear</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtnGhost} onPress={() => setModalVisible(false)}>
+            <View style={[styles.assignPanels, assignSplit && styles.assignPanelsSplit]}>
+              {(assignSplit || assignTab === 'subject') && (
+                <View style={[styles.assignPanel, assignSplit && styles.assignPanelSplit]}>
+                  <View style={styles.assignSectionHead}>
+                    <Text style={styles.assignSectionTitle}>Subject</Text>
+                    <Text style={styles.assignSectionCount}>{filteredSubjects.length}</Text>
+                  </View>
+                  {subjects.length > 8 && (
+                    <View style={styles.searchField}>
+                      <Ionicons name="search" size={14} color={c.textMuted} />
+                      <AppTextInput
+                        style={[ds.inputInChrome, styles.searchInput]}
+                        value={subjectQuery}
+                        onChangeText={setSubjectQuery}
+                        placeholder="Search subjects…"
+                        placeholderTextColor={c.textMuted}
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                      />
+                      {subjectQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setSubjectQuery('')} hitSlop={8}>
+                          <Ionicons name="close-circle" size={15} color={c.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  <ScrollView
+                    style={styles.assignPanelScroll}
+                    contentContainerStyle={styles.assignPanelScrollContent}
+                    showsVerticalScrollIndicator={Platform.OS === 'web'}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                  >
+                    <View style={styles.selectGroup}>
+                      {filteredSubjects.length === 0 ? (
+                        <Text style={styles.selectEmpty}>No subjects match “{subjectQuery}”</Text>
+                      ) : (
+                        filteredSubjects.map(sub => {
+                          const sp = subjectPalette(sub.id || sub.name || '', isDark);
+                          const active = selectedSubjectId === sub.id;
+                          return (
+                            <TouchableOpacity
+                              key={sub.id}
+                              style={[styles.selectItem, active && styles.selectItemActive]}
+                              onPress={() => {
+                                setSelectedSubjectId(sub.id);
+                                if (!assignSplit) setAssignTab('teacher');
+                              }}
+                              activeOpacity={0.7}
+                            >
+                              <View style={[styles.subjectSwatchLg, { backgroundColor: sp.solid }]} />
+                              <Text style={[styles.selectItemText, active && styles.selectItemTextActive]} numberOfLines={1}>
+                                {sub.name}
+                              </Text>
+                              <View style={[styles.selectCheck, active && styles.selectCheckOn]}>
+                                {active ? <Ionicons name="checkmark" size={12} color={c.onAccent} /> : null}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+
+              {(assignSplit || assignTab === 'teacher') && (
+                <View style={[styles.assignPanel, assignSplit && styles.assignPanelSplit]}>
+                  <View style={styles.assignSectionHead}>
+                    <Text style={styles.assignSectionTitle}>
+                      Teacher <Text style={styles.optionalLabel}>optional</Text>
+                    </Text>
+                    <Text style={styles.assignSectionCount}>{filteredStaff.length}</Text>
+                  </View>
+                  {staff.length > 8 && (
+                    <View style={styles.searchField}>
+                      <Ionicons name="search" size={14} color={c.textMuted} />
+                      <AppTextInput
+                        style={[ds.inputInChrome, styles.searchInput]}
+                        value={teacherQuery}
+                        onChangeText={setTeacherQuery}
+                        placeholder="Search teachers…"
+                        placeholderTextColor={c.textMuted}
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                      />
+                      {teacherQuery.length > 0 && (
+                        <TouchableOpacity onPress={() => setTeacherQuery('')} hitSlop={8}>
+                          <Ionicons name="close-circle" size={15} color={c.textMuted} />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                  <ScrollView
+                    style={styles.assignPanelScroll}
+                    contentContainerStyle={styles.assignPanelScrollContent}
+                    showsVerticalScrollIndicator={Platform.OS === 'web'}
+                    keyboardShouldPersistTaps="handled"
+                    nestedScrollEnabled
+                  >
+                    <View style={styles.selectGroup}>
+                      <TouchableOpacity
+                        onPress={() => setSelectedTeacherId('')}
+                        style={[styles.selectItem, selectedTeacherId === '' && styles.selectItemActive]}
+                        activeOpacity={0.7}
+                      >
+                        <View style={[styles.pickerAvatar, styles.pickerAvatarEmpty]}>
+                          <Ionicons name="person-outline" size={14} color={c.textMuted} />
+                        </View>
+                        <Text style={[styles.selectItemText, selectedTeacherId === '' && styles.selectItemTextActive]}>
+                          No teacher
+                        </Text>
+                        <View style={[styles.selectCheck, selectedTeacherId === '' && styles.selectCheckOn]}>
+                          {selectedTeacherId === '' ? <Ionicons name="checkmark" size={12} color={c.onAccent} /> : null}
+                        </View>
+                      </TouchableOpacity>
+                      {filteredStaff.length === 0 ? (
+                        <Text style={styles.selectEmpty}>No teachers match “{teacherQuery}”</Text>
+                      ) : (
+                        filteredStaff.map(st => {
+                          const name = st.display_name || st.first_name || st.staff_code || 'Staff';
+                          const active = selectedTeacherId === st.id;
+                          const isCT = !!(classTeacherName && name === classTeacherName);
+                          return (
+                            <TouchableOpacity
+                              key={st.id}
+                              style={[styles.selectItem, active && styles.selectItemActive]}
+                              onPress={() => setSelectedTeacherId(st.id)}
+                              activeOpacity={0.7}
+                            >
+                              <View style={[styles.pickerAvatar, active && styles.pickerAvatarActive]}>
+                                <Text style={[styles.pickerAvatarText, active && styles.pickerAvatarTextActive]}>
+                                  {personInitials(name)}
+                                </Text>
+                              </View>
+                              <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={[styles.selectItemText, active && styles.selectItemTextActive]} numberOfLines={1}>
+                                  {name}
+                                </Text>
+                                {isCT ? <Text style={styles.selectItemSub}>Current class teacher</Text> : null}
+                              </View>
+                              {isPeriod1ClassTeacherSlot && active ? (
+                                <View style={styles.ctMiniBadge}>
+                                  <Text style={styles.ctMiniBadgeText}>CT</Text>
+                                </View>
+                              ) : null}
+                              <View style={[styles.selectCheck, active && styles.selectCheckOn]}>
+                                {active ? <Ionicons name="checkmark" size={12} color={c.onAccent} /> : null}
+                              </View>
+                            </TouchableOpacity>
+                          );
+                        })
+                      )}
+                    </View>
+                  </ScrollView>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.assignFooter}>
+              {existingActiveSlot ? (
+                <TouchableOpacity
+                  style={styles.actionBtnDangerIcon}
+                  onPress={handleDeleteSlot}
+                  disabled={slotSaving}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Clear assignment"
+                >
+                  <Ionicons name="trash-outline" size={16} color={c.danger} />
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.actionBtnDangerIconPlaceholder} />
+              )}
+              <TouchableOpacity
+                style={styles.actionBtnGhost}
+                onPress={closeAssignModal}
+                disabled={slotSaving}
+                activeOpacity={0.7}
+              >
                 <Text style={styles.actionBtnGhostText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtnPrimary} onPress={handleSaveSlot}>
+              <TouchableOpacity
+                style={[styles.actionBtnPrimary, !canSaveSlot && styles.actionBtnPrimaryDisabled]}
+                onPress={handleSaveSlot}
+                disabled={!canSaveSlot}
+                activeOpacity={0.7}
+              >
                 <Ionicons name="checkmark" size={15} color={c.onAccent} />
-                <Text style={styles.actionBtnPrimaryText}>Save</Text>
+                <Text style={styles.actionBtnPrimaryText}>
+                  {slotSaving ? 'Saving…' : existingActiveSlot ? 'Update' : 'Assign'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -2258,7 +2481,7 @@ const getStyles = (c: Tokens) =>
     // Row Card
     rowCard: {
       flexDirection: 'row',
-      marginBottom: 7,
+      marginBottom: 6,
       borderRadius: 12,
       overflow: 'hidden',
       backgroundColor: c.surface,
@@ -2277,30 +2500,30 @@ const getStyles = (c: Tokens) =>
 
     // Period column
     periodCell: {
-      width: 82,
+      width: 76,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 14,
+      paddingVertical: 10,
       paddingHorizontal: 6,
-      gap: 3,
+      gap: 2,
       backgroundColor: c.surfaceAlt,
       borderRightWidth: 1,
       borderRightColor: c.borderAccent,
     },
     periodBadge: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
       backgroundColor: c.badgeIdleBg,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 4,
+      marginBottom: 2,
     },
     periodBadgeFilled: {
       backgroundColor: c.accent,
     },
     periodBadgeText: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '800',
       color: '#ffffff',
     },
@@ -2312,7 +2535,7 @@ const getStyles = (c: Tokens) =>
     },
     periodTimeEnd: { color: c.textMuted },
     periodTimeDivider: {
-      width: 16,
+      width: 14,
       height: 1,
       backgroundColor: c.borderAccent,
       marginVertical: 1,
@@ -2321,7 +2544,7 @@ const getStyles = (c: Tokens) =>
       fontSize: 9,
       fontWeight: '700',
       color: c.textMuted,
-      marginTop: 3,
+      marginTop: 2,
       letterSpacing: 0.3,
     },
 
@@ -2330,23 +2553,23 @@ const getStyles = (c: Tokens) =>
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
     },
-    slotFilledContent: { flex: 1, gap: 4 },
+    slotFilledContent: { flex: 1, gap: 3 },
     subjectRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 7,
     },
     subjectDot: {
-      width: 9,
-      height: 9,
+      width: 8,
+      height: 8,
       borderRadius: 3,
     },
     slotSubjectText: {
       flex: 1,
-      fontSize: 15,
+      fontSize: 14,
       fontWeight: '700',
       color: c.textPrimary,
       letterSpacing: -0.2,
@@ -2355,7 +2578,7 @@ const getStyles = (c: Tokens) =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
-      marginLeft: 16, // align under subject text (past the dot)
+      marginLeft: 15,
     },
     slotTeacherText: {
       fontSize: 12,
@@ -2373,9 +2596,9 @@ const getStyles = (c: Tokens) =>
       gap: 10,
     },
     addIconWrap: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
       backgroundColor: c.accentSoft,
       alignItems: 'center',
       justifyContent: 'center',
@@ -2499,6 +2722,11 @@ const getStyles = (c: Tokens) =>
       backgroundColor: c.overlay,
       justifyContent: 'flex-end',
     },
+    modalOverlayCenter: {
+      justifyContent: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+    },
     modalSheet: {
       backgroundColor: c.surface,
       borderTopLeftRadius: 24,
@@ -2569,38 +2797,29 @@ const getStyles = (c: Tokens) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    modalSectionLabel: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: c.textMuted,
-      letterSpacing: 0.8,
-      textTransform: 'uppercase',
-      marginBottom: 6,
-      marginTop: 10,
-    },
     optionalLabel: {
-      fontWeight: '400',
+      fontWeight: '500',
       color: c.textMuted,
       textTransform: 'none',
       letterSpacing: 0,
       fontSize: 11,
     },
 
-    // Select List
-    selectList: {
-      height: 145,
+    // Select List (shared by assign modal)
+    selectGroup: {
       borderWidth: 1,
       borderColor: c.border,
-      borderRadius: 10,
-      marginBottom: 4,
+      borderRadius: 12,
+      overflow: 'hidden',
       backgroundColor: c.surfaceSunken,
     },
     selectItem: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: 13,
-      paddingVertical: 11,
-      gap: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+      gap: 9,
+      minHeight: 42,
       borderBottomWidth: 1,
       borderBottomColor: c.borderSoft,
     },
@@ -2608,62 +2827,271 @@ const getStyles = (c: Tokens) =>
       backgroundColor: c.accentSoft,
     },
     subjectSwatch: {
+      width: 12,
+      height: 12,
+      borderRadius: 4,
+    },
+    subjectSwatchLg: {
       width: 14,
       height: 14,
       borderRadius: 4,
     },
-    selectRadio: {
-      width: 16,
-      height: 16,
-      borderRadius: 8,
-      borderWidth: 2,
-      borderColor: c.textFaint,
+    selectCheck: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      borderWidth: 1.5,
+      borderColor: c.border,
+      backgroundColor: c.surface,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    selectRadioActive: {
+    selectCheckOn: {
       borderColor: c.accent,
-    },
-    selectRadioDot: {
-      width: 7,
-      height: 7,
-      borderRadius: 4,
       backgroundColor: c.accent,
     },
     selectItemText: {
-      fontSize: 14,
+      fontSize: 13.5,
       color: c.textSecondary,
       flex: 1,
+      fontWeight: '500',
     },
     selectItemTextActive: {
       color: c.accentText,
-      fontWeight: '600',
+      fontWeight: '700',
     },
     selectItemSub: {
-      fontSize: 11,
+      fontSize: 10.5,
       color: c.textMuted,
       marginTop: 1,
     },
+    selectEmpty: {
+      paddingHorizontal: 14,
+      paddingVertical: 16,
+      fontSize: 13,
+      color: c.textMuted,
+      textAlign: 'center',
+    },
 
-    // Note Card
-    noteCard: {
+    // Assign Slot sheet
+    assignSheet: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      paddingTop: 10,
+      paddingHorizontal: 16,
+      paddingBottom: Platform.OS === 'ios' ? 28 : 16,
+      maxHeight: '92%',
+      width: '100%',
+      maxWidth: 560,
+      alignSelf: 'center',
+      borderWidth: c.dark ? 1 : 0,
+      borderColor: c.border,
+    },
+    assignSheetWide: {
+      maxWidth: 720,
+      borderRadius: 20,
+      marginBottom: Platform.OS === 'web' ? 24 : 0,
+      maxHeight: Platform.OS === 'web' ? '88%' : '92%',
+    },
+    assignMeta: {
+      marginTop: 4,
+      fontSize: 12,
+      fontWeight: '500',
+      color: c.textMuted,
+    },
+    ctHintSlim: {
       flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 8,
-      backgroundColor: c.warningSoft,
+      alignItems: 'center',
+      gap: 7,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      marginBottom: 10,
       borderRadius: 8,
-      padding: 10,
-      marginBottom: 8,
-      borderLeftWidth: 3,
-      borderLeftColor: c.warning,
+      backgroundColor: c.warningSoft,
       borderWidth: 1,
       borderColor: c.warningSoftBorder,
     },
-    noteText: {
+    ctHintSlimText: {
       flex: 1,
       fontSize: 12,
+      fontWeight: '600',
       color: c.warningText,
-      lineHeight: 18,
+    },
+    assignTabs: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 10,
+      padding: 3,
+      borderRadius: 12,
+      backgroundColor: c.chipBg,
+      borderWidth: 1,
+      borderColor: c.chipBorder,
+    },
+    assignTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      minHeight: 38,
+      paddingHorizontal: 10,
+      borderRadius: 9,
+    },
+    assignTabActive: {
+      backgroundColor: c.surface,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    assignTabLabel: {
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: '600',
+      color: c.textMuted,
+    },
+    assignTabLabelActive: {
+      color: c.textPrimary,
+      fontWeight: '700',
+    },
+    assignTabOptional: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: c.textFaint,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    assignPanels: {
+      flexGrow: 0,
+      flexShrink: 1,
+      minHeight: 220,
+      maxHeight: Platform.OS === 'web' ? 380 : 340,
+    },
+    assignPanelsSplit: {
+      flexDirection: 'row',
+      gap: 12,
+      maxHeight: 400,
+    },
+    assignPanel: {
+      flex: 1,
+      minHeight: 0,
+    },
+    assignPanelSplit: {
+      flex: 1,
+      minWidth: 0,
+    },
+    assignPanelScroll: {
+      flexGrow: 1,
+      flexShrink: 1,
+    },
+    assignPanelScrollContent: {
+      paddingBottom: 4,
+    },
+    assignSectionHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+    assignSectionTitle: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: c.textSecondary,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+    },
+    assignSectionCount: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: c.textMuted,
+      backgroundColor: c.chipBg,
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 99,
+      overflow: 'hidden',
+    },
+    searchField: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      minHeight: 38,
+      paddingHorizontal: 10,
+      marginBottom: 6,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: c.inputBorder,
+      backgroundColor: c.inputBg,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 13,
+      color: c.textPrimary,
+      paddingVertical: Platform.OS === 'web' ? 8 : 6,
+      outlineStyle: 'none' as any,
+    },
+    pickerAvatar: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: c.chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    pickerAvatarEmpty: {
+      backgroundColor: c.surface,
+    },
+    pickerAvatarActive: {
+      backgroundColor: c.accentSoft,
+      borderColor: c.accentSoftBorder,
+    },
+    pickerAvatarText: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: c.textMuted,
+    },
+    pickerAvatarTextActive: {
+      color: c.accentText,
+    },
+    ctMiniBadge: {
+      backgroundColor: c.successSoft,
+      borderRadius: 5,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+      borderWidth: 1,
+      borderColor: c.successSoftBorder,
+    },
+    ctMiniBadgeText: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: c.successText,
+      letterSpacing: 0.4,
+    },
+    assignFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: c.borderSoft,
+    },
+    actionBtnDangerIcon: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: c.dangerSoft,
+      borderWidth: 1,
+      borderColor: c.dangerSoftBorder,
+    },
+    actionBtnDangerIconPlaceholder: {
+      width: 44,
+      height: 44,
+    },
+    actionBtnPrimaryDisabled: {
+      opacity: 0.45,
     },
 
     // Input
@@ -2925,27 +3353,13 @@ const getStyles = (c: Tokens) =>
       gap: 8,
       marginTop: 20,
     },
-    actionBtnPrimary: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      backgroundColor: c.accent,
-      borderRadius: 10,
-      paddingVertical: 13,
-    },
-    actionBtnPrimaryText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: c.onAccent,
-    },
     actionBtnGhost: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 10,
+      borderRadius: 12,
       paddingVertical: 13,
+      minHeight: 44,
       backgroundColor: c.chipBg,
       borderWidth: 1,
       borderColor: c.chipBorder,
@@ -2955,14 +3369,31 @@ const getStyles = (c: Tokens) =>
       fontWeight: '600',
       color: c.textSecondary,
     },
+    actionBtnPrimary: {
+      flex: 1.35,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: c.accent,
+      borderRadius: 12,
+      paddingVertical: 13,
+      minHeight: 44,
+    },
+    actionBtnPrimaryText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: c.onAccent,
+    },
     actionBtnDanger: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 5,
-      borderRadius: 10,
+      borderRadius: 12,
       paddingVertical: 13,
+      minHeight: 44,
       backgroundColor: c.dangerSoft,
       borderWidth: 1,
       borderColor: c.dangerSoftBorder,

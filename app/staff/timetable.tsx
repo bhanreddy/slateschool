@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, Dimensions, Platform, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Platform, Pressable, Modal, ScrollView, TouchableOpacity } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import AppTextInput from '../../src/components/AppTextInput';
+import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import {
   TimetableService,
   TimetableSlot,
@@ -22,6 +25,17 @@ import { Svg, Path, Circle, Rect, Line, Ellipse } from 'react-native-svg';
 import LogoLoader from '../../src/components/LogoLoader';
 import ViewAsBanner from '../../src/components/ViewAsBanner';
 import { useEffectiveStaffId } from '../../src/hooks/useEffectiveStaffId';
+import {
+  ExamTimetableService,
+  ExamAllocationService,
+  ExamScheduleSlot,
+  ExamSyllabusItem,
+  ExamDuty,
+  groupSlotsByExam,
+  ymd,
+} from '../../src/services/examService';
+import { examCategoryFor } from '../../src/constants/examCategories';
+import { t_field } from '../../src/utils/lang';
 
 const { width, height } = Dimensions.get('window');
 const FONT_FAMILY = Platform.OS === 'ios' ? 'SF Pro Display' : 'sans-serif';
@@ -780,6 +794,13 @@ const TimeTableScreen = () => {
     const idx = new Date().getDay(); // 0=Sun..6=Sat
     return idx >= 1 && idx <= 6 ? TIMETABLE_DAYS[idx - 1] : 'monday';
   });
+  const [viewMode, setViewMode] = useState<'class' | 'exam'>('class');
+  const [examSlots, setExamSlots] = useState<ExamScheduleSlot[]>([]);
+  const [duties, setDuties] = useState<ExamDuty[]>([]);
+  const [examLoading, setExamLoading] = useState(false);
+  const [examLoaded, setExamLoaded] = useState(false);
+  const [openSyllabusId, setOpenSyllabusId] = useState<string | null>(null);
+  const [editSlot, setEditSlot] = useState<ExamScheduleSlot | null>(null);
 
   // Per-day school if the teacher's slots span more than one weekday.
   const isPerDay = useMemo(() => {
@@ -833,6 +854,35 @@ const TimeTableScreen = () => {
   }, []);
 
   useEffect(() => {loadTimetable();}, [staffId]);
+
+  // Published exam schedule for the classes this teacher teaches — lazy.
+  const loadExamData = async () => {
+    try {
+      setExamLoading(true);
+      const [schedule, dutyData] = await Promise.all([
+        ExamTimetableService.getTeacherSchedule(),
+        ExamAllocationService.getMyDuties().catch(() => [] as ExamDuty[]),
+      ]);
+      setExamSlots(schedule);
+      setDuties(dutyData);
+      setExamLoaded(true);
+    } catch {
+      // silent; switching back and forth retries
+    } finally {
+      setExamLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode !== 'exam' || examLoaded) return;
+    void loadExamData();
+  }, [viewMode, examLoaded]);
+
+  const examGroups = useMemo(() => groupSlotsByExam(examSlots), [examSlots]);
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [currentTime]);
 
   const loadTimetable = async () => {
     try {
@@ -931,6 +981,262 @@ const TimeTableScreen = () => {
 
         {isViewingAsAdmin && <ViewAsBanner name={viewAsName} />}
 
+        {/* ── Class / Exams toggle ── */}
+        <View style={[styles.modeToggle, { backgroundColor: isDark ? '#1F2937' : '#E4E9F5' }]}>
+          {(
+            [
+              ['class', 'My Classes'],
+              ['exam', 'Exams'],
+            ] as const
+          ).map(([value, label]) => {
+            const active = viewMode === value;
+            return (
+              <Text
+                key={value}
+                onPress={() => setViewMode(value)}
+                style={[
+                  styles.modeBtn,
+                  {
+                    backgroundColor: active ? (isDark ? '#818CF8' : '#4338CA') : 'transparent',
+                    color: active ? '#FFFFFF' : (isDark ? '#818CF8' : '#4338CA'),
+                    fontFamily: FONT_FAMILY,
+                  },
+                ]}
+              >
+                {label}
+              </Text>
+            );
+          })}
+        </View>
+
+        {viewMode === 'exam' ? (
+          examLoading && !examLoaded ? (
+            <View style={styles.center}>
+              <LogoLoader size={60} color={isDark ? '#818CF8' : '#4338CA'} />
+            </View>
+          ) : examGroups.length === 0 && duties.length === 0 ? (
+            <Animated.View entering={FadeInDown.duration(380)} style={styles.emptyState}>
+              <View style={styles.emptyIconContainer}>
+                <Ionicons name="document-text-outline" size={60} color={isDark ? '#2C3A50' : '#CDD7E6'} />
+              </View>
+              <Text style={[styles.emptyTitle, { color: isDark ? '#E0E8F8' : '#0D1726', fontFamily: FONT_FAMILY }]}>
+                No exam timetable yet
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: isDark ? '#4E5A6E' : '#9DAFC4', fontFamily: FONT_FAMILY }]}>
+                Published exam schedules for your classes will appear here
+              </Text>
+            </Animated.View>
+          ) : (
+            <View style={styles.examWrapper}>
+              {duties.length > 0 && (
+                <Animated.View entering={FadeInDown.duration(400)} style={styles.examGroup}>
+                  <View style={styles.examGroupHeader}>
+                    <View style={[styles.examTypeChip, { backgroundColor: isDark ? 'rgba(129,140,248,0.18)' : 'rgba(67,56,202,0.10)' }]}>
+                      <Ionicons name="shield-checkmark" size={13} color={isDark ? '#818CF8' : '#4338CA'} />
+                    </View>
+                    <Text style={[styles.examGroupTitle, { color: isDark ? '#EEF2FF' : '#0D1726', fontFamily: FONT_FAMILY }]}>
+                      Invigilation duties
+                    </Text>
+                  </View>
+                  <View
+                    style={[
+                      styles.examCard,
+                      {
+                        backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+                        borderColor: isDark ? 'rgba(129,140,248,0.25)' : 'rgba(67,56,202,0.22)',
+                      },
+                    ]}
+                  >
+                    {duties.map((duty, di) => {
+                      const dutyDate = ymd(duty.exam_date);
+                      const isToday = dutyDate === todayIso;
+                      const isPastDuty = !!dutyDate && dutyDate < todayIso;
+                      const d = dutyDate ? new Date(`${dutyDate}T00:00:00`) : null;
+                      const accent = isDark ? '#818CF8' : '#4338CA';
+                      const untimed = duty.session_start === '00:00:00';
+                      return (
+                        <View
+                          key={duty.id}
+                          style={[
+                            styles.examRow,
+                            di > 0 && {
+                              borderTopWidth: 1,
+                              borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+                            },
+                            isPastDuty && { opacity: 0.5 },
+                          ]}
+                        >
+                          <View
+                            style={[
+                              styles.examDateBox,
+                              { backgroundColor: isToday ? accent : isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FC' },
+                            ]}
+                          >
+                            <Text style={[styles.examDateDay, { color: isToday ? '#FFFFFF' : isDark ? '#8892A4' : '#7080A0' }]}>
+                              {d ? format(d, 'EEE').toUpperCase() : '—'}
+                            </Text>
+                            <Text style={[styles.examDateNum, { color: isToday ? '#FFFFFF' : isDark ? '#EEF2FF' : '#0D1726' }]}>
+                              {d ? format(d, 'dd') : ''}
+                            </Text>
+                            <Text style={[styles.examDateDay, { color: isToday ? '#FFFFFF' : isDark ? '#8892A4' : '#7080A0' }]}>
+                              {d ? format(d, 'MMM') : ''}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styles.examSubject, { color: isDark ? '#EEF2FF' : '#0D1726', fontFamily: FONT_FAMILY }]}>
+                              {duty.room_name} · {t_field(duty.exam_name, duty.exam_name_te)}
+                            </Text>
+                            <Text style={[styles.examMeta, { color: isDark ? '#8892A4' : '#7080A0', fontFamily: FONT_FAMILY }]}>
+                              {untimed
+                                ? 'Time TBA'
+                                : `${format(new Date(`2000-01-01T${duty.session_start}`), 'h:mm a')}${
+                                    duty.session_end
+                                      ? ` – ${format(new Date(`2000-01-01T${duty.session_end}`), 'h:mm a')}`
+                                      : ''
+                                  }`}
+                              {` · ${duty.seats_count} students`}
+                              {duty.class_names ? ` · ${duty.class_names}` : ''}
+                            </Text>
+                          </View>
+                          {isToday && (
+                            <View style={[styles.mySubjectBadge, { backgroundColor: isDark ? 'rgba(129,140,248,0.18)' : 'rgba(67,56,202,0.10)' }]}>
+                              <Text style={[styles.mySubjectText, { color: accent }]}>TODAY</Text>
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Animated.View>
+              )}
+              {examGroups.map((group, gi) => {
+                const category = examCategoryFor(group.examType);
+                return (
+                  <Animated.View
+                    key={group.examId}
+                    entering={FadeInDown.delay(Math.min(gi, 4) * 80).duration(400)}
+                    style={styles.examGroup}
+                  >
+                    <View style={styles.examGroupHeader}>
+                      <View style={[styles.examTypeChip, { backgroundColor: `${category.color}18` }]}>
+                        <Ionicons name={category.icon} size={13} color={category.color} />
+                      </View>
+                      <Text style={[styles.examGroupTitle, { color: isDark ? '#EEF2FF' : '#0D1726', fontFamily: FONT_FAMILY }]}>
+                        {t_field(group.examName, group.examNameTe)}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.examCard,
+                        {
+                          backgroundColor: isDark ? '#1A2332' : '#FFFFFF',
+                          borderColor: isDark ? 'rgba(255,255,255,0.06)' : '#EBEFF7',
+                        },
+                      ]}
+                    >
+                      {group.slots.map((slot, si) => {
+                        const slotDate = ymd(slot.exam_date);
+                        const isToday = !!slotDate && slotDate === todayIso;
+                        const isPastExam = !!slotDate && slotDate < todayIso;
+                        const d = slotDate ? new Date(`${slotDate}T00:00:00`) : null;
+                        const topics = slot.syllabus || [];
+                        const syllabusOpen = openSyllabusId === slot.id;
+                        return (
+                          <View key={slot.id}>
+                          <View
+                            style={[
+                              styles.examRow,
+                              si > 0 && {
+                                borderTopWidth: 1,
+                                borderTopColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9',
+                              },
+                              isPastExam && { opacity: 0.5 },
+                            ]}
+                          >
+                            <View
+                              style={[
+                                styles.examDateBox,
+                                { backgroundColor: isToday ? category.color : isDark ? 'rgba(255,255,255,0.06)' : '#F5F7FC' },
+                              ]}
+                            >
+                              <Text style={[styles.examDateDay, { color: isToday ? '#FFFFFF' : isDark ? '#8892A4' : '#7080A0' }]}>
+                                {d ? format(d, 'EEE').toUpperCase() : '—'}
+                              </Text>
+                              <Text style={[styles.examDateNum, { color: isToday ? '#FFFFFF' : isDark ? '#EEF2FF' : '#0D1726' }]}>
+                                {d ? format(d, 'dd') : ''}
+                              </Text>
+                              <Text style={[styles.examDateDay, { color: isToday ? '#FFFFFF' : isDark ? '#8892A4' : '#7080A0' }]}>
+                                {d ? format(d, 'MMM') : ''}
+                              </Text>
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styles.examSubject, { color: isDark ? '#EEF2FF' : '#0D1726', fontFamily: FONT_FAMILY }]}>
+                                {t_field(slot.subject_name, slot.subject_name_te)}
+                              </Text>
+                              <Text style={[styles.examMeta, { color: isDark ? '#8892A4' : '#7080A0', fontFamily: FONT_FAMILY }]}>
+                                {slot.class_name}
+                                {slot.start_time
+                                  ? ` · ${format(new Date(`2000-01-01T${slot.start_time}`), 'h:mm a')} – ${format(new Date(`2000-01-01T${slot.end_time || slot.start_time}`), 'h:mm a')}`
+                                  : ' · Time TBA'}
+                              </Text>
+                            </View>
+                            {slot.is_my_subject && (
+                              <View style={[styles.mySubjectBadge, { backgroundColor: `${category.color}18` }]}>
+                                <Text style={[styles.mySubjectText, { color: category.color }]}>YOURS</Text>
+                              </View>
+                            )}
+                          </View>
+                          {(topics.length > 0 || slot.is_my_subject) && (
+                            <View style={styles.syllabusWrap}>
+                              <View style={styles.syllabusHeaderRow}>
+                                {topics.length > 0 ? (
+                                  <Text
+                                    onPress={() => setOpenSyllabusId(syllabusOpen ? null : slot.id)}
+                                    style={[styles.syllabusToggle, { color: category.color, fontFamily: FONT_FAMILY }]}
+                                  >
+                                    {syllabusOpen ? '▾' : '▸'} Syllabus · {topics.length} topics
+                                  </Text>
+                                ) : (
+                                  <View style={{ flex: 1 }} />
+                                )}
+                                {slot.is_my_subject && (
+                                  <Text
+                                    onPress={() => setEditSlot(slot)}
+                                    style={[styles.syllabusEditLink, { color: category.color, fontFamily: FONT_FAMILY }]}
+                                  >
+                                    {topics.length > 0 ? '✎ Edit syllabus' : '＋ Add syllabus & weightage'}
+                                  </Text>
+                                )}
+                              </View>
+                              {syllabusOpen &&
+                                topics.map((item, ti) => (
+                                  <View key={ti} style={styles.syllabusItemRow}>
+                                    <View style={[styles.syllabusBullet, { backgroundColor: category.color }]} />
+                                    <Text
+                                      style={[styles.syllabusTopic, { color: isDark ? '#8892A4' : '#7080A0', fontFamily: FONT_FAMILY }]}
+                                    >
+                                      {item.topic}
+                                    </Text>
+                                    {item.marks != null && (
+                                      <Text style={[styles.syllabusMarksBadge, { color: category.color }]}>
+                                        {item.marks}m
+                                      </Text>
+                                    )}
+                                  </View>
+                                ))}
+                            </View>
+                          )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </Animated.View>
+                );
+              })}
+            </View>
+          )
+        ) : (
+        <>
         {/* ── Day selector (per-day schools only) ── */}
         {isPerDay && !loading && (
           <Animated.ScrollView
@@ -998,10 +1304,222 @@ const TimeTableScreen = () => {
             </Text>
           </Animated.View>
         }
+        </>
+        )}
       </Animated.ScrollView>
+
+      {editSlot && (
+        <SyllabusEditorModal
+          slot={editSlot}
+          isDark={isDark}
+          onClose={() => setEditSlot(null)}
+          onSaved={async () => {
+            setEditSlot(null);
+            await loadExamData();
+          }}
+        />
+      )}
     </View>);
 
 };
+
+// ─── Teacher syllabus editor ───────────────────────────────────────
+function SyllabusEditorModal({
+  slot,
+  isDark,
+  onClose,
+  onSaved,
+}: {
+  slot: ExamScheduleSlot;
+  isDark: boolean;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const category = examCategoryFor(slot.exam_type);
+  const [rows, setRows] = useState<{ topic: string; marks: string }[]>(
+    (slot.syllabus && slot.syllabus.length > 0
+      ? slot.syllabus.map((s) => ({ topic: s.topic, marks: s.marks != null ? String(s.marks) : '' }))
+      : [{ topic: '', marks: '' }])
+  );
+  const [busy, setBusy] = useState(false);
+
+  const setField = (i: number, field: 'topic' | 'marks', value: string) =>
+    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)));
+
+  const total = rows.reduce((n, r) => n + (Number(r.marks) || 0), 0);
+  const hasWeightage = rows.some((r) => r.marks.trim() !== '');
+  const matches = total === Number(slot.max_marks || 0);
+
+  const cardBg = isDark ? '#1A2332' : '#FFFFFF';
+  const textStrong = isDark ? '#EEF2FF' : '#0D1726';
+  const textMuted = isDark ? '#8892A4' : '#7080A0';
+  const border = isDark ? 'rgba(255,255,255,0.08)' : '#E4E9F5';
+
+  const save = async () => {
+    const bad = rows.find(
+      (r) => r.topic.trim() !== '' && r.marks.trim() !== '' && (Number.isNaN(Number(r.marks)) || Number(r.marks) < 0)
+    );
+    if (bad) {
+      alertCompat('Invalid weightage', `Check the marks for "${bad.topic.trim()}".`);
+      return;
+    }
+    const payload: ExamSyllabusItem[] = rows
+      .filter((r) => r.topic.trim() !== '')
+      .map((r) => ({ topic: r.topic.trim(), marks: r.marks.trim() === '' ? null : Number(r.marks) }));
+    try {
+      setBusy(true);
+      await ExamTimetableService.updateSyllabus(slot.id, payload);
+      await onSaved();
+    } catch (err: any) {
+      alertCompat('Could not save', err?.message || 'Update failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={editorStyles.backdrop}
+      >
+        <View style={[editorStyles.card, { backgroundColor: cardBg }]}>
+          <View style={editorStyles.header}>
+            <View style={{ flex: 1 }}>
+              <Text style={[editorStyles.title, { color: textStrong, fontFamily: FONT_FAMILY }]}>
+                {t_field(slot.subject_name, slot.subject_name_te)} · Syllabus
+              </Text>
+              <Text style={[editorStyles.sub, { color: textMuted, fontFamily: FONT_FAMILY }]}>
+                {slot.class_name ? `${slot.class_name} · ` : ''}{t_field(slot.exam_name, slot.exam_name_te)}
+              </Text>
+            </View>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Ionicons name="close" size={22} color={textMuted} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={editorStyles.tallyRow}>
+            <Text style={[editorStyles.label, { color: textMuted, fontFamily: FONT_FAMILY }]}>TOPICS & WEIGHTAGE</Text>
+            {hasWeightage && (
+              <View
+                style={[
+                  editorStyles.pill,
+                  { backgroundColor: matches ? 'rgba(16,185,129,0.14)' : 'rgba(245,158,11,0.16)' },
+                ]}
+              >
+                <Text style={[editorStyles.pillText, { color: matches ? '#10B981' : '#F59E0B' }]}>
+                  {total}/{Number(slot.max_marks || 0)} marks
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: 320 }}>
+            {rows.map((row, i) => (
+              <View key={i} style={editorStyles.row}>
+                <View style={{ flex: 1 }}>
+                  <AppTextInput
+                    value={row.topic}
+                    onChangeText={(v: string) => setField(i, 'topic', v)}
+                    placeholder={`Topic ${i + 1} — e.g. Chapter ${i + 1}`}
+                  />
+                </View>
+                <View style={{ width: 84 }}>
+                  <AppTextInput
+                    value={row.marks}
+                    onChangeText={(v: string) => setField(i, 'marks', v)}
+                    placeholder="Marks"
+                    keyboardType="numeric"
+                  />
+                </View>
+                <TouchableOpacity
+                  onPress={() => setRows((prev) => prev.filter((_, idx) => idx !== i))}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                >
+                  <Ionicons name="close-circle" size={18} color={textMuted} />
+                </TouchableOpacity>
+              </View>
+            ))}
+            <TouchableOpacity
+              style={[editorStyles.addBtn, { borderColor: `${category.color}66` }]}
+              activeOpacity={0.7}
+              onPress={() => setRows((prev) => [...prev, { topic: '', marks: '' }])}
+            >
+              <Ionicons name="add" size={15} color={category.color} />
+              <Text style={[editorStyles.addBtnText, { color: category.color, fontFamily: FONT_FAMILY }]}>Add topic</Text>
+            </TouchableOpacity>
+            <Text style={[editorStyles.helper, { color: textMuted, fontFamily: FONT_FAMILY }]}>
+              Students see these topics with the exam timetable. Weightage is optional per topic.
+            </Text>
+          </ScrollView>
+
+          <TouchableOpacity
+            style={[editorStyles.saveBtn, { backgroundColor: category.color }, busy && { opacity: 0.5 }]}
+            activeOpacity={0.85}
+            disabled={busy}
+            onPress={save}
+          >
+            <Text style={[editorStyles.saveBtnText, { fontFamily: FONT_FAMILY }]}>
+              {busy ? 'Saving…' : 'Save syllabus'}
+            </Text>
+          </TouchableOpacity>
+          <View style={{ height: Platform.OS === 'ios' ? 16 : 4 }} />
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+const editorStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.55)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  card: {
+    borderRadius: 22,
+    padding: 20,
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: '0 24px 60px rgba(2,6,23,0.35)' } as any)
+      : Platform.OS === 'ios'
+        ? { shadowColor: '#020617', shadowOffset: { width: 0, height: 18 }, shadowOpacity: 0.3, shadowRadius: 40 }
+        : { elevation: 10 }),
+  },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 14 },
+  title: { fontSize: 17, fontWeight: '800', letterSpacing: -0.3 },
+  sub: { fontSize: 12.5, marginTop: 2 },
+  tallyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  label: { fontSize: 11.5, fontWeight: '800', letterSpacing: 0.6 },
+  pill: { paddingHorizontal: 9, paddingVertical: 3.5, borderRadius: 20 },
+  pillText: { fontSize: 11.5, fontWeight: '800' },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  addBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    paddingVertical: 9,
+    marginTop: 2,
+  },
+  addBtnText: { fontSize: 14, fontWeight: '700' },
+  helper: { fontSize: 12, lineHeight: 17, marginTop: 10 },
+  saveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    paddingVertical: 14,
+    marginTop: 14,
+  },
+  saveBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
+});
 
 export default TimeTableScreen;
 
@@ -1009,6 +1527,141 @@ export default TimeTableScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1
+  },
+  /* Class / Exams toggle */
+  modeToggle: {
+    flexDirection: 'row',
+    marginHorizontal: 20,
+    marginBottom: 16,
+    borderRadius: 14,
+    padding: 4,
+    gap: 4
+  },
+  modeBtn: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+    paddingVertical: 9,
+    borderRadius: 11,
+    overflow: 'hidden'
+  },
+  /* Exam schedule */
+  examWrapper: {
+    paddingHorizontal: 20
+  },
+  examGroup: {
+    marginBottom: 18
+  },
+  examGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8
+  },
+  examTypeChip: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  examGroupTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.2
+  },
+  examCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    overflow: 'hidden'
+  },
+  examRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  examDateBox: {
+    width: 48,
+    borderRadius: 10,
+    alignItems: 'center',
+    paddingVertical: 6
+  },
+  examDateDay: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  examDateNum: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    marginVertical: 1
+  },
+  examSubject: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    letterSpacing: -0.2
+  },
+  examMeta: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2
+  },
+  mySubjectBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  mySubjectText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5
+  },
+  syllabusWrap: {
+    paddingLeft: 72,
+    paddingRight: 14,
+    paddingBottom: 10,
+    marginTop: -2
+  },
+  syllabusHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  syllabusToggle: {
+    fontSize: 12,
+    fontWeight: '700',
+    paddingVertical: 2
+  },
+  syllabusEditLink: {
+    fontSize: 12,
+    fontWeight: '800',
+    paddingVertical: 2
+  },
+  syllabusItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 3
+  },
+  syllabusBullet: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    opacity: 0.6
+  },
+  syllabusTopic: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '500'
+  },
+  syllabusMarksBadge: {
+    fontSize: 11.5,
+    fontWeight: '800'
   },
   noiseOverlay: {
     ...StyleSheet.absoluteFillObject,

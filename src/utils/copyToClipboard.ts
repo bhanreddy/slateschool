@@ -1,4 +1,5 @@
-import { Platform, Share } from 'react-native';
+import { Platform } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 
 function isWebRuntime() {
   return Platform.OS === 'web' || (typeof window !== 'undefined' && typeof document !== 'undefined');
@@ -67,9 +68,9 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 
   try {
-    await Share.share({ message: text });
+    await Clipboard.setStringAsync(text);
+    return true;
   } catch {
     return false;
   }
-  return false;
 }

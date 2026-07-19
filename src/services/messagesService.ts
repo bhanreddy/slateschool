@@ -52,6 +52,11 @@ export interface Message {
   sender_name: string;
   sender_photo?: string | null;
   body: string;
+  reply_to_message_id?: string | null;
+  reply_to_body?: string | null;
+  reply_to_sender_user_id?: string | null;
+  reply_to_sender_name?: string | null;
+  forwarded_from_message_id?: string | null;
   created_at: string;
   edited_at: string | null;
   deleted_at: string | null;
@@ -75,6 +80,11 @@ export interface LiveState {
 
 /** Delivery/seen status derived from receipt high-water marks. */
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'seen' | 'failed';
+
+export interface SendMessageOptions {
+  replyToMessageId?: string | null;
+  forwardedFromMessageId?: string | null;
+}
 
 // ─── Service ──────────────────────────────────────────────────────────────────
 
@@ -101,11 +111,35 @@ export const MessagesService = {
   ): Promise<Message[]> =>
     api.get<Message[]>(`/messages/conversations/${conversationId}/messages`, params),
 
-  sendMessage: (conversationId: string, body: string, clientMsgId?: string): Promise<Message> =>
+  sendMessage: (
+    conversationId: string,
+    body: string,
+    clientMsgId?: string,
+    options?: SendMessageOptions,
+  ): Promise<Message> =>
     api.post<Message>(`/messages/conversations/${conversationId}/messages`, {
       body,
       ...(clientMsgId ? { client_msg_id: clientMsgId } : {}),
+      ...(options?.replyToMessageId ? { reply_to_message_id: options.replyToMessageId } : {}),
+      ...(options?.forwardedFromMessageId
+        ? { forwarded_from_message_id: options.forwardedFromMessageId }
+        : {}),
     }),
+
+  editMessage: (
+    conversationId: string,
+    messageId: string,
+    body: string,
+  ): Promise<Message> =>
+    api.patch<Message>(`/messages/conversations/${conversationId}/messages/${messageId}`, {
+      body,
+    }),
+
+  deleteMessage: (
+    conversationId: string,
+    messageId: string,
+  ): Promise<Message> =>
+    api.delete<Message>(`/messages/conversations/${conversationId}/messages/${messageId}`),
 
   markRead: (conversationId: string): Promise<{ read: boolean }> =>
     api.post<{ read: boolean }>(`/messages/conversations/${conversationId}/read`),

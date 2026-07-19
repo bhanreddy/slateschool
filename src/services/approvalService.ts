@@ -15,9 +15,19 @@ export interface ApprovalRequest {
   created_at: string;
 }
 
+export interface ApprovalListParams {
+  status?: ApprovalRequest['status'];
+  type?: string;
+}
+
 export const ApprovalService = {
-  listPending: async (params?: { status?: string; type?: string }): Promise<ApprovalRequest[]> => {
+  list: async (params?: ApprovalListParams): Promise<ApprovalRequest[]> => {
     return api.get<ApprovalRequest[]>('/approvals', params);
+  },
+
+  /** Backwards-compatible pending queue helper. */
+  listPending: async (params?: ApprovalListParams): Promise<ApprovalRequest[]> => {
+    return api.get<ApprovalRequest[]>('/approvals', { status: 'PENDING', ...params });
   },
 
   approve: async (id: string): Promise<{ message: string; request: ApprovalRequest; result?: unknown }> => {

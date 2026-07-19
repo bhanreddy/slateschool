@@ -930,7 +930,6 @@ export default function AccountsDashboard() {
     { id: 'defaulters', title: 'Defaulters', description: 'Previous-year pending fees', icon: 'alert-circle', color: ['#B91C1C', '#EF4444'] as [string, string], route: '/accounts/defaulters', library: Ionicons },
     { id: 'transport_fees', title: 'Transport Fees', description: 'Stop-based bus fee management', icon: 'bus', color: ['#0E7490', '#06B6D4'] as [string, string], route: '/accounts/transport-fees', library: Ionicons },
     { id: 'invoices', title: 'Invoices', description: 'Generate & track invoices', icon: 'document-text', color: ['#1D4ED8', '#3B82F6'] as [string, string], route: '/accounts/invoices', library: Ionicons },
-    { id: 'upi_qr', title: 'Collect via UPI', description: 'Dynamic UPI QR for payments', icon: 'qr-code-outline', color: ['#B45309', '#F59E0B'] as [string, string], route: '/accounts/collect-fee-qr', library: Ionicons, permission: 'fees.collect' },
   ].filter((action) => !action.permission || hasPermission(action.permission)), [hasPermission]);
 
   const webSplitGap = 24;
@@ -965,6 +964,7 @@ export default function AccountsDashboard() {
                 <AdminHeaderCard
                   compact
                   compactRole
+                  embedded
                   displayName={user?.displayName || 'User'}
                   photoUrl={user?.photoUrl}
                   roleLabel={user?.role?.name || 'Accountant'}
@@ -1072,6 +1072,7 @@ export default function AccountsDashboard() {
               <AdminHeaderCard
                 compact
                 compactRole
+                embedded
                 displayName={user?.displayName || 'User'}
                 photoUrl={user?.photoUrl}
                 roleLabel={user?.role?.name || 'Accountant'}

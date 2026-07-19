@@ -110,6 +110,8 @@ export interface FeeSummaryParams {
     admission_no?: string;
     father_name?: string;
     mobile?: string;
+    /** Transport stop name (village / stop_name). */
+    village?: string;
     status?: FeeSummaryStatus;
     page?: number;
     limit?: number;
@@ -166,6 +168,21 @@ export interface FeeSummaryResponse {
         total_pages: number;
         counts?: Record<'All' | FeeSummaryStatus, number>;
     };
+}
+
+export interface PendingFeeFilterOptions {
+    academic_year: { id: string; code: string };
+    classes: { id: string; name: string }[];
+    sections: { id: string; name: string }[];
+    villages: { id: string; name: string; route_name?: string; label: string }[];
+}
+
+export interface PendingFeeExportFilters {
+    academic_year_id?: string;
+    class_id?: string;
+    section_id?: string;
+    village_id?: string;
+    overdue_only?: boolean;
 }
 
 export const FeeService = {
@@ -332,6 +349,28 @@ export const FeeService = {
         recent_transactions?: FeeTransaction[];
     }> => {
         return api.get('/admin/finance-stats', params);
+    },
+
+    /** Options for the Finance due-list export (classes, sections, transport villages). */
+    getPendingFeeFilterOptions: async (academicYearId?: string): Promise<PendingFeeFilterOptions> => {
+        return api.get<PendingFeeFilterOptions>('/admin/pending-fees/filter-options', {
+            academic_year_id: academicYearId,
+        });
+    },
+
+    /** Download the server-calculated pending-fees due list as a formatted Excel workbook. */
+    exportPendingFeesDueList: async (filters: PendingFeeExportFilters): Promise<void> => {
+        const params = new URLSearchParams(
+            Object.entries(filters)
+                .filter(([, value]) => value !== undefined && value !== '')
+                .map(([key, value]) => [key, String(value)]),
+        );
+        const query = params.toString();
+        const stamp = new Date().toISOString().slice(0, 10);
+        return api.downloadFile(
+            `/admin/pending-fees/export${query ? `?${query}` : ''}`,
+            `pending-fees-due-list-${stamp}.xlsx`,
+        );
     },
 
     /**

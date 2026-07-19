@@ -725,10 +725,10 @@ export default function AddStudentScreen() {
             ...formData,
             phone: t
           })} keyboardType="phone-pad" icon="call-outline" fieldKey="ims-stu-mobile-line" autofillMode="tel" />
-          {!isEditMode && <InputField label="Initial Password" placeholder="Min 6 characters" value={formData.password} onChangeText={(t: string) => setFormData({
+          <InputField label={isEditMode ? "Password" : "Initial Password"} placeholder={isEditMode ? "Leave blank to keep current" : "Min 6 characters"} value={formData.password} onChangeText={(t: string) => setFormData({
             ...formData,
             password: t
-          })} icon="lock-closed-outline" required={true} secureTextEntry={true} fieldKey="ims-stu-portal-secret" autofillMode="password" />}
+          })} icon="lock-closed-outline" required={!isEditMode} secureTextEntry={true} fieldKey="ims-stu-portal-secret" autofillMode="password" />
         </Animated.View>
         {/* Submit Button */}
         <TouchableOpacity style={[styles.saveButton, loading && styles.saveButtonDisabled]} activeOpacity={0.8} onPress={handleSave} disabled={loading}>

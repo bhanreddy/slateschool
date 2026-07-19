@@ -4,7 +4,7 @@ import { Asset } from 'expo-asset';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { Invoice } from '../types/invoices';
-import { FeeTransaction, Parent, StudentFeeDueLine } from '../types/models';
+import { FeeTransaction, Parent, StudentFeeDueLine, TransportDue } from '../types/models';
 import { SCHOOL_CONFIG, SCHOOL_RECOGNITION_LINE } from '../constants/schoolConfig';
 import { printElementToWindow } from './exportCertificate';
 
@@ -647,6 +647,7 @@ const BASE_CSS = `
     min-height: 521px;
   }
   .receipt-card {
+    position: relative;
     flex: 1 1 0;
     min-width: 0;
     border: 1.4px solid #111827;
@@ -658,6 +659,23 @@ const BASE_CSS = `
     font-size: 9px;
     line-height: 1.3;
     background: #fff;
+  }
+  .rc-copy-tag {
+    position: absolute;
+    top: -7px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 1px 7px;
+    border: 1px solid #111827;
+    border-radius: 999px;
+    background: #fff;
+    color: #111827;
+    font-size: 6.5px;
+    font-weight: 800;
+    line-height: 1.4;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    white-space: nowrap;
   }
   .rc-metarow {
     display: flex; justify-content: space-between; align-items: baseline;
@@ -761,6 +779,7 @@ const BASE_CSS = `
   .rc-dues-table tr.this-pay { background: #EEF0F3; }
   .rc-dues-table tr.this-pay td { color: #111827; }
   .rc-dues-table tr.this-pay td.fee { font-weight: 700; }
+  .rc-fee-stop { color: #4B5563; font-weight: 600; }
   .rc-dues-table tfoot td {
     font-size: 8px; font-weight: 800; color: #111827;
     border-top: 1.5px solid #D1D5DB; padding: 3px 6px;
@@ -785,6 +804,7 @@ function normalizeFeeDueLine(raw: Record<string, unknown>): StudentFeeDueLine {
   return {
     student_fee_id: raw.student_fee_id as string | undefined,
     fee_type: String(raw.fee_type ?? 'Fee'),
+    stop_name: raw.stop_name ? String(raw.stop_name) : null,
     academic_year: raw.academic_year ? String(raw.academic_year) : undefined,
     amount_due: amountDue,
     amount_paid: amountPaid,
@@ -792,6 +812,26 @@ function normalizeFeeDueLine(raw: Record<string, unknown>): StudentFeeDueLine {
     balance_due: balanceDue,
     status: raw.status ? String(raw.status) : undefined,
   };
+}
+
+function transportDueToReceiptLine(transportDue?: TransportDue | null): StudentFeeDueLine | null {
+  if (!transportDue || transportDue.fee_not_set || transportDue.fee_amount == null) {
+    return null;
+  }
+
+  return normalizeFeeDueLine({
+    fee_type: 'Transport Fee',
+    stop_name: transportDue.stop_name,
+    academic_year: transportDue.academic_year,
+    amount_due: transportDue.fee_amount,
+    amount_paid: transportDue.paid_amount ?? 0,
+    discount: 0,
+    balance_due: transportDue.balance_due,
+  });
+}
+
+function isTransportFee(feeType: string): boolean {
+  return /\btransport\b/i.test(feeType);
 }
 
 function fatherFromTransaction(transaction: FeeTransaction): { fatherName: string; fatherMobile: string } {
@@ -854,13 +894,24 @@ async function resolveReceiptContext(transaction: FeeTransaction): Promise<{
 
   const embedded = (transaction as FeeTransaction & { fee_dues?: unknown[] }).fee_dues;
   if (Array.isArray(embedded) && embedded.length > 0) {
-    const feeDues = embedded.map((row) =>
+    let feeDues = embedded.map((row) =>
       normalizeFeeDueLine(row as unknown as Record<string, unknown>),
     );
-    if ((!fatherName || !fatherMobile) && studentId) {
+    const embeddedTransport = feeDues.find((line) => isTransportFee(line.fee_type));
+    if ((!fatherName || !fatherMobile || !embeddedTransport?.stop_name) && studentId) {
       try {
         const { FeeService } = await import('../services/feeService');
         const data = await FeeService.getStudentFees(studentId);
+        const transportLine = transportDueToReceiptLine(data.transport_due);
+        if (transportLine) {
+          feeDues = embeddedTransport
+            ? feeDues.map((line) =>
+                isTransportFee(line.fee_type)
+                  ? { ...line, stop_name: line.stop_name || transportLine.stop_name }
+                  : line,
+              )
+            : [...feeDues, transportLine];
+        }
         fatherName = fatherName || (data.student?.father_name || '').trim();
         fatherMobile = fatherMobile || (data.student?.father_mobile || '').trim();
         if (!fatherName || !fatherMobile) {
@@ -895,6 +946,8 @@ async function resolveReceiptContext(transaction: FeeTransaction): Promise<{
         status: f.status,
       }),
     );
+    const transportLine = transportDueToReceiptLine(data.transport_due);
+    if (transportLine) feeDues.push(transportLine);
     fatherName = fatherName || (data.student?.father_name || '').trim();
     fatherMobile = fatherMobile || (data.student?.father_mobile || '').trim();
     if (!fatherName || !fatherMobile) {
@@ -953,9 +1006,18 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     const dateFull = dateObj.toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
     const dateTime = dateObj.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
     const feeName = transaction.fee_type || 'School Fee';
+    const receiptTransportStop =
+      (transaction.stop_name || '').trim() ||
+      (feeDues.find((line) => isTransportFee(line.fee_type))?.stop_name || '').trim();
+    const renderReceiptFeeLabel = (feeType: string, stopName?: string | null) => {
+      const resolvedStop = isTransportFee(feeType)
+        ? (stopName || receiptTransportStop).trim()
+        : '';
+      return `${escapeHtml(feeType)}${resolvedStop ? ` <span class="rc-fee-stop">· ${escapeHtml(resolvedStop)}</span>` : ''}`;
+    };
     // Combined multi-fee-type receipt: one receipt lists several paid fee types.
     const lineItems = (transaction as FeeTransaction & {
-      line_items?: { fee_type: string; academic_year?: string; amount: number }[];
+      line_items?: { fee_type: string; stop_name?: string | null; academic_year?: string; amount: number }[];
     }).line_items;
     const hasLineItems = Array.isArray(lineItems) && lineItems.length > 0;
     const paidFeeIds = new Set(
@@ -1021,6 +1083,14 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
     // half-page (the true totals still come from the footer row).
     const MAX_DUES_ROWS = 7;
     const shownDues = feeDues.slice(0, MAX_DUES_ROWS);
+    const transportDueLine = feeDues.find((line) => isTransportFee(line.fee_type));
+    if (
+      transportDueLine &&
+      !shownDues.includes(transportDueLine) &&
+      shownDues.length === MAX_DUES_ROWS
+    ) {
+      shownDues[MAX_DUES_ROWS - 1] = transportDueLine;
+    }
     const hiddenDuesCount = feeDues.length - shownDues.length;
     const duesRowsHtml =
       shownDues
@@ -1034,7 +1104,7 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
             .filter(Boolean)
             .join(' ');
           const discountCell = showDiscountColumn ? `<td>₹${fmtINR(line.discount ?? 0)}</td>` : '';
-          return `<tr class="${cls}"><td class="fee">${escapeHtml(line.fee_type)}</td><td>₹${fmtINR(showDiscountColumn ? line.amount_due : netDue)}</td>${discountCell}<td>₹${fmtINR(line.amount_paid)}</td><td>₹${fmtINR(line.balance_due)}</td></tr>`;
+          return `<tr class="${cls}"><td class="fee">${renderReceiptFeeLabel(line.fee_type, line.stop_name)}</td><td>₹${fmtINR(showDiscountColumn ? line.amount_due : netDue)}</td>${discountCell}<td>₹${fmtINR(line.amount_paid)}</td><td>₹${fmtINR(line.balance_due)}</td></tr>`;
         })
         .join('') +
       (hiddenDuesCount > 0
@@ -1059,8 +1129,9 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
         : '';
 
     // One compact receipt copy — sized so two sit side-by-side in the top half.
-    const renderReceiptCard = () => `
+    const renderReceiptCard = (copyLabel: string) => `
       <div class="receipt-card">
+        <div class="rc-copy-tag">${escapeHtml(copyLabel)}</div>
         <div class="rc-metarow">
           <span>Receipt No: <b class="rc-rcpt">${escapeHtml(receiptNo)}</b></span>
           <span>${dateFull} · ${dateTime}</span>
@@ -1085,13 +1156,14 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
             ${hasLineItems
               ? lineItems!
                   .map((li) => {
+                    const feeLabel = renderReceiptFeeLabel(li.fee_type, li.stop_name);
                     const label = li.academic_year
-                      ? `${escapeHtml(li.fee_type)} <span style="color:#6B7280;font-weight:500;">(${escapeHtml(String(li.academic_year))})</span>`
-                      : escapeHtml(li.fee_type);
+                      ? `${feeLabel} <span style="color:#6B7280;font-weight:500;">(${escapeHtml(String(li.academic_year))})</span>`
+                      : feeLabel;
                     return `<tr><td>${label}</td><td class="amt">${fmtINR(Number(li.amount || 0))}</td></tr>`;
                   })
                   .join('')
-              : `<tr><td>${escapeHtml(feeName)}</td><td class="amt">${amountFmt}</td></tr>`}
+              : `<tr><td>${renderReceiptFeeLabel(feeName, transaction.stop_name)}</td><td class="amt">${amountFmt}</td></tr>`}
           </tbody>
         </table>
         <div class="rc-totals">
@@ -1121,14 +1193,14 @@ export const generateReceiptPDF = async (transaction: FeeTransaction) => {
       </div>
     `;
 
-    // Two identical copies side-by-side, filling the top half of the A4 sheet
-    // (the .receipt-page is 148.5mm tall). Tear down the middle → payer copy +
-    // office copy. The bottom half of the sheet is intentionally left blank.
+    // Two labeled copies side-by-side, filling the top half of the A4 sheet
+    // (the .receipt-page is 148.5mm tall). Tear down the middle → school copy +
+    // parent copy. The bottom half of the sheet is intentionally left blank.
     const receiptPageHtml = `
           <div class="page receipt-page">
             <div class="receipt-duplex">
-              ${renderReceiptCard()}
-              ${renderReceiptCard()}
+              ${renderReceiptCard('School Copy')}
+              ${renderReceiptCard('Parent Copy')}
             </div>
           </div>
     `;

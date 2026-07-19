@@ -193,6 +193,7 @@ export interface FeeSummary {
 export interface StudentFeeDueLine {
     readonly student_fee_id?: string;
     readonly fee_type: string;
+    readonly stop_name?: string | null;
     readonly academic_year?: string;
     readonly amount_due: number;
     readonly amount_paid: number;
@@ -221,6 +222,7 @@ export interface FeeTransaction {
     readonly class_name?: string;
     readonly section_name?: string;
     readonly fee_type?: string;
+    readonly stop_name?: string | null;
     readonly academic_year?: string;
     /** Total fee amount before discount (from student_fees.amount_due) */
     readonly amount_due?: number;

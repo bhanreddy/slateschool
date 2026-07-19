@@ -9,7 +9,7 @@
  *   • SignInButton  — gradient call-to-action button
  */
 
-import React, { useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,7 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
+  interpolate,
   interpolateColor,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -66,6 +67,16 @@ export const DecorRing: React.FC<DecorRingProps> = ({
 );
 
 // ─── FloatingInput ────────────────────────────────────────────────────────────
+// Outlined Material-style field: when focused or filled, the label sits on the
+// top border and notches the outline (card-colored pill behind the text).
+
+const INPUT_HEIGHT = 56;
+/** Resting label sits inside the field, next to the leading icon. */
+const LABEL_REST_TOP = 19;
+const LABEL_REST_LEFT = 44;
+/** Floated label sits on the top border (outlined / notched). */
+const LABEL_FLOAT_DY = -28;
+const LABEL_FLOAT_DX = -32;
 
 interface FloatingInputProps extends Omit<TextInputProps, 'style'> {
   label: string;
@@ -94,7 +105,7 @@ export const FloatingInput: React.FC<FloatingInputProps> = ({
   const C = useLoginTheme();
   const s = makeInputStyles(C);
 
-  const focused = useRef(false);
+  const [isFocused, setIsFocused] = useState(false);
   const anim = useSharedValue(value ? 1 : 0);
 
   useEffect(() => {
@@ -105,22 +116,30 @@ export const FloatingInput: React.FC<FloatingInputProps> = ({
   // listeners (e.g. the login screen's doodle focus tracking) — a forwarded
   // handler must never silently replace the label animation.
   const handleFocus = (e: any) => {
-    focused.current = true;
+    setIsFocused(true);
     anim.value = withTiming(1, { duration: 200 });
     onFocus?.(e);
   };
 
   const handleBlur = (e: any) => {
-    focused.current = false;
+    setIsFocused(false);
     if (!value) anim.value = withTiming(0, { duration: 200 });
     onBlur?.(e);
   };
 
-  const labelStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: anim.value === 1 ? -12 : 0 },
-      { scale: anim.value === 1 ? 0.78 : 1 },
-    ],
+  // Motion stays on the UI thread: transform + opacity only.
+  const labelMotionStyle = useAnimatedStyle(() => {
+    const t = anim.value;
+    return {
+      transform: [
+        { translateX: interpolate(t, [0, 1], [0, LABEL_FLOAT_DX]) },
+        { translateY: interpolate(t, [0, 1], [0, LABEL_FLOAT_DY]) },
+        { scale: interpolate(t, [0, 1], [1, 0.82]) },
+      ],
+    };
+  });
+
+  const labelColorStyle = useAnimatedStyle(() => ({
     color: interpolateColor(
       anim.value,
       [0, 1],
@@ -128,47 +147,66 @@ export const FloatingInput: React.FC<FloatingInputProps> = ({
     ),
   }));
 
+  // Card-colored pill fades in so the label visually cuts the outline.
+  const notchStyle = useAnimatedStyle(() => ({
+    opacity: anim.value,
+  }));
+
   const borderColor = hasError
     ? C.error
-    : focused.current
+    : isFocused
     ? C.accent
     : C.borderNeutral;
 
+  const iconColor = hasError
+    ? C.error
+    : isFocused
+    ? C.accent
+    : C.inkSoft;
+
   return (
-    <Animated.View entering={FadeInDown.delay(delay).duration(500)}>
+    <Animated.View
+      entering={FadeInDown.delay(delay).duration(500)}
+      style={s.fieldWrap}
+    >
       <View
         style={[
           s.inputOuter,
           {
             borderColor,
             backgroundColor: C.surfaceAlt,
-            shadowOpacity: focused.current ? 0.08 : 0,
+            shadowOpacity: isFocused ? 0.08 : 0,
           },
         ]}
       >
         <View style={s.inputIconWrap}>
-          <Ionicons
-            name={icon}
-            size={18}
-            color={hasError ? C.error : C.inkSoft}
-          />
+          <Ionicons name={icon} size={18} color={iconColor} />
         </View>
-        <View style={s.inputLabelArea}>
-          <Animated.Text style={[s.floatingLabel, labelStyle]}>
-            {label}
-          </Animated.Text>
-          <TextInput
-            style={s.textInput}
-            value={value}
-            onChangeText={onChangeText}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            placeholderTextColor={C.inkGhost}
-            {...rest}
-          />
-        </View>
+        <TextInput
+          style={s.textInput}
+          value={value}
+          onChangeText={onChangeText}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          placeholderTextColor={C.inkGhost}
+          {...rest}
+        />
         {rightAction && <View style={s.inputRightSlot}>{rightAction}</View>}
       </View>
+
+      {/* Label overlays the top border when floated (outlined / notched). */}
+      <Animated.View
+        pointerEvents="none"
+        style={[s.labelWrap, labelMotionStyle]}
+      >
+        <Animated.View
+          style={[s.labelNotch, { backgroundColor: C.surface }, notchStyle]}
+        />
+        <Animated.Text style={[s.floatingLabel, labelColorStyle]}>
+          {label}
+        </Animated.Text>
+      </Animated.View>
+
       {hasError && errorText ? (
         <Text style={s.errorLabel}>{errorText}</Text>
       ) : null}
@@ -178,41 +216,59 @@ export const FloatingInput: React.FC<FloatingInputProps> = ({
 
 const makeInputStyles = (C: LoginTheme) =>
   StyleSheet.create({
+    fieldWrap: {
+      position: 'relative',
+      // Room for the label to sit on the top border without clipping.
+      marginTop: 8,
+      overflow: 'visible',
+    },
     inputOuter: {
       flexDirection: 'row',
       alignItems: 'center',
       borderRadius: 14,
       borderWidth: 1.5,
-      minHeight: 58,
+      minHeight: INPUT_HEIGHT,
       paddingHorizontal: 14,
       shadowColor: C.accent,
       shadowOffset: { width: 0, height: 4 },
       shadowRadius: 12,
+      overflow: 'visible',
     },
     inputIconWrap: {
       width: 28,
       alignItems: 'center',
       marginRight: 4,
     },
-    inputLabelArea: {
-      flex: 1,
-      height: 58,
-      justifyContent: 'center',
-      paddingTop: 14,
+    labelWrap: {
+      position: 'absolute',
+      top: LABEL_REST_TOP,
+      left: LABEL_REST_LEFT,
+      zIndex: 2,
+      ...(Platform.OS === 'web'
+        ? ({ transformOrigin: 'left center' } as any)
+        : {}),
+    },
+    labelNotch: {
+      ...StyleSheet.absoluteFillObject,
+      marginHorizontal: -6,
+      marginVertical: -1,
+      borderRadius: 4,
     },
     floatingLabel: {
-      position: 'absolute',
-      left: 0,
       fontSize: 14,
-      fontWeight: '500',
-      transformOrigin: 'left',
+      fontWeight: '600',
+      lineHeight: 18,
+      ...(Platform.OS === 'web'
+        ? ({ transformOrigin: 'left center' } as any)
+        : {}),
     },
     textInput: {
+      flex: 1,
       fontSize: 15,
       color: C.ink,
       fontWeight: '500',
       paddingVertical: 0,
-      height: 26,
+      height: INPUT_HEIGHT - 4,
       ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : {}),
     },
     inputRightSlot: {

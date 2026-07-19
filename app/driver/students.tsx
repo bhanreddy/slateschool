@@ -105,7 +105,7 @@ export default function DriverStudents() {
   if (loading) {
     return (
       <ScreenLayout>
-        <StudentHeader title="Passenger Roster" menuUserType="driver" />
+        <StudentHeader title="Passenger Roster" menuUserType="driver" showBackButton={false} />
         <View style={s.center}><LogoLoader size={60} color={theme.colors.primary} /></View>
       </ScreenLayout>
     );
@@ -116,7 +116,7 @@ export default function DriverStudents() {
     return (
       <ScreenLayout>
         <StatusBar barStyle="dark-content" />
-        <StudentHeader title="Passenger Roster" menuUserType="driver" />
+        <StudentHeader title="Passenger Roster" menuUserType="driver" showBackButton={false} />
         <View style={s.center}>
           <View style={s.emptyIcon}>
             <Ionicons name="people-outline" size={48} color="#CBD5E1" />
@@ -133,7 +133,7 @@ export default function DriverStudents() {
   return (
     <ScreenLayout>
       <StatusBar barStyle="light-content" />
-      <StudentHeader title="Passenger Roster" menuUserType="driver" />
+      <StudentHeader title="Passenger Roster" menuUserType="driver" showBackButton={false} />
 
       <FlatList
         data={currentRoute?.stops || []}

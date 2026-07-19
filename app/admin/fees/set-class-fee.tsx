@@ -2,7 +2,16 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import AppTextInput from '@/src/components/AppTextInput';
 import AppDatePicker from '@/src/components/AppDatePicker';
 
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Modal, Platform, Switch } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  Modal,
+  Platform,
+  Pressable,
+} from 'react-native';
 import KeyboardAwareScreen from '@/components/keyboard/KeyboardAwareScreen';
 import { alertCompat } from '../../../src/utils/crossPlatformAlert';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +23,7 @@ import { api } from '../../../src/services/apiClient';
 import { Class } from '../../../src/types/schema';
 import { FeeMode, FeeStructure } from '../../../src/types/models';
 import { useTheme } from '../../../src/hooks/useTheme';
-import { Theme } from '../../../src/theme/themes';
+import { Theme, Elevation, Radii, Spacing } from '../../../src/theme/themes';
 import LogoLoader from '../../../src/components/LogoLoader';
 
 export default function SetClassFeeScreen() {
@@ -32,6 +41,7 @@ export default function SetClassFeeScreen() {
   const [missingSections, setMissingSections] = useState<any[]>([]);
   const [configuredFees, setConfiguredFees] = useState<FeeStructure[]>([]);
   const [listClassFilter, setListClassFilter] = useState('');
+  const [showTypeOrder, setShowTypeOrder] = useState(false);
 
   const [classes, setClasses] = useState<Class[]>([]);
   const [feeTypes, setFeeTypes] = useState<FeeType[]>([]);
@@ -66,6 +76,51 @@ export default function SetClassFeeScreen() {
     );
   }, [classSections, selectedClassId, selectedYearId]);
 
+  const selectedClass = useMemo(
+    () => classes.find((c) => c.id === selectedClassId),
+    [classes, selectedClassId]
+  );
+  const selectedFeeType = useMemo(
+    () => sortedFeeTypes.find((t) => t.id === feeTypeId),
+    [sortedFeeTypes, feeTypeId]
+  );
+  const selectedSection = useMemo(
+    () => sectionsForClass.find((s) => s.section_id === selectedSectionId),
+    [sectionsForClass, selectedSectionId]
+  );
+  const selectedYear = useMemo(
+    () => academicYears.find((y) => y.id === selectedYearId),
+    [academicYears, selectedYearId]
+  );
+
+  const formReady = Boolean(
+    selectedClassId &&
+      amount &&
+      feeTypeId &&
+      selectedYearId &&
+      !(displayFeeMode === 'per_section' && !selectedSectionId) &&
+      !(pendingFeeMode && pendingFeeMode !== feeMode)
+  );
+
+  const missingFieldHint = useMemo(() => {
+    if (!selectedYearId) return 'Select an academic year';
+    if (!selectedClassId) return 'Select a class';
+    if (displayFeeMode === 'per_section' && !selectedSectionId) return 'Select a section';
+    if (!feeTypeId) return 'Select a fee type';
+    if (!amount) return 'Enter an amount';
+    if (pendingFeeMode && pendingFeeMode !== feeMode) return 'Confirm fee mode change first';
+    return null;
+  }, [
+    selectedYearId,
+    selectedClassId,
+    displayFeeMode,
+    selectedSectionId,
+    feeTypeId,
+    amount,
+    pendingFeeMode,
+    feeMode,
+  ]);
+
   const loadFeeMode = useCallback(async (yearId?: string) => {
     const seq = ++loadFeeModeSeq.current;
     try {
@@ -91,7 +146,9 @@ export default function SetClassFeeScreen() {
     }
   }, []);
 
-  useEffect(() => { loadInitialData(); }, []);
+  useEffect(() => {
+    loadInitialData();
+  }, []);
 
   useEffect(() => {
     if (!selectedClassId || !selectedYearId || !feeTypeId) return;
@@ -120,7 +177,9 @@ export default function SetClassFeeScreen() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [selectedClassId, selectedYearId, feeTypeId, selectedSectionId, displayFeeMode]);
 
   useEffect(() => {
@@ -239,7 +298,10 @@ export default function SetClassFeeScreen() {
 
   const handleAddFeeType = async () => {
     const trimmed = newTypeName.trim();
-    if (!trimmed) { alertCompat('Error', 'Please enter a fee type name'); return; }
+    if (!trimmed) {
+      alertCompat('Error', 'Please enter a fee type name');
+      return;
+    }
     try {
       setAddingType(true);
       const payload: any = { name: trimmed };
@@ -364,6 +426,15 @@ export default function SetClassFeeScreen() {
     if (fee.due_date) setDueDate(String(fee.due_date).split('T')[0]);
   };
 
+  const selectionSummary = [
+    selectedYear?.code,
+    selectedClass?.name,
+    displayFeeMode === 'per_section' ? selectedSection?.section_name : null,
+    selectedFeeType?.name,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -379,32 +450,105 @@ export default function SetClassFeeScreen() {
     <View style={styles.container}>
       <AdminHeader title="Set Class Fee" showBackButton />
       <KeyboardAwareScreen variant="scroll" contentContainerStyle={styles.content} bottomOffset={24}>
+        {/* Context: Academic Year */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Fee Mode</Text>
-          <View style={styles.modeRow}>
-            <View style={styles.modeLabels}>
-              <Text style={[styles.modeLabel, displayFeeMode === 'per_class' && styles.modeLabelActive]}>
-                Per Class
-              </Text>
-              <Text style={[styles.modeHint, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                One fee applies to all sections
-              </Text>
-            </View>
-            <Switch
-              value={displayFeeMode === 'per_section'}
-              onValueChange={(on) => confirmFeeModeChange(on ? 'per_section' : 'per_class')}
-              disabled={modeSaving}
-              trackColor={{ false: '#CBD5E1', true: ADMIN_THEME.colors.primary }}
-            />
-            <View style={styles.modeLabels}>
-              <Text style={[styles.modeLabel, displayFeeMode === 'per_section' && styles.modeLabelActive]}>
-                Per Section
-              </Text>
-              <Text style={[styles.modeHint, { color: isDark ? '#64748B' : '#94A3B8' }]}>
-                Different fees per section
-              </Text>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.iconBadge}>
+                <Ionicons name="calendar-outline" size={16} color={ADMIN_THEME.colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.sectionTitle}>Academic Year</Text>
+                <Text style={styles.sectionHint}>Fees are scoped to the year you select</Text>
+              </View>
             </View>
           </View>
+          <View style={styles.chipWrap}>
+            {academicYears.map((ay) => {
+              const active = selectedYearId === ay.id;
+              return (
+                <TouchableOpacity
+                  key={ay.id}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setSelectedYearId(ay.id)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{ay.code}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        {/* Fee Mode — segmented */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderLeft}>
+            <View style={styles.iconBadge}>
+              <Ionicons name="layers-outline" size={16} color={ADMIN_THEME.colors.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>Fee Mode</Text>
+              <Text style={styles.sectionHint}>How fees apply across sections</Text>
+            </View>
+          </View>
+
+          <View style={styles.segmented}>
+            <Pressable
+              onPress={() => confirmFeeModeChange('per_class')}
+              disabled={modeSaving}
+              style={[styles.segmentBtn, displayFeeMode === 'per_class' && styles.segmentBtnActive]}
+            >
+              <Ionicons
+                name="school-outline"
+                size={18}
+                color={displayFeeMode === 'per_class' ? ADMIN_THEME.colors.primary : theme.colors.textTertiary}
+              />
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  displayFeeMode === 'per_class' && styles.segmentLabelActive,
+                ]}
+              >
+                Per Class
+              </Text>
+              <Text
+                style={[
+                  styles.segmentDesc,
+                  displayFeeMode === 'per_class' && styles.segmentDescActive,
+                ]}
+              >
+                One fee for all sections
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => confirmFeeModeChange('per_section')}
+              disabled={modeSaving}
+              style={[styles.segmentBtn, displayFeeMode === 'per_section' && styles.segmentBtnActive]}
+            >
+              <Ionicons
+                name="grid-outline"
+                size={18}
+                color={displayFeeMode === 'per_section' ? ADMIN_THEME.colors.primary : theme.colors.textTertiary}
+              />
+              <Text
+                style={[
+                  styles.segmentLabel,
+                  displayFeeMode === 'per_section' && styles.segmentLabelActive,
+                ]}
+              >
+                Per Section
+              </Text>
+              <Text
+                style={[
+                  styles.segmentDesc,
+                  displayFeeMode === 'per_section' && styles.segmentDescActive,
+                ]}
+              >
+                Different fees per section
+              </Text>
+            </Pressable>
+          </View>
+
           {modeSaving ? (
             <View style={styles.modeSavingRow}>
               <LogoLoader size={16} />
@@ -416,147 +560,231 @@ export default function SetClassFeeScreen() {
         {displayFeeMode === 'per_section' && missingForSelection.length > 0 ? (
           <View style={[styles.card, styles.warningCard]}>
             <View style={styles.warningHeader}>
-              <Ionicons name="warning-outline" size={18} color="#D97706" />
+              <View style={styles.warningIconWrap}>
+                <Ionicons name="warning-outline" size={16} color="#D97706" />
+              </View>
               <Text style={styles.warningTitle}>Missing section fees</Text>
             </View>
             <Text style={styles.warningBody}>
-              Some sections have students but no per-section fee configured yet. They will fall back to class-level fees until set.
+              Some sections have students but no per-section fee yet. They fall back to class-level
+              fees until set.
             </Text>
             {missingForSelection.slice(0, 5).map((m) => (
               <Text key={`${m.section_id}-${m.fee_type_id}`} style={styles.warningItem}>
-                {m.class_name} · {m.section_name} · {m.fee_type}
+                · {m.class_name} · {m.section_name} · {m.fee_type}
               </Text>
             ))}
           </View>
         ) : null}
 
+        {/* Fee Type Order — collapsed by default */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Fee Type Order</Text>
-          <Text style={styles.listSubtitle}>
-            Set the display order for fee types in the accounts collection flow. Top items appear first on the fee ledger.
-          </Text>
-          {sortedFeeTypes.length === 0 ? (
-            <Text style={styles.emptyHint}>Add fee types below to configure their order.</Text>
-          ) : (
-            <View style={styles.typeOrderList}>
-              {sortedFeeTypes.map((type, index) => (
-                <View key={type.id} style={styles.typeOrderRow}>
-                  <View style={styles.orderBadge}>
-                    <Text style={styles.orderBadgeText}>{type.sort_order ?? index + 1}</Text>
-                  </View>
-                  <Text style={styles.typeOrderName}>{type.name}</Text>
-                  <View style={styles.orderControls}>
-                    <TouchableOpacity
-                      style={[styles.orderBtn, (index === 0 || reorderingTypes) && styles.orderBtnDisabled]}
-                      onPress={() => handleMoveFeeType(index, 'up')}
-                      disabled={index === 0 || reorderingTypes}
-                    >
-                      <Ionicons
-                        name="chevron-up"
-                        size={20}
-                        color={index === 0 || reorderingTypes ? '#CBD5E1' : ADMIN_THEME.colors.primary}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.orderBtn,
-                        (index === sortedFeeTypes.length - 1 || reorderingTypes) && styles.orderBtnDisabled,
-                      ]}
-                      onPress={() => handleMoveFeeType(index, 'down')}
-                      disabled={index === sortedFeeTypes.length - 1 || reorderingTypes}
-                    >
-                      <Ionicons
-                        name="chevron-down"
-                        size={20}
-                        color={
-                          index === sortedFeeTypes.length - 1 || reorderingTypes
-                            ? '#CBD5E1'
-                            : ADMIN_THEME.colors.primary
-                        }
-                      />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
+          <TouchableOpacity
+            style={styles.collapseHeader}
+            onPress={() => setShowTypeOrder((v) => !v)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.iconBadge}>
+                <Ionicons name="swap-vertical-outline" size={16} color={ADMIN_THEME.colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.sectionTitleNoMargin}>Fee Type Order</Text>
+                <Text style={styles.sectionHint}>
+                  {sortedFeeTypes.length} type{sortedFeeTypes.length === 1 ? '' : 's'} · ledger display
+                </Text>
+              </View>
             </View>
-          )}
+            <Ionicons
+              name={showTypeOrder ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color={theme.colors.textTertiary}
+            />
+          </TouchableOpacity>
+
+          {showTypeOrder ? (
+            <View style={styles.collapseBody}>
+              <Text style={styles.listSubtitle}>
+                Top items appear first on the fee ledger during collection.
+              </Text>
+              {sortedFeeTypes.length === 0 ? (
+                <Text style={styles.emptyHint}>Add fee types in Fee Details to configure order.</Text>
+              ) : (
+                <View style={styles.typeOrderList}>
+                  {sortedFeeTypes.map((type, index) => (
+                    <View key={type.id} style={styles.typeOrderRow}>
+                      <View style={styles.orderBadge}>
+                        <Text style={styles.orderBadgeText}>{type.sort_order ?? index + 1}</Text>
+                      </View>
+                      <Text style={styles.typeOrderName}>{type.name}</Text>
+                      <View style={styles.orderControls}>
+                        <TouchableOpacity
+                          style={[
+                            styles.orderBtn,
+                            (index === 0 || reorderingTypes) && styles.orderBtnDisabled,
+                          ]}
+                          onPress={() => handleMoveFeeType(index, 'up')}
+                          disabled={index === 0 || reorderingTypes}
+                        >
+                          <Ionicons
+                            name="chevron-up"
+                            size={18}
+                            color={
+                              index === 0 || reorderingTypes
+                                ? theme.colors.textTertiary
+                                : ADMIN_THEME.colors.primary
+                            }
+                          />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.orderBtn,
+                            (index === sortedFeeTypes.length - 1 || reorderingTypes) &&
+                              styles.orderBtnDisabled,
+                          ]}
+                          onPress={() => handleMoveFeeType(index, 'down')}
+                          disabled={index === sortedFeeTypes.length - 1 || reorderingTypes}
+                        >
+                          <Ionicons
+                            name="chevron-down"
+                            size={18}
+                            color={
+                              index === sortedFeeTypes.length - 1 || reorderingTypes
+                                ? theme.colors.textTertiary
+                                : ADMIN_THEME.colors.primary
+                            }
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          ) : null}
         </View>
 
+        {/* Fee Details — primary form */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Fee Details</Text>
+          <View style={styles.cardHeaderLeft}>
+            <View style={[styles.iconBadge, styles.iconBadgeAccent]}>
+              <Ionicons name="cash-outline" size={16} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sectionTitle}>Set Fee</Text>
+              <Text style={styles.sectionHint}>
+                {selectionSummary || 'Pick class, type, and amount'}
+              </Text>
+            </View>
+          </View>
 
-          <Text style={styles.label}>Select Class</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            {classes.map((cls) => (
-              <TouchableOpacity
-                key={cls.id}
-                style={[styles.chip, selectedClassId === cls.id && styles.chipActive]}
-                onPress={() => setSelectedClassId(cls.id)}
-              >
-                <Text style={[styles.chipText, selectedClassId === cls.id && styles.chipTextActive]}>
-                  {cls.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          <Text style={styles.fieldLabel}>Class</Text>
+          <View style={styles.chipWrap}>
+            {classes.map((cls) => {
+              const active = selectedClassId === cls.id;
+              return (
+                <TouchableOpacity
+                  key={cls.id}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setSelectedClassId(cls.id)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{cls.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
           {displayFeeMode === 'per_section' ? (
-            <>
-              <Text style={styles.label}>Select Section</Text>
-              {sectionsForClass.length === 0 ? (
-                <Text style={styles.emptyHint}>No sections for this class in the selected year.</Text>
+            <View style={styles.fieldBlock}>
+              <Text style={styles.fieldLabel}>Section</Text>
+              {!selectedClassId ? (
+                <View style={styles.inlineEmpty}>
+                  <Ionicons name="information-circle-outline" size={16} color={theme.colors.textTertiary} />
+                  <Text style={styles.inlineEmptyText}>Select a class to see its sections</Text>
+                </View>
+              ) : sectionsForClass.length === 0 ? (
+                <View style={styles.emptyPanel}>
+                  <View style={styles.emptyPanelIcon}>
+                    <Ionicons name="albums-outline" size={22} color="#D97706" />
+                  </View>
+                  <Text style={styles.emptyPanelTitle}>No sections for this class</Text>
+                  <Text style={styles.emptyPanelBody}>
+                    Create sections under Academic Structure, or switch to Per Class if all sections
+                    share the same fee.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.emptyPanelAction}
+                    onPress={() => confirmFeeModeChange('per_class')}
+                    disabled={modeSaving || feeMode === 'per_class'}
+                  >
+                    <Text style={styles.emptyPanelActionText}>Use Per Class instead</Text>
+                  </TouchableOpacity>
+                </View>
               ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-                  {sectionsForClass.map((cs) => (
-                    <TouchableOpacity
-                      key={cs.id}
-                      style={[styles.chip, selectedSectionId === cs.section_id && styles.chipActive]}
-                      onPress={() => setSelectedSectionId(cs.section_id)}
-                    >
-                      <Text
-                        style={[
-                          styles.chipText,
-                          selectedSectionId === cs.section_id && styles.chipTextActive,
-                        ]}
+                <View style={styles.chipWrap}>
+                  {sectionsForClass.map((cs) => {
+                    const active = selectedSectionId === cs.section_id;
+                    return (
+                      <TouchableOpacity
+                        key={cs.id}
+                        style={[styles.chip, active && styles.chipActive]}
+                        onPress={() => setSelectedSectionId(cs.section_id)}
+                        activeOpacity={0.85}
                       >
-                        {cs.section_name}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+                        <Text style={[styles.chipText, active && styles.chipTextActive]}>
+                          {cs.section_name}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               )}
-            </>
+            </View>
           ) : null}
 
-          <Text style={styles.label}>Fee Type</Text>
+          <Text style={styles.fieldLabel}>Fee Type</Text>
           <View style={styles.typeGrid}>
-            {sortedFeeTypes.map((type) => (
-              <TouchableOpacity
-                key={type.id}
-                style={[styles.typeChip, feeTypeId === type.id && styles.typeChipActive]}
-                onPress={() => setFeeTypeId(type.id)}
-              >
-                <Text style={[styles.typeChipText, feeTypeId === type.id && styles.typeChipTextActive]}>
-                  {type.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {sortedFeeTypes.map((type) => {
+              const active = feeTypeId === type.id;
+              return (
+                <TouchableOpacity
+                  key={type.id}
+                  style={[styles.typeChip, active && styles.typeChipActive]}
+                  onPress={() => setFeeTypeId(type.id)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.typeChipText, active && styles.typeChipTextActive]}>
+                    {type.name}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
             <TouchableOpacity style={styles.addTypeChip} onPress={() => setShowAddType(true)}>
-              <Ionicons name="add" size={14} color={ADMIN_THEME.colors.primary} />
+              <Ionicons name="add" size={15} color={ADMIN_THEME.colors.primary} />
               <Text style={styles.addTypeChipText}>Add Type</Text>
             </TouchableOpacity>
           </View>
 
-          <Modal transparent visible={showAddType} onRequestClose={() => setShowAddType(false)} animationType="fade">
+          <Modal
+            transparent
+            visible={showAddType}
+            onRequestClose={() => setShowAddType(false)}
+            animationType="fade"
+          >
             <View style={styles.modalOverlay}>
               <View style={styles.modalCard}>
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>New Fee Type</Text>
                   <TouchableOpacity
-                    onPress={() => { setShowAddType(false); setNewTypeName(''); setNewTypeNameTe(''); }}
+                    onPress={() => {
+                      setShowAddType(false);
+                      setNewTypeName('');
+                      setNewTypeNameTe('');
+                    }}
                     style={styles.modalClose}
                   >
-                    <Ionicons name="close" size={18} color="#64748B" />
+                    <Ionicons name="close" size={18} color={theme.colors.textSecondary} />
                   </TouchableOpacity>
                 </View>
                 <Text style={styles.modalHint}>e.g. Tuition Fee, Lab Fee, Transport, Exam Fee</Text>
@@ -565,7 +793,7 @@ export default function SetClassFeeScreen() {
                   value={newTypeName}
                   onChangeText={setNewTypeName}
                   placeholder="Enter fee type name"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.colors.textTertiary}
                   autoFocus
                 />
                 <AppTextInput
@@ -573,17 +801,21 @@ export default function SetClassFeeScreen() {
                   value={newTypeNameTe}
                   onChangeText={setNewTypeNameTe}
                   placeholder="Telugu Name (optional)"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={theme.colors.textTertiary}
                 />
                 <View style={styles.modalActions}>
                   <TouchableOpacity
                     style={styles.modalCancelBtn}
-                    onPress={() => { setShowAddType(false); setNewTypeName(''); setNewTypeNameTe(''); }}
+                    onPress={() => {
+                      setShowAddType(false);
+                      setNewTypeName('');
+                      setNewTypeNameTe('');
+                    }}
                   >
                     <Text style={styles.modalCancelText}>Cancel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.modalSaveBtn, !newTypeName.trim() && { opacity: 0.5 }]}
+                    style={[styles.modalSaveBtn, !newTypeName.trim() && { opacity: 0.45 }]}
                     onPress={handleAddFeeType}
                     disabled={addingType || !newTypeName.trim()}
                   >
@@ -601,60 +833,76 @@ export default function SetClassFeeScreen() {
             </View>
           </Modal>
 
-          <Text style={styles.label}>Amount (₹)</Text>
-          <AppTextInput
-            key={`${selectedClassId}-${selectedSectionId}-${selectedYearId}-${feeTypeId}`}
-            style={styles.input}
-            value={amount}
-            onChangeText={setAmount}
-            placeholder="Enter amount"
-            keyboardType="numeric"
-            placeholderTextColor="#94A3B8"
-          />
+          <Text style={styles.fieldLabel}>Amount</Text>
+          <View style={styles.amountRow}>
+            <View style={styles.currencyBadge}>
+              <Text style={styles.currencyBadgeText}>₹</Text>
+            </View>
+            <AppTextInput
+              key={`${selectedClassId}-${selectedSectionId}-${selectedYearId}-${feeTypeId}`}
+              style={styles.amountInput}
+              value={amount}
+              onChangeText={setAmount}
+              placeholder="0"
+              keyboardType="numeric"
+              placeholderTextColor={theme.colors.textTertiary}
+            />
+          </View>
 
           <AppDatePicker
             label="Due Date"
             value={dueDate}
             onChange={setDueDate}
             isDark={isDark}
-            containerStyle={{ marginBottom: 16 }}
+            containerStyle={{ marginBottom: Spacing.md, marginTop: Spacing.sm }}
           />
 
-          <Text style={styles.label}>Academic Year</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
-            {academicYears.map((ay) => (
-              <TouchableOpacity
-                key={ay.id}
-                style={[styles.chip, selectedYearId === ay.id && styles.chipActive]}
-                onPress={() => setSelectedYearId(ay.id)}
-              >
-                <Text style={[styles.chipText, selectedYearId === ay.id && styles.chipTextActive]}>
-                  {ay.code}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
+          {missingFieldHint && !formReady ? (
+            <View style={styles.hintBar}>
+              <Ionicons name="arrow-forward-circle-outline" size={16} color={ADMIN_THEME.colors.primary} />
+              <Text style={styles.hintBarText}>{missingFieldHint}</Text>
+            </View>
+          ) : null}
 
-          <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
-            {submitting ? <LogoLoader color="#fff" /> : <Text style={styles.submitBtnText}>Save Fee Structure</Text>}
+          <TouchableOpacity
+            style={[styles.submitBtn, (!formReady || submitting) && styles.submitBtnDisabled]}
+            onPress={handleSubmit}
+            disabled={submitting || !formReady}
+            activeOpacity={0.88}
+          >
+            {submitting ? (
+              <LogoLoader color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                <Text style={styles.submitBtnText}>Save Fee Structure</Text>
+              </>
+            )}
           </TouchableOpacity>
         </View>
 
+        {/* Configured Fees */}
         <View style={styles.card}>
           <View style={styles.listHeaderRow}>
-            <Text style={styles.sectionTitle}>Configured Fees</Text>
+            <View style={styles.cardHeaderLeft}>
+              <View style={styles.iconBadge}>
+                <Ionicons name="list-outline" size={16} color={ADMIN_THEME.colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.sectionTitleNoMargin}>Configured Fees</Text>
+                <Text style={styles.sectionHint}>
+                  {selectedYear?.code ?? 'This year'}
+                  {displayFeeMode === 'per_section' ? ' · per section' : ' · per class'}
+                </Text>
+              </View>
+            </View>
             <View style={styles.countBadge}>
               <Text style={styles.countBadgeText}>{filteredConfiguredFees.length}</Text>
             </View>
           </View>
-          <Text style={styles.listSubtitle}>
-            Fees already set for{' '}
-            {academicYears.find((y) => y.id === selectedYearId)?.code ?? 'this year'}
-            {displayFeeMode === 'per_section' ? ' (per section)' : ' (per class)'}
-          </Text>
 
-          <Text style={styles.label}>Filter by Class</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+          <Text style={styles.fieldLabel}>Filter by Class</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipScrollContent}>
             <TouchableOpacity
               style={[styles.chip, !listClassFilter && styles.chipActive]}
               onPress={() => setListClassFilter('')}
@@ -676,11 +924,11 @@ export default function SetClassFeeScreen() {
 
           {filteredConfiguredFees.length === 0 ? (
             <View style={styles.emptyList}>
-              <Ionicons name="receipt-outline" size={28} color="#94A3B8" />
+              <View style={styles.emptyListIcon}>
+                <Ionicons name="receipt-outline" size={28} color={theme.colors.textTertiary} />
+              </View>
               <Text style={styles.emptyListTitle}>No fees configured yet</Text>
-              <Text style={styles.emptyListHint}>
-                Set a fee above and it will appear here.
-              </Text>
+              <Text style={styles.emptyListHint}>Set a fee above and it will appear here.</Text>
             </View>
           ) : (
             <View style={styles.feeList}>
@@ -689,12 +937,14 @@ export default function SetClassFeeScreen() {
                   key={fee.id}
                   style={styles.feeRow}
                   onPress={() => handleSelectConfiguredFee(fee)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.72}
                 >
                   <View style={styles.feeRowMain}>
                     <Text style={styles.feeRowClass}>
                       {fee.class_name ?? 'Class'}
-                      {displayFeeMode === 'per_section' && fee.section_name ? ` · ${fee.section_name}` : ''}
+                      {displayFeeMode === 'per_section' && fee.section_name
+                        ? ` · ${fee.section_name}`
+                        : ''}
                     </Text>
                     <Text style={styles.feeRowType}>{fee.fee_type ?? 'Fee'}</Text>
                   </View>
@@ -711,7 +961,7 @@ export default function SetClassFeeScreen() {
                     {deletingId === fee.id ? (
                       <LogoLoader size={16} />
                     ) : (
-                      <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                      <Ionicons name="trash-outline" size={17} color="#EF4444" />
                     )}
                   </TouchableOpacity>
                 </TouchableOpacity>
@@ -724,120 +974,381 @@ export default function SetClassFeeScreen() {
   );
 }
 
-const getStyles = (theme: Theme, isDark: boolean) =>
-  StyleSheet.create({
+const getStyles = (theme: Theme, isDark: boolean) => {
+  const surface = isDark ? theme.colors.card : '#FFFFFF';
+  const muted = isDark ? '#1E293B' : '#F1F5F9';
+  const soft = isDark ? '#334155' : '#F8FAFC';
+  const border = isDark ? '#334155' : '#E2E8F0';
+  const primary = ADMIN_THEME.colors.primary;
+
+  return StyleSheet.create({
     container: { flex: 1, backgroundColor: 'transparent' },
     loaderWrap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-    content: { padding: 20, gap: 16 },
+    content: { padding: Spacing.md, gap: Spacing.md, paddingBottom: Spacing.xxl },
+
     card: {
-      backgroundColor: isDark ? '#1E293B' : '#fff',
-      borderRadius: 16,
-      padding: 20,
+      backgroundColor: surface,
+      borderRadius: Radii.xl,
+      padding: Spacing.md,
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.05)',
       ...Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+        ios: {
+          shadowColor: '#0F172A',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.25 : 0.05,
+          shadowRadius: 12,
+        },
         android: { elevation: 3 },
+        default: {},
       }),
     },
+    cardHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: Spacing.sm,
+    },
+    cardHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      flex: 1,
+    },
+    iconBadge: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: isDark ? 'rgba(102,89,144,0.22)' : '#F3F0F8',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconBadgeAccent: {
+      backgroundColor: primary,
+    },
+    sectionTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: isDark ? '#F1F5F9' : '#0F172A',
+      letterSpacing: -0.2,
+      marginBottom: 2,
+    },
+    sectionTitleNoMargin: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: isDark ? '#F1F5F9' : '#0F172A',
+      letterSpacing: -0.2,
+    },
+    sectionHint: {
+      fontSize: 12,
+      color: isDark ? '#94A3B8' : '#64748B',
+      lineHeight: 16,
+      marginTop: 1,
+    },
+
+    // Segmented fee mode
+    segmented: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: Spacing.md,
+      padding: 4,
+      borderRadius: Radii.lg,
+      backgroundColor: muted,
+    },
+    segmentBtn: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      borderRadius: Radii.md,
+      gap: 4,
+    },
+    segmentBtnActive: {
+      backgroundColor: surface,
+      ...Elevation.level1,
+    },
+    segmentLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: isDark ? '#94A3B8' : '#64748B',
+    },
+    segmentLabelActive: {
+      color: primary,
+    },
+    segmentDesc: {
+      fontSize: 10,
+      color: isDark ? '#64748B' : '#94A3B8',
+      textAlign: 'center',
+      lineHeight: 13,
+    },
+    segmentDescActive: {
+      color: isDark ? '#94A3B8' : '#64748B',
+    },
+    modeSavingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 12,
+    },
+    modeSavingText: { fontSize: 12, color: isDark ? '#94A3B8' : '#64748B' },
+
+    // Warning
     warningCard: {
-      borderWidth: 1,
       borderColor: 'rgba(217,119,6,0.35)',
       backgroundColor: isDark ? 'rgba(217,119,6,0.08)' : '#FFFBEB',
     },
     warningHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-    warningTitle: { fontSize: 14, fontWeight: '700', color: '#D97706' },
-    warningBody: { fontSize: 12, color: isDark ? '#FCD34D' : '#92400E', marginBottom: 8, lineHeight: 18 },
-    warningItem: { fontSize: 12, color: isDark ? '#FDE68A' : '#B45309', marginTop: 2 },
-    sectionTitle: {
-      fontSize: 18,
-      fontWeight: '800',
-      color: isDark ? '#F1F5F9' : '#1E293B',
-      marginBottom: 16,
-      letterSpacing: -0.3,
+    warningIconWrap: {
+      width: 28,
+      height: 28,
+      borderRadius: 8,
+      backgroundColor: 'rgba(217,119,6,0.15)',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
-    modeRow: {
+    warningTitle: { fontSize: 14, fontWeight: '700', color: '#D97706' },
+    warningBody: {
+      fontSize: 12,
+      color: isDark ? '#FCD34D' : '#92400E',
+      marginBottom: 8,
+      lineHeight: 18,
+    },
+    warningItem: { fontSize: 12, color: isDark ? '#FDE68A' : '#B45309', marginTop: 2 },
+
+    // Collapse
+    collapseHeader: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: 12,
+      gap: 8,
     },
-    modeLabels: { flex: 1 },
-    modeLabel: { fontSize: 14, fontWeight: '600', color: isDark ? '#94A3B8' : '#64748B' },
-    modeLabelActive: { color: ADMIN_THEME.colors.primary, fontWeight: '800' },
-    modeHint: { fontSize: 11, marginTop: 2 },
-    modeSavingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
-    modeSavingText: { fontSize: 12, color: isDark ? '#94A3B8' : '#64748B' },
-    label: {
-      fontSize: 13,
+    collapseBody: { marginTop: Spacing.md },
+
+    // Fields
+    fieldBlock: { marginTop: 4 },
+    fieldLabel: {
+      fontSize: 12,
       fontWeight: '700',
       color: isDark ? '#94A3B8' : '#475569',
       marginBottom: 8,
-      marginTop: 16,
+      marginTop: Spacing.md,
+      letterSpacing: 0.3,
+      textTransform: 'uppercase',
     },
     emptyHint: { fontSize: 13, color: '#94A3B8', fontStyle: 'italic' },
-    input: {
-      backgroundColor: isDark ? '#334155' : '#F8FAFC',
-      borderWidth: 1,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
-      borderRadius: 10,
-      padding: 12,
-      fontSize: 15,
-      color: isDark ? '#F1F5F9' : '#1E293B',
+
+    chipWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
     },
-    chipScroll: { flexDirection: 'row', marginBottom: 4 },
+    chipScrollContent: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingBottom: 4,
+    },
     chip: {
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 20,
-      backgroundColor: isDark ? '#334155' : '#F1F5F9',
-      marginRight: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      minHeight: 40,
+      borderRadius: Radii.md,
+      backgroundColor: soft,
       borderWidth: 1.5,
-      borderColor: 'transparent',
+      borderColor: border,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     chipActive: {
-      backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF',
-      borderColor: ADMIN_THEME.colors.primary,
+      backgroundColor: isDark ? 'rgba(102,89,144,0.2)' : '#F3F0F8',
+      borderColor: primary,
     },
-    chipText: { fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', fontWeight: '600' },
-    chipTextActive: { color: ADMIN_THEME.colors.primary, fontWeight: '700' },
+    chipText: {
+      fontSize: 13,
+      color: isDark ? '#94A3B8' : '#475569',
+      fontWeight: '600',
+    },
+    chipTextActive: { color: primary, fontWeight: '700' },
+
     typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     typeChip: {
       paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: 10,
-      backgroundColor: isDark ? '#334155' : '#F8FAFC',
+      paddingVertical: 10,
+      minHeight: 40,
+      borderRadius: Radii.md,
+      backgroundColor: soft,
       borderWidth: 1.5,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
+      borderColor: border,
     },
     typeChipActive: {
-      backgroundColor: isDark ? 'rgba(99,102,241,0.15)' : '#EEF2FF',
-      borderColor: ADMIN_THEME.colors.primary,
+      backgroundColor: isDark ? 'rgba(102,89,144,0.2)' : '#F3F0F8',
+      borderColor: primary,
     },
-    typeChipText: { fontSize: 13, fontWeight: '600', color: isDark ? '#94A3B8' : '#64748B' },
-    typeChipTextActive: { color: ADMIN_THEME.colors.primary, fontWeight: '700' },
+    typeChipText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: isDark ? '#94A3B8' : '#475569',
+    },
+    typeChipTextActive: { color: primary, fontWeight: '700' },
     addTypeChip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,
       paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
+      paddingVertical: 10,
+      minHeight: 40,
+      borderRadius: Radii.md,
       borderWidth: 1.5,
-      borderColor: ADMIN_THEME.colors.primary,
+      borderColor: primary,
       borderStyle: 'dashed',
-      backgroundColor: isDark ? 'rgba(99,102,241,0.08)' : '#F5F3FF',
+      backgroundColor: isDark ? 'rgba(102,89,144,0.1)' : '#F8F6FC',
     },
-    addTypeChipText: { fontSize: 12, fontWeight: '700', color: ADMIN_THEME.colors.primary },
+    addTypeChipText: { fontSize: 12, fontWeight: '700', color: primary },
+
+    // Empty states
+    inlineEmpty: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: Radii.md,
+      backgroundColor: soft,
+    },
+    inlineEmptyText: { fontSize: 13, color: isDark ? '#94A3B8' : '#64748B', flex: 1 },
+    emptyPanel: {
+      alignItems: 'flex-start',
+      padding: Spacing.md,
+      borderRadius: Radii.lg,
+      backgroundColor: isDark ? 'rgba(217,119,6,0.08)' : '#FFFBEB',
+      borderWidth: 1,
+      borderColor: 'rgba(217,119,6,0.25)',
+      gap: 6,
+    },
+    emptyPanelIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: 'rgba(217,119,6,0.12)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
+    },
+    emptyPanelTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: isDark ? '#FCD34D' : '#92400E',
+    },
+    emptyPanelBody: {
+      fontSize: 12,
+      color: isDark ? '#FDE68A' : '#B45309',
+      lineHeight: 18,
+    },
+    emptyPanelAction: {
+      marginTop: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: Radii.sm,
+      backgroundColor: isDark ? 'rgba(102,89,144,0.25)' : '#F3F0F8',
+    },
+    emptyPanelActionText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: primary,
+    },
+
+    // Amount
+    amountRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: border,
+      borderRadius: Radii.md,
+      backgroundColor: soft,
+      overflow: 'hidden',
+    },
+    currencyBadge: {
+      width: 44,
+      height: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: isDark ? 'rgba(102,89,144,0.2)' : '#F3F0F8',
+      borderRightWidth: 1,
+      borderRightColor: border,
+    },
+    currencyBadgeText: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: primary,
+    },
+    amountInput: {
+      flex: 1,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 18,
+      fontWeight: '700',
+      color: isDark ? '#F1F5F9' : '#0F172A',
+      letterSpacing: -0.3,
+      ...Platform.select({
+        web: { outlineStyle: 'none' as any },
+        default: {},
+      }),
+    },
+
+    hintBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: Radii.md,
+      backgroundColor: isDark ? 'rgba(102,89,144,0.12)' : '#F8F6FC',
+      marginBottom: 4,
+    },
+    hintBarText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: primary,
+      flex: 1,
+    },
+
+    submitBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      backgroundColor: primary,
+      paddingVertical: 15,
+      borderRadius: Radii.lg,
+      marginTop: Spacing.sm,
+      ...Platform.select({
+        ios: {
+          shadowColor: primary,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.28,
+          shadowRadius: 12,
+        },
+        android: { elevation: 4 },
+        default: {},
+      }),
+    },
+    submitBtnDisabled: { opacity: 0.45 },
+    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+
+    // Modal
     modalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(10,14,30,0.55)',
       justifyContent: 'center',
       alignItems: 'center',
+      padding: 20,
     },
     modalCard: {
-      width: '85%',
-      backgroundColor: isDark ? '#1E293B' : '#fff',
-      borderRadius: 20,
+      width: '100%',
+      maxWidth: 400,
+      backgroundColor: surface,
+      borderRadius: Radii.xxl,
       padding: 22,
+      ...Elevation.level3,
     },
     modalHeader: {
       flexDirection: 'row',
@@ -848,76 +1359,77 @@ const getStyles = (theme: Theme, isDark: boolean) =>
     modalTitle: {
       fontSize: 17,
       fontWeight: '800',
-      color: isDark ? '#F1F5F9' : '#1E293B',
+      color: isDark ? '#F1F5F9' : '#0F172A',
       letterSpacing: -0.3,
     },
     modalClose: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      backgroundColor: isDark ? '#334155' : '#F1F5F9',
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: muted,
       alignItems: 'center',
       justifyContent: 'center',
     },
     modalHint: { fontSize: 12, color: '#94A3B8', marginBottom: 14 },
     modalInput: {
       borderWidth: 1,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
-      borderRadius: 10,
+      borderColor: border,
+      borderRadius: Radii.md,
       padding: 12,
       fontSize: 15,
-      color: isDark ? '#F1F5F9' : '#1E293B',
-      backgroundColor: isDark ? '#334155' : '#F8FAFC',
-      marginBottom: 16,
+      color: isDark ? '#F1F5F9' : '#0F172A',
+      backgroundColor: soft,
+      marginBottom: 12,
     },
-    modalActions: { flexDirection: 'row', gap: 8 },
+    modalActions: { flexDirection: 'row', gap: 8, marginTop: 4 },
     modalCancelBtn: {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      borderRadius: 10,
+      borderRadius: Radii.md,
       paddingVertical: 12,
-      backgroundColor: isDark ? '#334155' : '#F1F5F9',
+      minHeight: 48,
+      backgroundColor: muted,
       borderWidth: 1,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
+      borderColor: border,
     },
-    modalCancelText: { fontSize: 14, fontWeight: '600', color: isDark ? '#94A3B8' : '#64748B' },
+    modalCancelText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: isDark ? '#94A3B8' : '#64748B',
+    },
     modalSaveBtn: {
       flex: 1.5,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
       gap: 6,
-      backgroundColor: ADMIN_THEME.colors.primary,
-      borderRadius: 10,
+      backgroundColor: primary,
+      borderRadius: Radii.md,
       paddingVertical: 12,
+      minHeight: 48,
     },
     modalSaveText: { fontSize: 14, fontWeight: '700', color: '#fff' },
-    submitBtn: {
-      backgroundColor: ADMIN_THEME.colors.primary,
-      paddingVertical: 14,
-      borderRadius: 12,
-      alignItems: 'center',
-      marginTop: 26,
-    },
-    submitBtnText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+
+    // Configured list
     listHeaderRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
       marginBottom: 4,
+      gap: 12,
     },
     listSubtitle: {
       fontSize: 12,
       color: isDark ? '#64748B' : '#94A3B8',
-      marginBottom: 4,
+      marginBottom: Spacing.sm,
       lineHeight: 18,
     },
     countBadge: {
       minWidth: 28,
       height: 28,
       borderRadius: 14,
-      backgroundColor: isDark ? 'rgba(99,102,241,0.2)' : '#EEF2FF',
+      backgroundColor: isDark ? 'rgba(102,89,144,0.25)' : '#F3F0F8',
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 8,
@@ -925,12 +1437,21 @@ const getStyles = (theme: Theme, isDark: boolean) =>
     countBadgeText: {
       fontSize: 13,
       fontWeight: '800',
-      color: ADMIN_THEME.colors.primary,
+      color: primary,
     },
     emptyList: {
       alignItems: 'center',
-      paddingVertical: 28,
+      paddingVertical: 32,
       gap: 6,
+    },
+    emptyListIcon: {
+      width: 56,
+      height: 56,
+      borderRadius: 18,
+      backgroundColor: soft,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
     },
     emptyListTitle: {
       fontSize: 15,
@@ -943,22 +1464,22 @@ const getStyles = (theme: Theme, isDark: boolean) =>
       color: '#94A3B8',
       textAlign: 'center',
     },
-    feeList: { marginTop: 8, gap: 8 },
+    feeList: { marginTop: Spacing.sm, gap: 8 },
     feeRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
       padding: 14,
-      borderRadius: 12,
-      backgroundColor: isDark ? '#334155' : '#F8FAFC',
+      borderRadius: Radii.md,
+      backgroundColor: soft,
       borderWidth: 1,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
+      borderColor: border,
     },
     feeRowMain: { flex: 1 },
     feeRowClass: {
       fontSize: 14,
       fontWeight: '700',
-      color: isDark ? '#F1F5F9' : '#1E293B',
+      color: isDark ? '#F1F5F9' : '#0F172A',
       marginBottom: 2,
     },
     feeRowType: {
@@ -968,9 +1489,10 @@ const getStyles = (theme: Theme, isDark: boolean) =>
     },
     feeRowMeta: { alignItems: 'flex-end' },
     feeRowAmount: {
-      fontSize: 14,
+      fontSize: 15,
       fontWeight: '800',
-      color: ADMIN_THEME.colors.primary,
+      color: primary,
+      letterSpacing: -0.3,
     },
     feeRowDue: {
       fontSize: 11,
@@ -978,53 +1500,56 @@ const getStyles = (theme: Theme, isDark: boolean) =>
       marginTop: 2,
     },
     feeRowDelete: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: isDark ? 'rgba(239,68,68,0.12)' : '#FEF2F2',
     },
-    typeOrderList: { marginTop: 8, gap: 8 },
+
+    // Type order
+    typeOrderList: { gap: 8 },
     typeOrderRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
       padding: 12,
-      borderRadius: 12,
-      backgroundColor: isDark ? '#334155' : '#F8FAFC',
+      borderRadius: Radii.md,
+      backgroundColor: soft,
       borderWidth: 1,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
+      borderColor: border,
     },
     typeOrderName: {
       flex: 1,
       fontSize: 14,
       fontWeight: '700',
-      color: isDark ? '#F1F5F9' : '#1E293B',
+      color: isDark ? '#F1F5F9' : '#0F172A',
     },
     orderBadge: {
       width: 28,
       height: 28,
       borderRadius: 8,
-      backgroundColor: isDark ? 'rgba(99,102,241,0.2)' : '#EEF2FF',
+      backgroundColor: isDark ? 'rgba(102,89,144,0.25)' : '#F3F0F8',
       alignItems: 'center',
       justifyContent: 'center',
     },
     orderBadgeText: {
       fontSize: 12,
       fontWeight: '800',
-      color: ADMIN_THEME.colors.primary,
+      color: primary,
     },
     orderControls: { flexDirection: 'row', gap: 4 },
     orderBtn: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
+      width: 36,
+      height: 36,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: isDark ? '#1E293B' : '#fff',
+      backgroundColor: surface,
       borderWidth: 1,
-      borderColor: isDark ? '#475569' : '#E2E8F0',
+      borderColor: border,
     },
-    orderBtnDisabled: { opacity: 0.45 },
+    orderBtnDisabled: { opacity: 0.4 },
   });
+};

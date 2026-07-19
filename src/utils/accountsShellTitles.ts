@@ -4,7 +4,6 @@ const EXACT: Record<string, string> = {
   '/accounts/fees': 'Fee Management',
   '/accounts/fees/today-collection': "Today's Collection",
   '/accounts/fees/collect': 'Collect Fee',
-  '/accounts/collect-fee-qr': 'Collect fee via UPI',
   '/accounts/fees/adjust': 'Issue Waiver',
   '/accounts/fees/details': 'Fee Ledger',
   '/accounts/receipts': 'Receipts',

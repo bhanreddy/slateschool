@@ -83,6 +83,10 @@ interface AdminHeaderCardProps {
     compact?: boolean;
     /** In compact mode, keep the role line (when the greeting shows a date/name but not the role, e.g. accounts) */
     compactRole?: boolean;
+    /** Nested inside DashboardHero — drop outer margin/elevation so the parent clay shell owns depth */
+    embedded?: boolean;
+    /** Driver / on-duty surfaces: strip decorative chrome, keep identity + account switch */
+    dense?: boolean;
 }
 
 // Enhanced clay rim generator with thicker, smoother highlight distribution
@@ -107,6 +111,8 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
     tagline,
     compact = false,
     compactRole = false,
+    embedded = false,
+    dense = false,
 }) => {
     const isLogin = variant === 'login';
     const { t } = useTranslation();
@@ -290,28 +296,54 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
         () =>
             StyleSheet.create({
                 wrapper: {
-                    marginTop: theme.spacing.md,
-                    paddingHorizontal: 4,
+                    marginTop: embedded ? 0 : theme.spacing.md,
+                    paddingHorizontal: embedded ? 0 : 4,
                     width: '100%',
                 },
                 outerGlow: {
                     width: '100%',
                     borderRadius: CLAY_RADIUS,
-                    ...Platform.select({
-                        ios: {
-                            shadowColor: clay.shadow,
-                            shadowOffset: { width: 0, height: 10 },
-                            shadowOpacity: clay.shadowOpacity,
-                            shadowRadius: 24,
-                        },
-                        android: { elevation: isDark ? 8 : 6 },
-                        default: {
-                            shadowColor: clay.shadow,
-                            shadowOffset: { width: 0, height: 10 },
-                            shadowOpacity: clay.shadowOpacity,
-                            shadowRadius: 24,
-                        },
-                    }),
+                    ...(embedded
+                        ? Platform.select({
+                              web: {
+                                  boxShadow: isDark
+                                      ? '4px 6px 14px rgba(0,0,0,0.35), inset 2px 2px 4px rgba(255,255,255,0.06), inset -2px -3px 6px rgba(0,0,0,0.3)'
+                                      : '4px 8px 16px rgba(196,181,253,0.28), inset 2px 2px 5px rgba(255,255,255,0.9), inset -2px -3px 6px rgba(107,47,160,0.08)',
+                              } as any,
+                              ios: {
+                                  shadowColor: clay.shadow,
+                                  shadowOffset: { width: 0, height: 4 },
+                                  shadowOpacity: clay.shadowOpacity * 0.7,
+                                  shadowRadius: 10,
+                              },
+                              android: { elevation: 2 },
+                              default: {
+                                  shadowColor: clay.shadow,
+                                  shadowOffset: { width: 0, height: 4 },
+                                  shadowOpacity: clay.shadowOpacity * 0.7,
+                                  shadowRadius: 10,
+                              },
+                          })
+                        : Platform.select({
+                              web: {
+                                  boxShadow: isDark
+                                      ? '10px 14px 28px rgba(0,0,0,0.45), -6px -6px 18px rgba(255,255,255,0.03), inset 2px 2px 5px rgba(255,255,255,0.06), inset -2px -3px 6px rgba(0,0,0,0.35)'
+                                      : '10px 14px 28px rgba(196,181,253,0.35), -6px -8px 20px rgba(255,255,255,0.85), inset 2px 2px 6px rgba(255,255,255,0.9), inset -3px -4px 8px rgba(107,47,160,0.08)',
+                              } as any,
+                              ios: {
+                                  shadowColor: clay.shadow,
+                                  shadowOffset: { width: 0, height: 10 },
+                                  shadowOpacity: clay.shadowOpacity,
+                                  shadowRadius: 24,
+                              },
+                              android: { elevation: isDark ? 6 : 5 },
+                              default: {
+                                  shadowColor: clay.shadow,
+                                  shadowOffset: { width: 0, height: 10 },
+                                  shadowOpacity: clay.shadowOpacity,
+                                  shadowRadius: 24,
+                              },
+                          })),
                 },
                 cardShell: {
                     width: '100%',
@@ -420,6 +452,11 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                     justifyContent: 'center',
                     ...(isLogin ? { paddingRight: 28 } : null),
                 },
+                contentDense: {
+                    paddingHorizontal: 14,
+                    paddingVertical: 12,
+                    minHeight: 72,
+                },
                 topRow: {
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -472,6 +509,8 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                     zIndex: 4,
                 },
                 profileRow: { flexDirection: 'row', alignItems: 'center' },
+                profileRowDense: { gap: 12 },
+                nameDense: { fontSize: 17, marginBottom: 2 },
                 avatarPressable: { borderRadius: 22 },
                 // 3D puffy ring container for avatar
                 avatarRing: {
@@ -610,7 +649,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                     color: clay.subtitle,
                 },
             }),
-        [clay, gold, isDark, isLogin, isWide, theme],
+        [clay, embedded, gold, isDark, isLogin, isWide, theme],
     );
 
     return (
@@ -665,6 +704,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                         <View style={styles.specularStreak} pointerEvents="none" />
 
                         {/* School illustration — atmospheric dissolve across full card */}
+                        {!dense && (
                         <View style={styles.schoolAtmosphere} pointerEvents="none">
                             <SchoolDecorIcons isDark={isDark} accent={schoolCerulean} gold={gold} compact={compact} />
                             <View style={[styles.schoolImageClip, schoolImageStyle]}>
@@ -723,18 +763,20 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                 style={styles.schoolDissolveRight}
                             />
                         </View>
+                        )}
 
                         {/* Card Content Shell */}
                         <Pressable
-                            style={styles.content}
+                            style={[styles.content, dense && styles.contentDense]}
                             delayLongPress={LONG_PRESS_MS}
                             onLongPress={isLogin ? undefined : handleLongPress}
                             onPressIn={isLogin ? undefined : handleCardPressIn}
                             onPressOut={isLogin ? undefined : handleCardPressOut}
                             android_disableSound
                             disabled={isLogin}
+                            accessibilityHint={!isLogin && accountCount > 1 ? 'Hold to switch accounts, double-tap photo for next account' : undefined}
                         >
-                            {!isLogin && (
+                            {!isLogin && !dense && (
                                 <View style={styles.topRow}>
                                     <View style={styles.schoolBadge}>
                                         <View style={styles.schoolLogoWrap}>
@@ -750,7 +792,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                 </View>
                             )}
 
-                            <View style={styles.profileRow}>
+                            <View style={[styles.profileRow, dense && styles.profileRowDense]}>
                                 {isLogin ? (
                                     <View style={styles.avatarPressable}>
                                         <LinearGradient
@@ -797,8 +839,8 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                 )}
 
                                 <View style={styles.info}>
-                                    {!compact && (
-                                        <Text style={styles.name} numberOfLines={isLogin ? 2 : 1}>
+                                    {(!compact || dense) && (
+                                        <Text style={[styles.name, dense && styles.nameDense]} numberOfLines={isLogin ? 2 : 1}>
                                             {resolvedName}
                                         </Text>
                                     )}
@@ -812,7 +854,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                             </View>
                                             <Text style={styles.loginTagline}>{resolvedRole}</Text>
                                         </View>
-                                    ) : compact ? (
+                                    ) : compact && !dense ? (
                                         compactRole && resolvedRole ? (
                                             <Text style={styles.roleCompact} numberOfLines={1}>
                                                 {resolvedRole}
@@ -830,8 +872,8 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                         </View>
                                     )}
 
-                                    <View style={[styles.chipsRow, compact && !compactRole && styles.chipsRowCompact]}>
-                                        {compact && (
+                                    <View style={[styles.chipsRow, compact && !compactRole && !dense && styles.chipsRowCompact]}>
+                                        {compact && !dense && (
                                             <View style={styles.crownPill}>
                                                 <FontAwesome5 name="crown" size={7.5} color={gold} />
                                                 <Text style={styles.crownText}>{badgeLabel}</Text>
@@ -849,7 +891,7 @@ const AdminHeaderCard: React.FC<AdminHeaderCardProps> = ({
                                         </View>
                                     </View>
 
-                                    {!isLogin && accountCount > 1 && (
+                                    {!isLogin && accountCount > 1 && !dense && (
                                         <Text style={styles.switchHint}>
                                             Hold to switch · double-tap photo
                                         </Text>

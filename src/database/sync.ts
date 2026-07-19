@@ -36,8 +36,15 @@ export async function sync() {
       // Fetch Diary
       // Use class_section_id from user profile if available (for students)
       const classSectionId = userProfile?.class_section_id || userProfile?.classId;
+      // Always full-pull the retention window (updated_since = 0) instead of an
+      // incremental delta. The dataset is tiny (~15 days for one class), and an
+      // incremental sync silently drops entries whenever the client/server clocks
+      // skew, a sync fires in the gap around an entry's creation, or the local DB
+      // was cleared while lastPulledAt persisted — which showed up as diary
+      // history appearing empty even though the entries exist on the server.
+      // Upserting the full window every time is idempotent and self-healing.
       const diaryParams: any = {
-        updated_since: String(lastPulledAt || 0),
+        updated_since: '0',
         is_sync: 'true',
         // If student, filter by class
         ...(classSectionId ? { class_section_id: classSectionId } : {})

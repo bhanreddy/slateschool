@@ -1,20 +1,23 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import AppTextInput from '@/src/components/AppTextInput';
 import { styles as ds } from '@/src/theme/styles';
 
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, Modal, Platform, ScrollView,
-  Animated as RNAnimated
+  StatusBar, Modal, Platform, ScrollView, Pressable,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardStickyView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
 import { Ionicons, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
 import AdminHeader from '../../src/components/AdminHeader';
-import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  FadeInDown, FadeInUp, ZoomIn, FadeIn,
+  useSharedValue, useAnimatedStyle, withSpring,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useExpenses } from '../../src/hooks/useExpenses';
-import { useAuth } from '../../src/hooks/useAuth';
-import { CreateExpenseRequest, Expense } from '../../src/types/expenses';
+import { Expense } from '../../src/types/expenses';
 import { PolicyService } from '../../src/services/policyService';
 import NetBalanceTab from '../../src/components/NetBalanceTab';
 import { useTheme } from '../../src/hooks/useTheme';
@@ -22,100 +25,63 @@ import { Theme } from '../../src/theme/themes';
 import LogoLoader from '../../src/components/LogoLoader';
 import ExpenseDateFilterBar from '../../src/components/expenses/ExpenseDateFilterBar';
 import BulkExpenseSheet from '../../src/components/expenses/BulkExpenseSheet';
-import { monthStartInput, todayDateInput } from '../../src/components/expenses/expenseConstants';
+import {
+  EXPENSE_CATEGORIES,
+  formatDateShort,
+  monthStartInput,
+  todayDateInput,
+} from '../../src/components/expenses/expenseConstants';
 
-// --- CONSTANTS ---
-const CATEGORIES = ['Education', 'Maintenance', 'Sports', 'Utility', 'Events', 'Salary', 'Other'];
+const CATEGORIES = [...EXPENSE_CATEGORIES];
 
-const CATEGORY_META: Record<string, { icon: string; color: string; bg: string }> = {
-  Education: { icon: 'graduation-cap', color: '#6366F1', bg: '#EEF2FF' },
-  Maintenance: { icon: 'tools', color: '#F59E0B', bg: '#FEF3C7' },
-  Sports: { icon: 'running', color: '#10B981', bg: '#D1FAE5' },
-  Utility: { icon: 'bolt', color: '#3B82F6', bg: '#DBEAFE' },
-  Events: { icon: 'calendar-alt', color: '#EC4899', bg: '#FCE7F3' },
-  Salary: { icon: 'wallet', color: '#8B5CF6', bg: '#EDE9FE' },
-  Other: { icon: 'ellipsis-h', color: '#6B7280', bg: '#F3F4F6' },
+const CATEGORY_META: Record<string, { icon: string; color: string; bg: string; grad: [string, string] }> = {
+  Education: { icon: 'graduation-cap', color: '#4F46E5', bg: '#EEF2FF', grad: ['#4338CA', '#6366F1'] },
+  Maintenance: { icon: 'tools', color: '#D97706', bg: '#FEF3C7', grad: ['#B45309', '#F59E0B'] },
+  Sports: { icon: 'running', color: '#059669', bg: '#D1FAE5', grad: ['#047857', '#10B981'] },
+  Utility: { icon: 'bolt', color: '#2563EB', bg: '#DBEAFE', grad: ['#1D4ED8', '#3B82F6'] },
+  Events: { icon: 'calendar-alt', color: '#DB2777', bg: '#FCE7F3', grad: ['#BE185D', '#EC4899'] },
+  Salary: { icon: 'wallet', color: '#7C3AED', bg: '#EDE9FE', grad: ['#6D28D9', '#8B5CF6'] },
+  Other: { icon: 'ellipsis-h', color: '#64748B', bg: '#F1F5F9', grad: ['#475569', '#94A3B8'] },
 };
 
 const STATUS_META = {
-  approved: { bg: '#ECFDF5', text: '#065F46', dot: '#10B981', border: '#A7F3D0', label: 'APPROVED' },
-  paid: { bg: '#EFF6FF', text: '#1E40AF', dot: '#3B82F6', border: '#BFDBFE', label: 'PAID' },
-  pending: { bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B', border: '#FDE68A', label: 'PENDING' },
+  approved: { bg: '#ECFDF5', text: '#065F46', dot: '#10B981', border: '#A7F3D0', label: 'Approved' },
+  paid: { bg: '#EFF6FF', text: '#1E40AF', dot: '#3B82F6', border: '#BFDBFE', label: 'Paid' },
+  pending: { bg: '#FFFBEB', text: '#92400E', dot: '#F59E0B', border: '#FDE68A', label: 'Pending' },
 };
 
-// Pulsing dot for live status feel
-const PulseDot = ({ color }: { color: string }) => {
-  const scale = useRef(new RNAnimated.Value(1)).current;
-  useEffect(() => {
-    RNAnimated.loop(
-      RNAnimated.sequence([
-        RNAnimated.timing(scale, { toValue: 1.8, duration: 900, useNativeDriver: true }),
-        RNAnimated.timing(scale, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ])
-    ).start();
-  }, []);
-  return (
-    <View style={{ width: 10, height: 10, justifyContent: 'center', alignItems: 'center' }}>
-      <RNAnimated.View style={{
-        position: 'absolute', width: 10, height: 10, borderRadius: 5,
-        backgroundColor: color, opacity: 0.25, transform: [{ scale }],
-      }} />
-      <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: color }} />
-    </View>
-  );
-};
+const fmtINR = (n: number) => `₹${n.toLocaleString('en-IN')}`;
 
 export default function AdminExpenses() {
   const { theme, isDark } = useTheme();
-  const styles = React.useMemo(() => getStyles(theme), [theme]);
+  const insets = useSafeAreaInsets();
+  const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
   const { expenses, loading, fetchExpenses, createExpense, createBulkExpenses, updateStatus } = useExpenses();
-  const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [fromDate, setFromDate] = useState(monthStartInput);
   const [toDate, setToDate] = useState(todayDateInput);
   const [activeTab, setActiveTab] = useState<'list' | 'balance'>('list');
 
-  // --- MODAL STATES ---
   const [isAddModalVisible, setIsAddModalVisible] = useState(false);
   const [isBulkModalVisible, setIsBulkModalVisible] = useState(false);
   const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
 
-  // --- DELETE STATE ---
   const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
   const [deleteReason, setDeleteReason] = useState('');
   const [deleting, setDeleting] = useState(false);
 
-  // --- FORM STATES ---
-  const [expenseRows, setExpenseRows] = useState([
-    { id: '1', title: '', category: CATEGORIES[0], amount: '', description: '' }
-  ]);
+  const [newTitle, setNewTitle] = useState('');
+  const [newCategory, setNewCategory] = useState(CATEGORIES[0]);
+  const [newAmount, setNewAmount] = useState('');
+  const [newDescription, setNewDescription] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const addExpenseRows = () => {
-    setExpenseRows(prev => [
-      ...prev,
-      { id: Date.now().toString(), title: '', category: CATEGORIES[0], amount: '', description: '' }
-    ]);
-  };
-
-  const updateExpenseRow = (id: string, field: string, value: string) => {
-    setExpenseRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
-  };
-
-  const removeExpenseRow = (id: string) => {
-    setExpenseRows(prev => prev.length > 1 ? prev.filter(r => r.id !== id) : prev);
-  };
-
-  // Search focus
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // FAB press animation
-  const fabScale = useRef(new RNAnimated.Value(1)).current;
-  const onFabPressIn = () => RNAnimated.spring(fabScale, { toValue: 0.91, useNativeDriver: true }).start();
-  const onFabPressOut = () => RNAnimated.spring(fabScale, { toValue: 1, useNativeDriver: true }).start();
+  const fabScale = useSharedValue(1);
+  const fabStyle = useAnimatedStyle(() => ({ transform: [{ scale: fabScale.value }] }));
 
-  // --- EFFECT ---
-  const fetchOptions = React.useMemo(
+  const fetchOptions = useMemo(
     () => ({ fromDate, toDate }),
     [fromDate, toDate]
   );
@@ -129,53 +95,65 @@ export default function AdminExpenses() {
     setToDate(todayDateInput());
   };
 
-  // --- HANDLERS ---
-  const handleAddExpense = async () => {
-    const validRows = expenseRows.filter(r => r.title.trim() && r.amount.trim());
-    if (validRows.length === 0) { alertCompat('Validation', 'Please fill in at least one expense title and amount.'); return; }
-    
-    let hasError = false;
-    const payload: CreateExpenseRequest[] = validRows.map(r => {
-      const amount = parseFloat(r.amount);
-      if (isNaN(amount) || amount <= 0) hasError = true;
-      return {
-        title: r.title.trim(),
-        category: r.category,
-        amount,
-        expense_date: new Date().toISOString().split('T')[0],
-        description: r.description.trim() || undefined,
-        status: 'paid' as any
-      };
-    });
-
-    if (hasError) { alertCompat('Validation', 'Invalid amount in one or more rows'); return; }
-
-    setIsSubmitting(true);
-    const success = await createBulkExpenses(payload);
-    setIsSubmitting(false);
-    
-    if (success.ok) { 
-      setIsAddModalVisible(false); 
-      resetForm(); 
-      alertCompat('Success', 'Expense(s) created successfully'); 
-    }
+  const resetForm = () => {
+    setNewTitle('');
+    setNewCategory(CATEGORIES[0]);
+    setNewAmount('');
+    setNewDescription('');
   };
 
-  const resetForm = () => {
-    setExpenseRows([{ id: '1', title: '', category: CATEGORIES[0], amount: '', description: '' }]);
+  const handleAddExpense = async () => {
+    if (!newTitle.trim() || !newAmount.trim()) {
+      alertCompat('Required', 'Title and amount are required.');
+      return;
+    }
+    const amount = parseFloat(newAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alertCompat('Invalid amount', 'Enter a valid positive number.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const success = await createExpense({
+      title: newTitle.trim(),
+      category: newCategory,
+      amount,
+      expense_date: todayDateInput(),
+      description: newDescription.trim() || undefined,
+      status: 'paid' as any,
+    });
+    setIsSubmitting(false);
+
+    if (success) {
+      setIsAddModalVisible(false);
+      resetForm();
+      alertCompat('Success', 'Expense logged successfully');
+    }
   };
 
   const handleApprove = async (expense: Expense) => {
     alertCompat('Confirm Approve', 'Are you sure you want to approve this expense?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Approve', onPress: async () => { const s = await updateStatus(expense.id, 'approved'); if (s) setSelectedExpense(null); } },
+      {
+        text: 'Approve',
+        onPress: async () => {
+          const s = await updateStatus(expense.id, 'approved');
+          if (s) setSelectedExpense(null);
+        },
+      },
     ]);
   };
 
   const handlePay = async (expense: Expense) => {
     alertCompat('Confirm Payment', 'Mark this expense as Paid?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Mark Paid', onPress: async () => { const s = await updateStatus(expense.id, 'paid'); if (s) setSelectedExpense(null); } },
+      {
+        text: 'Mark Paid',
+        onPress: async () => {
+          const s = await updateStatus(expense.id, 'paid');
+          if (s) setSelectedExpense(null);
+        },
+      },
     ]);
   };
 
@@ -183,154 +161,168 @@ export default function AdminExpenses() {
 
   const confirmDelete = async () => {
     if (!selectedExpense) return;
-    if (!deleteReason.trim()) { alertCompat('Required', 'Please provide a reason for deletion.'); return; }
+    if (!deleteReason.trim()) {
+      alertCompat('Required', 'Please provide a reason for deletion.');
+      return;
+    }
     setDeleting(true);
     try {
       await PolicyService.deleteWithReason('expenses', selectedExpense.id, deleteReason);
-      setIsDeleteModalVisible(false); setSelectedExpense(null); setDeleteReason('');
-      fetchExpenses(searchQuery, fetchOptions); alertCompat('Success', 'Expense deleted.');
-    } catch { alertCompat('Error', 'Failed to delete expense.'); }
-    finally { setDeleting(false); }
+      setIsDeleteModalVisible(false);
+      setSelectedExpense(null);
+      setDeleteReason('');
+      fetchExpenses(searchQuery, fetchOptions);
+      alertCompat('Success', 'Expense deleted.');
+    } catch {
+      alertCompat('Error', 'Failed to delete expense.');
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  // Derived summary stats
-  const totalPending = expenses.filter(e => e.status === 'pending').reduce((s, e) => s + e.amount, 0);
-  const totalApproved = expenses.filter(e => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
-  const totalPaid = expenses.filter(e => e.status === 'paid').reduce((s, e) => s + e.amount, 0);
+  const totalPending = expenses.filter((e) => e.status === 'pending').reduce((s, e) => s + e.amount, 0);
+  const totalApproved = expenses.filter((e) => e.status === 'approved').reduce((s, e) => s + e.amount, 0);
+  const totalPaid = expenses.filter((e) => e.status === 'paid').reduce((s, e) => s + e.amount, 0);
+  const totalAll = totalPending + totalApproved + totalPaid;
 
-  // --- RENDER ITEM ---
-  const renderItem = ({ item, index }: { item: Expense; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: Expense; index: number }) => {
     const st = STATUS_META[item.status as keyof typeof STATUS_META] ?? STATUS_META.pending;
     const cat = CATEGORY_META[item.category] ?? CATEGORY_META.Other;
 
     return (
-      <Animated.View entering={FadeInDown.delay(index * 55).duration(500).springify().damping(14)}>
-        <TouchableOpacity style={styles.card} onPress={() => setSelectedExpense(item)} activeOpacity={0.8}>
-          {/* Category-colored top bar */}
-          <View style={[styles.cardTopBar, { backgroundColor: cat.color }]} />
-
+      <Animated.View entering={index < 10 ? FadeInDown.delay(index * 45).duration(320) : undefined}>
+        <Pressable
+          style={({ pressed }) => [styles.card, pressed && { opacity: 0.92, transform: [{ scale: 0.985 }] }]}
+          onPress={() => setSelectedExpense(item)}
+        >
+          <View style={[styles.cardAccent, { backgroundColor: cat.color }]} />
           <View style={styles.cardBody}>
-            {/* Row 1: Icon + Title + Amount */}
             <View style={styles.headerRow}>
               <View style={[styles.iconBox, { backgroundColor: cat.bg }]}>
-                <FontAwesome5 name={cat.icon} size={14} color={cat.color} />
+                <FontAwesome5 name={cat.icon as any} size={13} color={cat.color} />
               </View>
               <View style={styles.titleBox}>
                 <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
-                <Text style={styles.date}>{item.expense_date}</Text>
+                <Text style={styles.date}>
+                  {formatDateShort(item.expense_date)} · {item.category}
+                </Text>
               </View>
-              <View style={styles.amountBlock}>
-                <Text style={styles.amountCurrency}>₹</Text>
-                <Text style={styles.amount}>{item.amount.toLocaleString('en-IN')}</Text>
-              </View>
+              <Text style={styles.amount}>{fmtINR(item.amount)}</Text>
             </View>
 
-            {/* Row 2: Category pill + Status */}
             <View style={styles.cardFooter}>
-              <View style={[styles.catLabel, { backgroundColor: cat.bg }]}>
-                <Text style={[styles.catLabelText, { color: cat.color }]}>{item.category}</Text>
-              </View>
+              {item.description ? (
+                <Text style={styles.descText} numberOfLines={1}>{item.description}</Text>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
               <View style={[styles.statusBadge, { backgroundColor: st.bg, borderColor: st.border }]}>
-                <PulseDot color={st.dot} />
+                <View style={[styles.statusDot, { backgroundColor: st.dot }]} />
                 <Text style={[styles.statusText, { color: st.text }]}>{st.label}</Text>
               </View>
             </View>
-
-            {item.description
-              ? <Text style={styles.descText} numberOfLines={1}>"{item.description}"</Text>
-              : null}
           </View>
-        </TouchableOpacity>
+        </Pressable>
       </Animated.View>
     );
+  }, [styles]);
+
+  const openAdd = () => {
+    setIsAddModalVisible(true);
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
       <AdminHeader title="Expense Tracker" showBackButton={true} />
 
-      {/* ── TAB SWITCHER ── */}
-      <View style={styles.tabContainer}>
-        {(['list', 'balance'] as const).map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tabBtn, activeTab === tab && styles.activeTabBtn]}
-            onPress={() => setActiveTab(tab)}
-            activeOpacity={0.75}
-          >
-            <Ionicons
-              name={tab === 'list' ? 'receipt-outline' : 'stats-chart-outline'}
-              size={14}
-              color={activeTab === tab ? '#fff' : theme.colors.textSecondary}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
-              {tab === 'list' ? 'Expenses' : 'Net Balance'}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      {/* Segmented tabs */}
+      <Animated.View entering={FadeInDown.duration(280)} style={styles.tabContainer}>
+        {([
+          { key: 'list' as const, label: 'Expenses', icon: 'receipt-outline' as const },
+          { key: 'balance' as const, label: 'Net Balance', icon: 'stats-chart-outline' as const },
+        ]).map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              style={[styles.tabBtn, active && styles.activeTabBtn]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Ionicons
+                name={tab.icon}
+                size={15}
+                color={active ? '#fff' : theme.colors.textSecondary}
+              />
+              <Text style={[styles.tabText, active && styles.activeTabText]}>{tab.label}</Text>
+            </Pressable>
+          );
+        })}
+      </Animated.View>
 
       {activeTab === 'list' ? (
         <>
-          {/* ── SEARCH ── */}
-          <View style={[styles.searchContainer, ds.searchBarWrapper, searchFocused && styles.searchContainerFocused]}>
-            <Ionicons
-              name="search-outline" size={17}
-              color={searchFocused ? '#6366F1' : '#9CA3AF'}
-              style={styles.searchIcon}
-            />
-            <AppTextInput
-              style={[ds.inputInChrome, styles.searchInput]}
-              placeholder="Search by title, category..."
-              placeholderTextColor="#9CA3AF"
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              onFocus={() => setSearchFocused(true)}
-              onBlur={() => setSearchFocused(false)}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-                <Ionicons name="close" size={13} color="#fff" />
-              </TouchableOpacity>
-            )}
-          </View>
+          <Animated.View entering={FadeInDown.delay(40).duration(280)}>
+            <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
+              <Ionicons
+                name="search-outline"
+                size={17}
+                color={searchFocused ? theme.colors.primary : theme.colors.textTertiary}
+                style={styles.searchIcon}
+              />
+              <AppTextInput
+                style={[ds.inputInChrome, styles.searchInput]}
+                placeholder="Search by title or category…"
+                placeholderTextColor={theme.colors.textTertiary}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setSearchFocused(false)}
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn} hitSlop={8}>
+                  <Ionicons name="close" size={12} color="#fff" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </Animated.View>
 
-          <ExpenseDateFilterBar
-            fromDate={fromDate}
-            toDate={toDate}
-            onFromDateChange={setFromDate}
-            onToDateChange={setToDate}
-            onClear={resetDateFilters}
-          />
+          <Animated.View entering={FadeInDown.delay(80).duration(280)}>
+            <ExpenseDateFilterBar
+              fromDate={fromDate}
+              toDate={toDate}
+              onFromDateChange={setFromDate}
+              onToDateChange={setToDate}
+              onClear={resetDateFilters}
+              isDark={isDark}
+            />
+          </Animated.View>
 
-          {/* ── SUMMARY STRIP ── */}
           {expenses.length > 0 && (
-            <Animated.View entering={FadeInDown.duration(400)} style={styles.summaryStrip}>
+            <Animated.View entering={FadeInDown.duration(300)} style={styles.summaryStrip}>
+              <View style={styles.summaryHero}>
+                <Text style={styles.summaryHeroLabel}>Total spent</Text>
+                <Text style={styles.summaryHeroAmount}>{fmtINR(totalAll)}</Text>
+              </View>
+              <View style={styles.summaryDivider} />
               {[
-                { label: 'Pending', amount: totalPending, color: STATUS_META.pending.dot, text: STATUS_META.pending.text },
-                { label: 'Approved', amount: totalApproved, color: STATUS_META.approved.dot, text: STATUS_META.approved.text },
-                { label: 'Paid', amount: totalPaid, color: STATUS_META.paid.dot, text: STATUS_META.paid.text },
-              ].map((stat, i) => (
-                <React.Fragment key={stat.label}>
-                  {i > 0 && <View style={styles.summaryDivider} />}
-                  <View style={[styles.summaryChip, { borderLeftColor: stat.color }]}>
-                    <Text style={styles.summaryLabel}>{stat.label}</Text>
-                    <Text style={[styles.summaryAmount, { color: stat.text }]}>
-                      ₹{stat.amount.toLocaleString('en-IN')}
-                    </Text>
-                  </View>
-                </React.Fragment>
+                { label: 'Pending', amount: totalPending, color: STATUS_META.pending.dot },
+                { label: 'Approved', amount: totalApproved, color: STATUS_META.approved.dot },
+                { label: 'Paid', amount: totalPaid, color: STATUS_META.paid.dot },
+              ].map((stat) => (
+                <View key={stat.label} style={styles.summaryChip}>
+                  <View style={[styles.summaryDot, { backgroundColor: stat.color }]} />
+                  <Text style={styles.summaryLabel}>{stat.label}</Text>
+                  <Text style={styles.summaryAmount}>{fmtINR(stat.amount)}</Text>
+                </View>
               ))}
             </Animated.View>
           )}
 
-          {/* ── LIST ── */}
           {loading && expenses.length === 0 ? (
             <View style={styles.centered}>
-              <LogoLoader size={56} color="#6366F1" />
-              <Text style={styles.loadingText}>Loading expenses...</Text>
+              <LogoLoader size={56} color={theme.colors.primary} />
+              <Text style={styles.loadingText}>Loading expenses…</Text>
             </View>
           ) : (
             <FlatList
@@ -340,172 +332,286 @@ export default function AdminExpenses() {
               contentContainerStyle={styles.listContent}
               showsVerticalScrollIndicator={false}
               ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Animated.View entering={ZoomIn.duration(400)} style={styles.emptyIconWrap}>
-                    <FontAwesome5 name="receipt" size={28} color="#A5B4FC" />
-                  </Animated.View>
-                  <Text style={styles.emptyTitle}>No Expenses Found</Text>
-                  <Text style={styles.emptySubtitle}>
-                    {searchQuery ? `No results for "${searchQuery}"` : 'Tap + to log your first expense'}
+                <Animated.View entering={FadeIn.duration(350)} style={styles.emptyContainer}>
+                  <View style={styles.emptyIconWrap}>
+                    <LinearGradient
+                      colors={['#EEF2FF', '#E0E7FF']}
+                      style={StyleSheet.absoluteFill}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                    />
+                    <FontAwesome5 name="receipt" size={26} color="#818CF8" />
+                  </View>
+                  <Text style={styles.emptyTitle}>
+                    {searchQuery ? 'No matching expenses' : 'No expenses yet'}
                   </Text>
-                </View>
+                  <Text style={styles.emptySubtitle}>
+                    {searchQuery
+                      ? `Nothing matched “${searchQuery}”. Try another search or widen the date range.`
+                      : 'Log school spending so you can track balances and approvals in one place.'}
+                  </Text>
+                  {!searchQuery && (
+                    <Pressable
+                      style={({ pressed }) => [styles.emptyCta, pressed && { opacity: 0.9, transform: [{ scale: 0.98 }] }]}
+                      onPress={openAdd}
+                    >
+                      <LinearGradient
+                        colors={['#4F46E5', '#6366F1']}
+                        style={styles.emptyCtaGrad}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 0 }}
+                      >
+                        <Ionicons name="add" size={18} color="#fff" />
+                        <Text style={styles.emptyCtaText}>Add first expense</Text>
+                      </LinearGradient>
+                    </Pressable>
+                  )}
+                </Animated.View>
               }
               refreshing={loading}
               onRefresh={() => fetchExpenses(searchQuery, fetchOptions)}
             />
           )}
 
-          {/* ── FAB ── */}
-          <RNAnimated.View style={[styles.fabWrapper, { transform: [{ scale: fabScale }] }]}>
-            <TouchableOpacity
-              style={styles.fab}
-              onPress={() => setIsAddModalVisible(true)}
-              onPressIn={onFabPressIn}
-              onPressOut={onFabPressOut}
-              activeOpacity={1}
+          {/* FABs */}
+          <Pressable
+            style={({ pressed }) => [styles.fabSecondaryWrap, pressed && { opacity: 0.88 }]}
+            onPress={() => setIsBulkModalVisible(true)}
+            accessibilityLabel="Bulk add expenses"
+          >
+            <View style={styles.fabSecondary}>
+              <Ionicons name="grid-outline" size={20} color={theme.colors.primary} />
+            </View>
+          </Pressable>
+
+          <Animated.View style={[styles.fabWrapper, fabStyle]}>
+            <Pressable
+              onPress={openAdd}
+              onPressIn={() => { fabScale.value = withSpring(0.94, { damping: 15, stiffness: 280 }); }}
+              onPressOut={() => { fabScale.value = withSpring(1, { damping: 12, stiffness: 220 }); }}
+              accessibilityLabel="Add expense"
             >
-              <Ionicons name="add" size={24} color="#fff" />
-              <Text style={styles.fabLabel}>Add Expense</Text>
-            </TouchableOpacity>
-          </RNAnimated.View>
+              <LinearGradient
+                colors={['#4F46E5', '#6366F1']}
+                style={styles.fab}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+              >
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.22)', 'rgba(255,255,255,0)']}
+                  style={styles.fabGloss}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                />
+                <Ionicons name="add" size={22} color="#fff" />
+                <Text style={styles.fabLabel}>Add Expense</Text>
+              </LinearGradient>
+            </Pressable>
+          </Animated.View>
         </>
       ) : (
         <NetBalanceTab />
       )}
 
-      {/* ════════════════════════════════════
-          ADD EXPENSE MODAL  (Bottom Sheet)
-      ════════════════════════════════════ */}
-      <Modal visible={isAddModalVisible} animationType="slide" transparent={true}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.sheetOverlay}>
-          <Animated.View entering={FadeInUp.duration(320).springify()} style={styles.sheetContent}>
+      {/* ── ADD EXPENSE SHEET ── */}
+      <Modal visible={isAddModalVisible} animationType="slide" transparent statusBarTranslucent>
+        <View style={styles.sheetOverlay}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setIsAddModalVisible(false); resetForm(); }} />
+          <Animated.View entering={FadeInUp.duration(300)} style={[styles.sheetContent, { maxHeight: '92%' as any }]}>
             <View style={styles.sheetHandle} />
 
             <View style={styles.sheetHeader}>
               <View style={styles.sheetTitleRow}>
                 <View style={styles.sheetIconBadge}>
-                  <Ionicons name="receipt-outline" size={16} color="#6366F1" />
+                  <Ionicons name="receipt-outline" size={16} color={theme.colors.primary} />
                 </View>
                 <View>
                   <Text style={styles.sheetTitle}>New Expense</Text>
-                  <Text style={styles.sheetSubtitle}>Fill in details to log</Text>
+                  <Text style={styles.sheetSubtitle}>Log a single school expenditure</Text>
                 </View>
               </View>
-              <TouchableOpacity style={styles.closeBtn} onPress={() => { setIsAddModalVisible(false); resetForm(); }}>
-                <Ionicons name="close" size={18} color="#374151" />
+              <TouchableOpacity
+                style={styles.closeBtn}
+                onPress={() => { setIsAddModalVisible(false); resetForm(); }}
+                hitSlop={8}
+              >
+                <Ionicons name="close" size={18} color={theme.colors.text} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.fieldSep} />
-
-            <ScrollView horizontal showsHorizontalScrollIndicator>
-              <View style={{ minWidth: 600, paddingVertical: 10 }}>
-                {/* Header */}
-                <View style={[styles.headerRow, { borderBottomWidth: 1, borderBottomColor: '#E5E7EB', paddingBottom: 8, marginBottom: 8 }]}>
-                  <Text style={[styles.gridHeaderCell, { width: 140 }]}>Title</Text>
-                  <Text style={[styles.gridHeaderCell, { width: 110 }]}>Category</Text>
-                  <Text style={[styles.gridHeaderCell, { width: 90 }]}>Amount</Text>
-                  <Text style={[styles.gridHeaderCell, { width: 160 }]}>Description</Text>
-                  <Text style={[styles.gridHeaderCell, { width: 40 }]}></Text>
-                </View>
-
-                {/* Rows */}
-                <ScrollView style={{ maxHeight: 300 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                  {expenseRows.map((row, idx) => (
-                    <View key={row.id} style={[styles.dataRow, { borderBottomWidth: 1, borderBottomColor: '#F3F4F6', paddingVertical: 6 }]}>
-                      <AppTextInput
-                        style={[styles.cellInput, { width: 140 }]}
-                        placeholder="e.g. Lab Items"
-                        placeholderTextColor="#9CA3AF"
-                        value={row.title}
-                        onChangeText={(v) => updateExpenseRow(row.id, 'title', v)}
-                      />
-                      <TouchableOpacity
-                        style={[styles.categoryCell, { width: 110 }]}
-                        onPress={() => {
-                          const cIdx = CATEGORIES.indexOf(row.category);
-                          const nextC = CATEGORIES[(cIdx + 1) % CATEGORIES.length];
-                          updateExpenseRow(row.id, 'category', nextC);
-                        }}
-                      >
-                        <Text style={styles.categoryText} numberOfLines={1}>{row.category}</Text>
-                        <Ionicons name="chevron-down" size={12} color="#9CA3AF" />
-                      </TouchableOpacity>
-                      <View style={[styles.amountCell, { width: 90 }]}>
-                        <Text style={styles.amountPrefix}>₹</Text>
-                        <AppTextInput
-                          style={[styles.cellInput, { flex: 1, borderWidth: 0, paddingHorizontal: 0 }]}
-                          placeholder="0.00"
-                          placeholderTextColor="#9CA3AF"
-                          keyboardType="numeric"
-                          value={row.amount}
-                          onChangeText={(v) => updateExpenseRow(row.id, 'amount', v)}
-                        />
-                      </View>
-                      <AppTextInput
-                        style={[styles.cellInput, { width: 160 }]}
-                        placeholder="Notes..."
-                        placeholderTextColor="#9CA3AF"
-                        value={row.description}
-                        onChangeText={(v) => updateExpenseRow(row.id, 'description', v)}
-                      />
-                      <TouchableOpacity style={styles.deleteRowBtn} onPress={() => removeExpenseRow(row.id)}>
-                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity style={styles.addGridRowBtn} onPress={addExpenseRows}>
-              <Ionicons name="add-circle" size={20} color="#6366F1" />
-              <Text style={styles.addGridRowText}>Add one more row</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.submitBtn} onPress={handleAddExpense} disabled={isSubmitting}>
-              {isSubmitting ? (
-                <LogoLoader color="#fff" />
-              ) : (
+            {(() => {
+              const formFields = (
                 <>
-                  <Ionicons name="checkmark-done-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
-                  <Text style={styles.submitBtnText}>Submit Expenses</Text>
+                  <Text style={styles.fieldLabel}>Title <Text style={styles.req}>*</Text></Text>
+                  <AppTextInput
+                    style={styles.input}
+                    placeholder="e.g. Lab equipment, bus repair"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    value={newTitle}
+                    onChangeText={setNewTitle}
+                  />
+
+                  <Text style={styles.fieldLabel}>Amount <Text style={styles.req}>*</Text></Text>
+                  <View style={styles.amountRow}>
+                    <View style={styles.currencyBox}>
+                      <Text style={styles.currencyBoxText}>₹</Text>
+                    </View>
+                    <AppTextInput
+                      style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                      placeholder="0.00"
+                      placeholderTextColor={theme.colors.textTertiary}
+                      keyboardType="numeric"
+                      value={newAmount}
+                      onChangeText={setNewAmount}
+                    />
+                  </View>
+
+                  <Text style={styles.fieldLabel}>Category</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 4 }}>
+                    {CATEGORIES.map((cat) => {
+                      const meta = CATEGORY_META[cat];
+                      const active = newCategory === cat;
+                      return (
+                        <Pressable
+                          key={cat}
+                          onPress={() => setNewCategory(cat)}
+                          style={[
+                            styles.catChip,
+                            {
+                              backgroundColor: active ? meta.bg : theme.colors.card,
+                              borderColor: active ? meta.color : theme.colors.border,
+                            },
+                          ]}
+                        >
+                          <FontAwesome5 name={meta.icon as any} size={11} color={active ? meta.color : theme.colors.textTertiary} />
+                          <Text style={[styles.catChipText, { color: active ? meta.color : theme.colors.textSecondary }]}>
+                            {cat}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+
+                  <Text style={styles.fieldLabel}>
+                    Notes <Text style={styles.fieldOpt}>(optional)</Text>
+                  </Text>
+                  <AppTextInput
+                    style={[styles.input, { height: 88, textAlignVertical: 'top' }]}
+                    placeholder="Any extra context…"
+                    placeholderTextColor={theme.colors.textTertiary}
+                    multiline
+                    value={newDescription}
+                    onChangeText={setNewDescription}
+                  />
+
+                  <Pressable
+                    style={styles.bulkLink}
+                    onPress={() => {
+                      setIsAddModalVisible(false);
+                      resetForm();
+                      setIsBulkModalVisible(true);
+                    }}
+                  >
+                    <Ionicons name="grid-outline" size={15} color={theme.colors.primary} />
+                    <Text style={styles.bulkLinkText}>Need to add several? Use bulk entry</Text>
+                  </Pressable>
                 </>
-              )}
-            </TouchableOpacity>
+              );
+
+              const submitBtn = (
+                <Pressable
+                  style={({ pressed }) => [styles.submitWrap, pressed && { opacity: 0.9 }]}
+                  onPress={handleAddExpense}
+                  disabled={isSubmitting}
+                >
+                  <LinearGradient
+                    colors={['#4F46E5', '#6366F1']}
+                    style={styles.submitBtn}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    {isSubmitting ? (
+                      <LogoLoader color="#fff" size={22} />
+                    ) : (
+                      <>
+                        <Ionicons name="checkmark-circle-outline" size={18} color="#fff" />
+                        <Text style={styles.submitBtnText}>Save expense</Text>
+                      </>
+                    )}
+                  </LinearGradient>
+                </Pressable>
+              );
+
+              if (Platform.OS === 'web') {
+                return (
+                  <ScrollView
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    contentContainerStyle={{ paddingBottom: 12 + insets.bottom }}
+                  >
+                    {formFields}
+                    {submitBtn}
+                  </ScrollView>
+                );
+              }
+
+              return (
+                <View style={{ flexShrink: 1, minHeight: 0, maxHeight: 520 }}>
+                  <KeyboardAwareScrollView
+                    bottomOffset={100}
+                    keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={{ paddingBottom: 16 }}
+                  >
+                    {formFields}
+                  </KeyboardAwareScrollView>
+                  <KeyboardStickyView offset={{ closed: 0, opened: 0 }}>
+                    <View style={{ paddingBottom: Math.max(insets.bottom, 8) }}>
+                      {submitBtn}
+                    </View>
+                  </KeyboardStickyView>
+                </View>
+              );
+            })()}
           </Animated.View>
-        </KeyboardAvoidingView>
+        </View>
       </Modal>
 
-      {/* ════════════════════════════════════
-          DETAILS MODAL
-      ════════════════════════════════════ */}
-      <Modal visible={!!selectedExpense} animationType="fade" transparent={true}>
+      <BulkExpenseSheet
+        visible={isBulkModalVisible}
+        onClose={() => setIsBulkModalVisible(false)}
+        onSubmit={createBulkExpenses}
+        isDark={isDark}
+      />
+
+      {/* ── DETAILS ── */}
+      <Modal visible={!!selectedExpense} animationType="fade" transparent>
         <View style={styles.overlayBlur}>
           {selectedExpense && (() => {
             const st = STATUS_META[selectedExpense.status as keyof typeof STATUS_META] ?? STATUS_META.pending;
             const cat = CATEGORY_META[selectedExpense.category] ?? CATEGORY_META.Other;
             return (
-              <Animated.View entering={ZoomIn.duration(280).springify()} style={styles.detailsCard}>
-                {/* Colored header band */}
-                <View style={[styles.detailBand, { backgroundColor: cat.bg }]}>
-                  <View style={[styles.detailBandIcon, { backgroundColor: cat.color }]}>
-                    <FontAwesome5 name={cat.icon} size={18} color="#fff" />
+              <Animated.View entering={ZoomIn.duration(260)} style={styles.detailsCard}>
+                <LinearGradient colors={cat.grad} style={styles.detailBand} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}>
+                  <LinearGradient
+                    colors={['rgba(255,255,255,0.18)', 'rgba(255,255,255,0)']}
+                    style={StyleSheet.absoluteFill}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 0, y: 1 }}
+                  />
+                  <View style={styles.detailBandIcon}>
+                    <FontAwesome5 name={cat.icon as any} size={18} color="#fff" />
                   </View>
-                  <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedExpense(null)}>
-                    <Ionicons name="close" size={18} color="#374151" />
+                  <TouchableOpacity style={styles.closeBtnLight} onPress={() => setSelectedExpense(null)}>
+                    <Ionicons name="close" size={18} color="#fff" />
                   </TouchableOpacity>
-                </View>
+                </LinearGradient>
 
-                {/* Amount hero */}
                 <View style={styles.detailAmountSection}>
-                  <Text style={styles.detailAmountLabel}>TOTAL AMOUNT</Text>
-                  <Text style={styles.detailAmountValue}>
-                    <Text style={styles.detailAmountRs}>₹</Text>
-                    {selectedExpense.amount.toLocaleString('en-IN')}
-                  </Text>
+                  <Text style={styles.detailAmountLabel}>Amount</Text>
+                  <Text style={styles.detailAmountValue}>{fmtINR(selectedExpense.amount)}</Text>
                   <View style={[styles.statusBadge, { backgroundColor: st.bg, borderColor: st.border, alignSelf: 'center', marginTop: 10 }]}>
-                    <PulseDot color={st.dot} />
+                    <View style={[styles.statusDot, { backgroundColor: st.dot }]} />
                     <Text style={[styles.statusText, { color: st.text }]}>{st.label}</Text>
                   </View>
                 </View>
@@ -514,7 +620,7 @@ export default function AdminExpenses() {
 
                 {[
                   { label: 'Title', value: selectedExpense.title },
-                  { label: 'Date', value: selectedExpense.expense_date },
+                  { label: 'Date', value: formatDateShort(selectedExpense.expense_date) },
                 ].map(({ label, value }) => (
                   <View key={label} style={styles.detailRow}>
                     <Text style={styles.detailLabel}>{label}</Text>
@@ -525,17 +631,17 @@ export default function AdminExpenses() {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Category</Text>
                   <View style={[styles.detailCatPill, { backgroundColor: cat.bg }]}>
-                    <FontAwesome5 name={cat.icon} size={10} color={cat.color} style={{ marginRight: 4 }} />
+                    <FontAwesome5 name={cat.icon as any} size={10} color={cat.color} style={{ marginRight: 4 }} />
                     <Text style={[styles.detailCatText, { color: cat.color }]}>{selectedExpense.category}</Text>
                   </View>
                 </View>
 
-                {selectedExpense.description && (
+                {selectedExpense.description ? (
                   <View style={styles.detailDescBox}>
-                    <Text style={styles.detailLabel}>Description</Text>
+                    <Text style={styles.detailLabel}>Notes</Text>
                     <Text style={styles.detailLog}>{selectedExpense.description}</Text>
                   </View>
-                )}
+                ) : null}
 
                 <View style={styles.actionRow}>
                   {selectedExpense.status === 'pending' && (
@@ -563,23 +669,21 @@ export default function AdminExpenses() {
         </View>
       </Modal>
 
-      {/* ════════════════════════════════════
-          DELETE REASON MODAL
-      ════════════════════════════════════ */}
-      <Modal visible={isDeleteModalVisible} transparent={true} animationType="fade">
+      {/* ── DELETE ── */}
+      <Modal visible={isDeleteModalVisible} transparent animationType="fade">
         <View style={styles.overlayBlur}>
-          <Animated.View entering={ZoomIn.duration(280).springify()} style={styles.deleteCard}>
+          <Animated.View entering={ZoomIn.duration(260)} style={styles.deleteCard}>
             <View style={styles.deleteIconRing}>
               <MaterialIcons name="warning-amber" size={26} color="#EF4444" />
             </View>
-            <Text style={styles.deleteTitle}>Reject & Delete</Text>
+            <Text style={styles.deleteTitle}>Reject & delete</Text>
             <Text style={styles.deleteSubtitle}>
               This is permanent and will be recorded in the audit log.
             </Text>
             <AppTextInput
               style={[styles.input, { height: 90, textAlignVertical: 'top', marginTop: 16, width: '100%' }]}
-              placeholder="Reason (e.g. Unjustified, Budget exceeded)"
-              placeholderTextColor="#9CA3AF"
+              placeholder="Reason (e.g. Unjustified, budget exceeded)"
+              placeholderTextColor={theme.colors.textTertiary}
               multiline
               value={deleteReason}
               onChangeText={setDeleteReason}
@@ -591,8 +695,7 @@ export default function AdminExpenses() {
               <TouchableOpacity onPress={confirmDelete} style={styles.confirmDeleteBtn} disabled={deleting}>
                 {deleting
                   ? <LogoLoader color="#fff" size={28} />
-                  : <Text style={styles.confirmDeleteText}>Confirm Delete</Text>
-                }
+                  : <Text style={styles.confirmDeleteText}>Confirm delete</Text>}
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -602,465 +705,498 @@ export default function AdminExpenses() {
   );
 }
 
-// ─────────────────────────────────────────
-//  STYLES
-// ─────────────────────────────────────────
-const getStyles = (theme: Theme) => StyleSheet.create({
+const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 60 },
-  loadingText: { marginTop: 14, fontSize: 13, color: theme.colors.textSecondary, letterSpacing: 0.3 },
+  loadingText: { marginTop: 14, fontSize: 13, color: theme.colors.textSecondary, letterSpacing: 0.2 },
 
-  // ── TABS ──────────────────────────────────
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.background,
-    marginHorizontal: 20, marginTop: 14,
-    borderRadius: 15, padding: 5,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1, shadowRadius: 8,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F1F5F9',
+    marginHorizontal: 20,
+    marginTop: 12,
+    borderRadius: 14,
+    padding: 4,
+    gap: 4,
   },
   tabBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', paddingVertical: 12, borderRadius: 11,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 11,
+    borderRadius: 11,
   },
   activeTabBtn: {
-    backgroundColor: '#6366F1',
-    elevation: 6,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.45, shadowRadius: 10,
+    backgroundColor: theme.colors.primaryDark || '#4F46E5',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 8 }
+      : { elevation: 3 }),
   },
   tabText: { fontSize: 13, fontWeight: '600', color: theme.colors.textSecondary },
   activeTabText: { color: '#fff', fontWeight: '800' },
 
-  // ── SEARCH ────────────────────────────────
   searchContainer: {
-    flexDirection: 'row', alignItems: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: theme.colors.background,
-    marginHorizontal: 20, marginTop: 14,
-    paddingHorizontal: 14, borderRadius: 14,
-    height: 50, elevation: 2,
-    borderWidth: 1.5, borderColor: '#CBD5E1',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 5,
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 10,
+    paddingHorizontal: 14,
+    borderRadius: 14,
+    height: 48,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   searchContainerFocused: {
-    borderColor: '#6366F1',
-    shadowColor: '#6366F1',
-    shadowOpacity: 0.2, shadowRadius: 10, elevation: 5,
+    borderColor: theme.colors.primary,
   },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 14, color: '#1F2937', fontWeight: '500' },
+  searchInput: { flex: 1, fontSize: 14, color: theme.colors.textStrong, fontWeight: '500' },
   clearBtn: {
-    width: 22, height: 22, borderRadius: 11,
-    backgroundColor: '#9CA3AF',
-    justifyContent: 'center', alignItems: 'center',
-  },
-
-  // ── SUMMARY STRIP ─────────────────────────
-  summaryStrip: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.background,
-    marginHorizontal: 20, marginTop: 12,
-    borderRadius: 14, paddingVertical: 14, paddingHorizontal: 18,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 5,
-    alignItems: 'center',
-  },
-  summaryChip: {
-    flex: 1, alignItems: 'center',
-    borderLeftWidth: 3, paddingLeft: 10,
-  },
-  summaryDivider: { width: 1, height: 32, backgroundColor: theme.colors.card, marginHorizontal: 6 },
-  summaryLabel: { fontSize: 10, color: theme.colors.textTertiary, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
-  summaryAmount: { fontSize: 14, fontWeight: '900', marginTop: 3, letterSpacing: -0.4 },
-
-  // ── LIST ──────────────────────────────────
-  listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 120 },
-
-  // ── CARD ──────────────────────────────────
-  card: {
-    backgroundColor: theme.colors.background,
-    borderRadius: 20, marginBottom: 14,
-    elevation: 5,
-    shadowColor: '#1E1B4B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1, shadowRadius: 14,
-    overflow: 'hidden',
-  },
-  cardTopBar: { height: 4 },
-  cardBody: { padding: 16 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  iconBox: {
-    width: 46, height: 46, borderRadius: 14,
-    justifyContent: 'center', alignItems: 'center', marginRight: 13,
-  },
-  titleBox: { flex: 1 },
-  title: { fontSize: 15, fontWeight: '700', color: '#111827', letterSpacing: -0.3 },
-  date: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 3, fontWeight: '500' },
-  amountBlock: { alignItems: 'flex-end' },
-  amountCurrency: { fontSize: 10, color: '#EF4444', fontWeight: '800', lineHeight: 14 },
-  amount: { fontSize: 18, fontWeight: '900', color: '#EF4444', letterSpacing: -0.6, lineHeight: 24 },
-  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  catLabel: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
-  catLabelText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
-  descText: {
-    fontSize: 11, color: theme.colors.textTertiary, fontStyle: 'italic',
-    marginTop: 10, borderTopWidth: 1, borderTopColor: theme.colors.card, paddingTop: 8,
-  },
-
-  // ── STATUS BADGE ──────────────────────────
-  statusBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 20, borderWidth: 1,
-  },
-  sApproved: { backgroundColor: '#ECFDF5' },
-  sPending: { backgroundColor: '#FFFBEB' },
-  sPaid: { backgroundColor: '#EFF6FF' },
-  statusDot: { width: 6, height: 6, borderRadius: 3 },
-  statusText: { fontSize: 10, fontWeight: '800', letterSpacing: 0.7 },
-
-  // ── FAB ───────────────────────────────────
-  fabWrapper: { position: 'absolute', bottom: 28, right: 18 },
-  fabWrapperSecondary: { position: 'absolute', bottom: 28, right: 168 },
-  fabSecondary: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: theme.colors.background,
-    borderWidth: 1.5,
-    borderColor: '#C7D2FE',
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: theme.colors.textTertiary,
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 8,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
+  },
+
+  summaryStrip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: 8,
+  },
+  summaryHero: { paddingRight: 4 },
+  summaryHeroLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.colors.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  summaryHeroAmount: {
+    fontSize: 16,
+    fontWeight: '900',
+    color: theme.colors.primary,
+    letterSpacing: -0.4,
+    marginTop: 2,
+  },
+  summaryDivider: { width: 1, height: 36, backgroundColor: theme.colors.border, marginHorizontal: 4 },
+  summaryChip: { flex: 1, gap: 2 },
+  summaryDot: { width: 6, height: 6, borderRadius: 3, marginBottom: 2 },
+  summaryLabel: {
+    fontSize: 10,
+    color: theme.colors.textTertiary,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  summaryAmount: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.colors.textStrong,
+    letterSpacing: -0.2,
+  },
+
+  listContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 120 },
+
+  card: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.background,
+    borderRadius: 18,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8 }
+      : { elevation: 2 }),
+  },
+  cardAccent: { width: 4 },
+  cardBody: { flex: 1, padding: 14 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  iconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  titleBox: { flex: 1, marginRight: 8 },
+  title: { fontSize: 15, fontWeight: '700', color: theme.colors.textStrong, letterSpacing: -0.2 },
+  date: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2, fontWeight: '500' },
+  amount: { fontSize: 16, fontWeight: '800', color: '#EF4444', letterSpacing: -0.4 },
+  cardFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  descText: { flex: 1, fontSize: 12, color: theme.colors.textTertiary, fontWeight: '500' },
+
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+    borderRadius: 20,
+    borderWidth: 1,
+  },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  statusText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2 },
+
+  fabWrapper: { position: 'absolute', bottom: 28, right: 18 },
+  fabSecondaryWrap: { position: 'absolute', bottom: 32, right: 178 },
+  fabSecondary: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: theme.colors.background,
+    borderWidth: 1.5,
+    borderColor: isDark ? 'rgba(129,140,248,0.35)' : '#C7D2FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.15, shadowRadius: 10 }
+      : { elevation: 4 }),
   },
   fab: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#6366F1',
-    paddingVertical: 15, paddingHorizontal: 24,
-    borderRadius: 32,
-    elevation: 12,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45, shadowRadius: 16,
-    gap: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 28,
+    gap: 6,
+    overflow: 'hidden',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.35, shadowRadius: 14 }
+      : { elevation: 8 }),
   },
-  fabLabel: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.2 },
+  fabGloss: { position: 'absolute', top: 0, left: 0, right: 0, height: 22 },
+  fabLabel: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 0.1 },
 
-  // ── EMPTY STATE ───────────────────────────
-  emptyContainer: { alignItems: 'center', paddingTop: 70 },
+  emptyContainer: { alignItems: 'center', paddingTop: 56, paddingHorizontal: 28 },
   emptyIconWrap: {
-    width: 84, height: 84, borderRadius: 42,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center', alignItems: 'center', marginBottom: 18,
-    elevation: 2,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12, shadowRadius: 10,
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 18,
+    overflow: 'hidden',
   },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#374151', letterSpacing: -0.3 },
-  emptySubtitle: { fontSize: 13, color: theme.colors.textTertiary, marginTop: 6, textAlign: 'center', paddingHorizontal: 40 },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.textStrong,
+    letterSpacing: -0.3,
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 21,
+    maxWidth: 320,
+  },
+  emptyCta: {
+    marginTop: 22,
+    borderRadius: 14,
+    overflow: 'hidden',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.28, shadowRadius: 12 }
+      : { elevation: 6 }),
+  },
+  emptyCtaGrad: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+  },
+  emptyCtaText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 
-  // ── OVERLAY ───────────────────────────────
   overlayBlur: {
-    flex: 1, backgroundColor: 'rgba(8,8,24,0.62)',
-    justifyContent: 'center', alignItems: 'center',
+    flex: 1,
+    backgroundColor: 'rgba(8,8,24,0.58)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
-  // ── BOTTOM SHEET ──────────────────────────
   sheetOverlay: {
-    flex: 1, backgroundColor: 'rgba(8,8,24,0.55)',
+    flex: 1,
+    backgroundColor: 'rgba(8,8,24,0.5)',
     justifyContent: 'flex-end',
   },
   sheetContent: {
     backgroundColor: theme.colors.background,
-    borderTopLeftRadius: 30, borderTopRightRadius: 30,
-    paddingHorizontal: 22, paddingBottom: 38, paddingTop: 12,
-    elevation: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.18, shadowRadius: 22,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 28,
+    paddingTop: 12,
+    maxWidth: Platform.OS === 'web' ? 520 : undefined,
+    width: Platform.OS === 'web' ? '100%' as any : undefined,
+    alignSelf: Platform.OS === 'web' ? 'center' : undefined,
   },
   sheetHandle: {
-    width: 42, height: 4, borderRadius: 2,
-    backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 20,
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: theme.colors.border,
+    alignSelf: 'center',
+    marginBottom: 18,
   },
   sheetHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 18,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sheetIconBadge: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: '#EEF2FF',
-    justifyContent: 'center', alignItems: 'center',
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: isDark ? 'rgba(129,140,248,0.15)' : '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  sheetTitle: { fontSize: 17, fontWeight: '900', color: '#111827', letterSpacing: -0.4 },
-  sheetSubtitle: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 1 },
-  fieldSep: { height: 1, backgroundColor: theme.colors.card, marginBottom: 2 },
-
-  // ── SHARED CLOSE BTN ──────────────────────
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.textStrong, letterSpacing: -0.3 },
+  sheetSubtitle: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
   closeBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: theme.colors.card,
-    justifyContent: 'center', alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeBtnLight: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 
-  // ── FORM ──────────────────────────────────
-  label: {
-    fontSize: 10, fontWeight: '800', color: '#9CA3AF',
-    letterSpacing: 1.2, textTransform: 'uppercase',
-    marginTop: 16, marginBottom: 8,
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+    marginTop: 14,
+    marginBottom: 8,
   },
-  labelOpt: { fontWeight: '400', color: '#C4B5FD', textTransform: 'none', letterSpacing: 0 },
+  fieldOpt: { fontWeight: '500', color: theme.colors.textTertiary },
+  req: { color: '#EF4444' },
   input: {
-    backgroundColor: theme.colors.card,
-    borderWidth: 1.5, borderColor: theme.colors.border,
-    borderRadius: 13, padding: 14,
-    fontSize: 15, color: '#1F2937', fontWeight: '500',
+    backgroundColor: isDark ? '#1E293B' : '#F8FAFC',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: 13,
+    padding: 14,
+    fontSize: 15,
+    color: theme.colors.textStrong,
+    fontWeight: '500',
+    marginBottom: 4,
   },
-  amountInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  amountRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   currencyBox: {
-    width: 48, height: 52, borderRadius: 13,
-    backgroundColor: '#FEF2F2',
-    justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#FECACA',
+    width: 48,
+    height: 50,
+    borderRadius: 13,
+    backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: isDark ? theme.colors.border : '#C7D2FE',
   },
-  currencyBoxText: { fontSize: 18, fontWeight: '900', color: '#EF4444' },
-  categoryRow: { paddingVertical: 4 },
+  currencyBoxText: { fontSize: 17, fontWeight: '800', color: theme.colors.primary },
   catChip: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 13, paddingVertical: 9,
-    borderRadius: 22,
-    backgroundColor: theme.colors.card,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
     marginRight: 8,
-    borderWidth: 1.5, borderColor: 'transparent',
+    borderWidth: 1.5,
   },
-  catText: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '500' },
-  submitBtn: {
-    backgroundColor: '#6366F1',
-    padding: 17, borderRadius: 16,
-    alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
-    marginTop: 22,
-    elevation: 8,
-    shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.45, shadowRadius: 14,
-  },
-  submitBtnText: { color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 0.3 },
+  catChipText: { fontSize: 12, fontWeight: '700' },
 
-  // ── DETAILS CARD ──────────────────────────
+  submitWrap: {
+    marginTop: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#4F46E5', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 }
+      : { elevation: 6 }),
+  },
+  submitBtn: {
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  submitBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  bulkLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 14,
+    marginBottom: 8,
+    paddingVertical: 10,
+  },
+  bulkLinkText: { fontSize: 13, fontWeight: '700', color: theme.colors.primary },
+
   detailsCard: {
     width: '90%',
+    maxWidth: 420,
     backgroundColor: theme.colors.background,
-    borderRadius: 28, overflow: 'hidden',
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.2, shadowRadius: 28,
+    borderRadius: 26,
+    overflow: 'hidden',
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.2, shadowRadius: 24 }
+      : { elevation: 16 }),
   },
   detailBand: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', padding: 20, paddingBottom: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    overflow: 'hidden',
   },
   detailBandIcon: {
-    width: 50, height: 50, borderRadius: 25,
-    justifyContent: 'center', alignItems: 'center',
-    elevation: 5,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.35, shadowRadius: 8,
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  detailAmountSection: { alignItems: 'center', paddingVertical: 20, paddingHorizontal: 24 },
+  detailAmountSection: { alignItems: 'center', paddingVertical: 18, paddingHorizontal: 24 },
   detailAmountLabel: {
-    fontSize: 10, color: '#EF4444', fontWeight: '800',
-    letterSpacing: 1.8, textTransform: 'uppercase',
+    fontSize: 11,
+    color: theme.colors.textTertiary,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   detailAmountValue: {
-    fontSize: 36, fontWeight: '900', color: '#EF4444',
-    letterSpacing: -1.5, marginTop: 5,
+    fontSize: 32,
+    fontWeight: '900',
+    color: theme.colors.textStrong,
+    letterSpacing: -1.2,
+    marginTop: 4,
   },
-  detailAmountRs: { fontSize: 22, fontWeight: '700' },
-  detailSep: { height: 1, backgroundColor: theme.colors.card, marginHorizontal: 20 },
+  detailSep: { height: 1, backgroundColor: theme.colors.border, marginHorizontal: 20 },
   detailRow: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', paddingHorizontal: 22, paddingVertical: 14,
-    borderBottomWidth: 1, borderBottomColor: theme.colors.card,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
   },
-  detailRowVertical: { marginBottom: 4 },
   detailLabel: { fontSize: 12, color: theme.colors.textSecondary, fontWeight: '600' },
-  detailValue: { fontSize: 14, fontWeight: '700', color: '#111827', letterSpacing: -0.2 },
+  detailValue: { fontSize: 14, fontWeight: '700', color: theme.colors.textStrong, letterSpacing: -0.2, flexShrink: 1, textAlign: 'right', marginLeft: 16 },
   detailCatPill: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
   },
   detailCatText: { fontSize: 12, fontWeight: '700' },
   detailDescBox: { paddingHorizontal: 22, paddingTop: 14, paddingBottom: 4 },
   detailLog: {
     backgroundColor: theme.colors.card,
-    padding: 14, borderRadius: 12, marginTop: 6,
-    fontSize: 13, color: '#374151', lineHeight: 20,
-    borderLeftWidth: 3, borderLeftColor: '#6366F1',
+    padding: 14,
+    borderRadius: 12,
+    marginTop: 6,
+    fontSize: 13,
+    color: theme.colors.text,
+    lineHeight: 20,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
   },
   actionRow: {
-    flexDirection: 'row', gap: 10,
-    paddingHorizontal: 20, paddingVertical: 20,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
   },
   actionBtn: {
-    flex: 1, flexDirection: 'row', paddingVertical: 14,
-    borderRadius: 14, alignItems: 'center',
-    justifyContent: 'center', gap: 7, elevation: 4,
+    flex: 1,
+    flexDirection: 'row',
+    paddingVertical: 14,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
   },
-  approveBtn: {
-    backgroundColor: '#059669',
-    shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.38, shadowRadius: 8,
-  },
-  payBtn: {
-    backgroundColor: '#2563EB',
-    shadowColor: '#2563EB',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.38, shadowRadius: 8,
-  },
-  deleteBtn: {
-    backgroundColor: '#EF4444',
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.38, shadowRadius: 8,
-  },
-  actionText: { color: '#fff', fontWeight: '900', fontSize: 13, letterSpacing: 0.2 },
+  approveBtn: { backgroundColor: '#059669' },
+  payBtn: { backgroundColor: '#2563EB' },
+  deleteBtn: { backgroundColor: '#EF4444' },
+  actionText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 
-  // ── DELETE MODAL ──────────────────────────
   deleteCard: {
     width: '88%',
+    maxWidth: 400,
     backgroundColor: theme.colors.background,
-    borderRadius: 26, padding: 28,
-    elevation: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.18, shadowRadius: 24,
+    borderRadius: 24,
+    padding: 28,
     alignItems: 'center',
   },
   deleteIconRing: {
-    width: 68, height: 68, borderRadius: 34,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: '#FEF2F2',
-    justifyContent: 'center', alignItems: 'center',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
-    borderWidth: 4, borderColor: '#FECACA',
+    borderWidth: 3,
+    borderColor: '#FECACA',
   },
-  deleteTitle: { fontSize: 19, fontWeight: '900', color: '#111827', letterSpacing: -0.4 },
+  deleteTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.textStrong, letterSpacing: -0.3 },
   deleteSubtitle: {
-    fontSize: 13, color: theme.colors.textSecondary,
-    textAlign: 'center', marginTop: 8, lineHeight: 20, paddingHorizontal: 10,
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
   deleteActions: {
-    flexDirection: 'row', alignSelf: 'stretch',
-    justifyContent: 'flex-end', gap: 10, marginTop: 20,
+    flexDirection: 'row',
+    alignSelf: 'stretch',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 20,
   },
   cancelBtn: {
-    paddingHorizontal: 18, paddingVertical: 13,
-    borderRadius: 12, backgroundColor: theme.colors.card,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: theme.colors.card,
   },
-  cancelBtnText: { color: '#6B7280', fontWeight: '700', fontSize: 14 },
+  cancelBtnText: { color: theme.colors.textSecondary, fontWeight: '700', fontSize: 14 },
   confirmDeleteBtn: {
     backgroundColor: '#EF4444',
-    paddingHorizontal: 20, paddingVertical: 13,
-    borderRadius: 12, elevation: 4,
-    shadowColor: '#EF4444',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.38, shadowRadius: 8,
-  },
-  confirmDeleteText: { color: '#fff', fontWeight: '900', fontSize: 14 },
-
-  // ── GRID LAYOUT ───────────────────────────
-  dataRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  gridHeaderCell: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#9CA3AF',
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  cellInput: {
-    height: 38,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    fontSize: 13,
-    color: '#1F2937',
-    backgroundColor: '#F9FAFB',
-  },
-  categoryCell: {
-    height: 38,
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    backgroundColor: '#F9FAFB',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  categoryText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#374151',
-    flex: 1,
-  },
-  amountCell: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E5E7EB',
-    borderRadius: 8,
-    backgroundColor: '#F9FAFB',
-    paddingLeft: 8,
-    height: 38,
-  },
-  amountPrefix: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6B7280',
-    marginRight: 2,
-  },
-  deleteRowBtn: {
-    width: 40,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addGridRowBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderWidth: 1,
-    borderColor: '#E0E7FF',
-    borderStyle: 'dashed',
+    paddingHorizontal: 20,
+    paddingVertical: 13,
     borderRadius: 12,
-    marginTop: 8,
-    marginBottom: 16,
-    backgroundColor: '#F5F8FF',
   },
-  addGridRowText: {
-    marginLeft: 6,
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#6366F1',
-  },
+  confirmDeleteText: { color: '#fff', fontWeight: '800', fontSize: 14 },
 });

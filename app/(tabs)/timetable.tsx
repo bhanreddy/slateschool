@@ -10,6 +10,16 @@ import {
   TIMETABLE_DAYS,
   TIMETABLE_DAY_LABELS,
 } from '../../src/services/timetableService';
+import {
+  ExamTimetableService,
+  ExamAllocationService,
+  ExamScheduleSlot,
+  ExamSeatInfo,
+  groupSlotsByExam,
+  sittingKeyOf,
+  ymd,
+} from '../../src/services/examService';
+import { examCategoryFor } from '../../src/constants/examCategories';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useStudentQuery } from '../../src/hooks/useStudentQuery';
 import type { Student } from '../../src/types/models';
@@ -96,6 +106,12 @@ const TimeTableScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'class' | 'exam'>('class');
+  const [examSlots, setExamSlots] = useState<ExamScheduleSlot[]>([]);
+  const [seatInfos, setSeatInfos] = useState<ExamSeatInfo[]>([]);
+  const [examLoading, setExamLoading] = useState(false);
+  const [examLoaded, setExamLoaded] = useState(false);
+  const [openSyllabusId, setOpenSyllabusId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<DayOfWeek>(() => {
     const idx = new Date().getDay(); // 0=Sun..6=Sat
     return idx >= 1 && idx <= 6 ? TIMETABLE_DAYS[idx - 1] : 'monday';
@@ -139,9 +155,44 @@ const TimeTableScreen = () => {
     void loadTimetable();
   }, [user?.userId, isStudent, profile?.current_enrollment?.class_section_id]);
 
+  // Published exam timetable — fetched lazily the first time the toggle flips.
+  const loadExamTimetable = async () => {
+    const sectionId = profile?.current_enrollment?.class_section_id;
+    if (!sectionId) {
+      setExamSlots([]);
+      setExamLoaded(true);
+      return;
+    }
+    try {
+      setExamLoading(true);
+      const [data, seats] = await Promise.all([
+        ExamTimetableService.getSectionSchedule(sectionId),
+        profile?.id
+          ? ExamAllocationService.getMyAllocations(profile.id).catch(() => [] as ExamSeatInfo[])
+          : Promise.resolve([] as ExamSeatInfo[]),
+      ]);
+      setExamSlots(data);
+      setSeatInfos(seats);
+      setExamLoaded(true);
+    } catch {
+      // leave previous data; pull-to-refresh retries
+    } finally {
+      setExamLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewMode === 'exam' && !examLoaded) void loadExamTimetable();
+  }, [viewMode, profile?.current_enrollment?.class_section_id]);
+
   const onRefresh = async () => {
     setRefreshing(true);
     await refetchProfile();
+    if (viewMode === 'exam') {
+      await loadExamTimetable();
+      setRefreshing(false);
+      return;
+    }
     await loadTimetable();
   };
 
@@ -215,6 +266,28 @@ const TimeTableScreen = () => {
     return eh * 60 + em - (sh * 60 + sm);
   };
 
+  // ── Exam schedule derived data ──
+  const examGroups = useMemo(() => groupSlotsByExam(examSlots), [examSlots]);
+  const seatByKey = useMemo(() => {
+    const map = new Map<string, ExamSeatInfo>();
+    for (const seat of seatInfos) {
+      map.set(sittingKeyOf(seat.exam_id, seat.exam_date, seat.session_start), seat);
+    }
+    return map;
+  }, [seatInfos]);
+  const todayIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [currentTime]);
+
+  const fmtExamTime = (time?: string | null): string => {
+    if (!time) return '';
+    const [h, m] = time.split(':').map(Number);
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    const hour12 = h % 12 === 0 ? 12 : h % 12;
+    return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`;
+  };
+
   return (
     <ScreenLayout>
       <StudentHeader title={t('timetable.title')} />
@@ -230,6 +303,150 @@ const TimeTableScreen = () => {
                         <LogoLoader size={30} />
                     </View>
         }
+        {/* Class / Exams toggle */}
+        <View style={styles.modeToggle}>
+          {(
+            [
+              ['class', t('timetable.mode_class', 'Class'), 'school-outline'],
+              ['exam', t('timetable.mode_exams', 'Exams'), 'document-text-outline'],
+            ] as const
+          ).map(([value, label, icon]) => {
+            const active = viewMode === value;
+            return (
+              <Text
+                key={value}
+                onPress={() => setViewMode(value)}
+                style={[styles.modeBtn, active && styles.modeBtnActive]}
+              >
+                <Ionicons name={icon as any} size={13} color={active ? '#FFFFFF' : '#6366F1'} />
+                {'  '}
+                {label}
+              </Text>
+            );
+          })}
+        </View>
+
+        {viewMode === 'exam' ? (
+          examLoading && !examLoaded ? (
+            <LogoLoader size={60} color="#6366F1" style={{ marginTop: 60 }} />
+          ) : examGroups.length === 0 ? (
+            <Animated.View entering={FadeInDown.delay(100).duration(500)} style={styles.emptyState}>
+              <Ionicons name="document-text-outline" size={56} color={isDark ? '#374151' : '#D1D5DB'} />
+              <Text style={styles.emptyTitle}>{t('timetable.no_exams', 'No Exam Timetable')}</Text>
+              <Text style={styles.emptySubtitle}>
+                {t(
+                  'timetable.no_exams_hint',
+                  'Your exam schedule will appear here once the school publishes it'
+                )}
+              </Text>
+            </Animated.View>
+          ) : (
+            examGroups.map((group, gi) => {
+              const category = examCategoryFor(group.examType);
+              return (
+                <Animated.View
+                  key={group.examId}
+                  entering={FadeInDown.delay(Math.min(gi, 4) * 80).duration(450)}
+                  style={styles.examGroup}
+                >
+                  <View style={styles.examGroupHeader}>
+                    <View style={[styles.examTypeChip, { backgroundColor: `${category.color}15` }]}>
+                      <Ionicons name={category.icon} size={13} color={category.color} />
+                    </View>
+                    <Text style={styles.examGroupTitle}>
+                      {t_field(group.examName, group.examNameTe)}
+                    </Text>
+                  </View>
+                  <View style={styles.examCard}>
+                    {group.slots.map((slot, si) => {
+                      const slotDate = ymd(slot.exam_date);
+                      const isToday = !!slotDate && slotDate === todayIso;
+                      const isPastExam = !!slotDate && slotDate < todayIso;
+                      const d = slotDate ? new Date(`${slotDate}T00:00:00`) : null;
+                      const seat = seatByKey.get(sittingKeyOf(slot.exam_id, slot.exam_date, slot.start_time));
+                      const topics = slot.syllabus || [];
+                      const syllabusOpen = openSyllabusId === slot.id;
+                      return (
+                        <View key={slot.id}>
+                        <View
+                          style={[
+                            styles.examRow,
+                            si > 0 && styles.examRowBorder,
+                            isPastExam && styles.examRowPast,
+                          ]}
+                        >
+                          <View style={[styles.dateBox, isToday && { backgroundColor: category.color }]}>
+                            <Text style={[styles.dateBoxDay, isToday && styles.dateBoxTextToday]}>
+                              {d ? d.toLocaleDateString('default', { weekday: 'short' }).toUpperCase() : '—'}
+                            </Text>
+                            <Text style={[styles.dateBoxNum, isToday && styles.dateBoxTextToday]}>
+                              {d ? String(d.getDate()).padStart(2, '0') : ''}
+                            </Text>
+                            <Text style={[styles.dateBoxMonth, isToday && styles.dateBoxTextToday]}>
+                              {d ? d.toLocaleDateString('default', { month: 'short' }) : ''}
+                            </Text>
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.examSubject}>
+                              {t_field(slot.subject_name, slot.subject_name_te)}
+                            </Text>
+                            <Text style={styles.examMeta}>
+                              {slot.start_time
+                                ? `${fmtExamTime(slot.start_time)} – ${fmtExamTime(slot.end_time)}`
+                                : t('timetable.time_tbd', 'Time to be announced')}
+                              {` · Max ${Number(slot.max_marks)}`}
+                            </Text>
+                            {seat && (
+                              <View style={[styles.seatChip, { backgroundColor: `${category.color}12` }]}>
+                                <Ionicons name="location-outline" size={11} color={category.color} />
+                                <Text style={[styles.seatChipText, { color: category.color }]}>
+                                  {seat.room_name}
+                                  {seat.seat_no != null ? ` · ${t('timetable.seat', 'Seat')} ${seat.seat_no}` : ''}
+                                </Text>
+                              </View>
+                            )}
+                          </View>
+                          {isToday && (
+                            <View style={[styles.todayBadge, { backgroundColor: `${category.color}15` }]}>
+                              <Text style={[styles.todayBadgeText, { color: category.color }]}>
+                                {t('timetable.today', 'TODAY')}
+                              </Text>
+                            </View>
+                          )}
+                        </View>
+                        {topics.length > 0 && (
+                          <View style={styles.syllabusWrap}>
+                            <Text
+                              onPress={() => setOpenSyllabusId(syllabusOpen ? null : slot.id)}
+                              style={[styles.syllabusToggle, { color: category.color }]}
+                            >
+                              {syllabusOpen ? '▾' : '▸'} {t('timetable.syllabus', 'Syllabus')} · {topics.length}{' '}
+                              {t('timetable.topics', 'topics')}
+                            </Text>
+                            {syllabusOpen &&
+                              topics.map((item, ti) => (
+                                <View key={ti} style={styles.syllabusItemRow}>
+                                  <View style={[styles.syllabusBullet, { backgroundColor: category.color }]} />
+                                  <Text style={styles.syllabusTopic}>{item.topic}</Text>
+                                  {item.marks != null && (
+                                    <Text style={[styles.syllabusMarksBadge, { color: category.color }]}>
+                                      {item.marks}m
+                                    </Text>
+                                  )}
+                                </View>
+                              ))}
+                          </View>
+                        )}
+                        </View>
+                      );
+                    })}
+                  </View>
+                </Animated.View>
+              );
+            })
+          )
+        ) : (
+        <>
         {/* Header Stats */}
         <Animated.View entering={FadeInUp.duration(600)} style={styles.statsRow}>
           <View style={[styles.statCard, { backgroundColor: isDark ? '#1E1B4B' : '#EEF2FF' }]}>
@@ -393,6 +610,8 @@ const TimeTableScreen = () => {
           })}
           </View>
         }
+        </>
+        )}
 
         <View style={{ height: 100 }} />
       </ScrollView>
@@ -408,6 +627,174 @@ const getStyles = (theme: SchoolTheme, isDark: boolean) => StyleSheet.create({
     backgroundColor: 'transparent'},
   scrollContent: {
     paddingTop: 16
+  },
+
+  /* Class / Exams toggle */
+  modeToggle: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: isDark ? '#1F2937' : '#EEF2FF',
+    borderRadius: 12,
+    padding: 4,
+    gap: 4
+  },
+  modeBtn: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6366F1',
+    paddingVertical: 9,
+    borderRadius: 9,
+    overflow: 'hidden'
+  },
+  modeBtnActive: {
+    backgroundColor: '#6366F1',
+    color: '#FFFFFF'
+  },
+
+  /* Exam schedule */
+  examGroup: {
+    paddingHorizontal: 16,
+    marginBottom: 18
+  },
+  examGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8
+  },
+  examTypeChip: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  examGroupTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    letterSpacing: -0.2
+  },
+  examCard: {
+    backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: isDark ? theme.colors.border : '#F1F5F9',
+    overflow: 'hidden'
+  },
+  examRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10
+  },
+  examRowBorder: {
+    borderTopWidth: 1,
+    borderTopColor: isDark ? theme.colors.border : '#F1F5F9'
+  },
+  examRowPast: {
+    opacity: 0.5
+  },
+  dateBox: {
+    width: 48,
+    borderRadius: 10,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F8FAFC',
+    alignItems: 'center',
+    paddingVertical: 6
+  },
+  dateBoxDay: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    color: theme.colors.textSecondary
+  },
+  dateBoxNum: {
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    color: theme.colors.textPrimary,
+    marginVertical: 1
+  },
+  dateBoxMonth: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: theme.colors.textSecondary
+  },
+  dateBoxTextToday: {
+    color: '#FFFFFF'
+  },
+  examSubject: {
+    fontSize: 14.5,
+    fontWeight: '700',
+    color: theme.colors.textPrimary,
+    letterSpacing: -0.2
+  },
+  examMeta: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: theme.colors.textSecondary,
+    marginTop: 2
+  },
+  todayBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8
+  },
+  seatChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 7,
+    marginTop: 4
+  },
+  seatChipText: {
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  syllabusWrap: {
+    paddingLeft: 72,
+    paddingRight: 14,
+    paddingBottom: 10,
+    marginTop: -2
+  },
+  syllabusToggle: {
+    fontSize: 12,
+    fontWeight: '700',
+    paddingVertical: 2
+  },
+  syllabusItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 3
+  },
+  syllabusBullet: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    opacity: 0.6
+  },
+  syllabusTopic: {
+    flex: 1,
+    fontSize: 12.5,
+    fontWeight: '500',
+    color: theme.colors.textSecondary
+  },
+  syllabusMarksBadge: {
+    fontSize: 11.5,
+    fontWeight: '800'
+  },
+  todayBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.5
   },
 
   /* Stats */

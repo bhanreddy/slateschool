@@ -37,31 +37,30 @@ export function clayCard(isDark: boolean, raised: 'sm' | 'md' | 'lg' = 'md'): an
 
 export function clayInset(isDark: boolean, isFocused: boolean = false): any {
   if (Platform.OS === 'web') {
-    // For a true "pressed in" look, background should match the parent or be very slightly darker.
-    const bgColor = isDark ? '#121824' : '#E2E8F0';
-    // Deep, sharper shadows for a recessed input cavity (increased depth by 40-50%)
-    const innerLo = isDark ? 'rgba(0,0,0,0.75)' : 'rgba(148,163,184,0.55)';
-    const innerHi = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.85)';
-
-    // Focus adds an outer glowing ring, no border
-    const focusGlow = isFocused
-      ? `, 0 0 0 3px ${isDark ? 'rgba(99,102,241,0.25)' : 'rgba(79,70,229,0.2)'}`
+    // Soft recessed field — light inset only (heavy 5/10px cavities looked broken)
+    const bgColor = isDark ? '#121824' : '#F1F5F9';
+    const innerLo = isDark ? 'rgba(0,0,0,0.35)' : 'rgba(148,163,184,0.22)';
+    const innerHi = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.75)';
+    const focusRing = isFocused
+      ? `, 0 0 0 2px ${isDark ? 'rgba(236,72,153,0.35)' : 'rgba(236,72,153,0.28)'}`
       : '';
 
     return {
-      // Deeper 5px inset with 10px blur for realistic deep cut-out look
-      boxShadow: `inset 5px 5px 10px ${innerLo}, inset -5px -5px 10px ${innerHi}${focusGlow}`,
+      boxShadow: `inset 1.5px 1.5px 3px ${innerLo}, inset -1px -1px 2px ${innerHi}${focusRing}`,
       backgroundColor: bgColor,
-      borderWidth: 0,
-      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+      borderWidth: 1,
+      borderColor: isFocused
+        ? (isDark ? 'rgba(236,72,153,0.45)' : 'rgba(244,114,182,0.55)')
+        : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(148,163,184,0.22)'),
+      transition: 'box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease',
     };
   }
 
   return {
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: isFocused
-      ? (isDark ? '#6366F1' : '#4F46E5')
-      : (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(148,163,184,0.3)'),
-    backgroundColor: isDark ? '#121824' : '#E2E8F0',
+      ? (isDark ? '#F472B6' : '#EC4899')
+      : (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(148,163,184,0.28)'),
+    backgroundColor: isDark ? '#121824' : '#F1F5F9',
   };
 }

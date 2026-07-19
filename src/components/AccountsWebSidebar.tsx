@@ -59,13 +59,6 @@ const DEFAULT_NAV: AccountsSidebarNavItem[] = [
     category: 'Fees & payments',
   },
   {
-    title: 'UPI fee QR',
-    icon: 'qr-code-outline',
-    route: '/accounts/collect-fee-qr',
-    gradient: ['#D97706', '#F59E0B'],
-    category: 'Fees & payments',
-  },
-  {
     title: 'Reports',
     icon: 'bar-chart-outline',
     route: '/accounts/invoices',

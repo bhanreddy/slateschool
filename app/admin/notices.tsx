@@ -1,17 +1,24 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import AppTextInput from '@/src/components/AppTextInput';
 import { styles as ds } from '@/src/theme/styles';
+import PremiumButton from '@/src/components/PremiumButton';
+import { clayInset } from '@/src/theme/clayStyles';
 
 import {
-  View, Text, StyleSheet, FlatList, TouchableOpacity,
-  StatusBar, Switch, ScrollView, Platform,
-  Animated as RNAnimated
+  View, Text, StyleSheet, FlatList, TouchableOpacity, Pressable,
+  StatusBar, ScrollView, Platform, useWindowDimensions,
+  Animated as RNAnimated,
 } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { alertCompat } from '../../src/utils/crossPlatformAlert';
-import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import AdminHeader from '../../src/components/AdminHeader';
-import Animated, { FadeInDown, FadeInUp, ZoomIn } from 'react-native-reanimated';
+import Animated, {
+  FadeIn, FadeInDown, FadeInUp, ZoomIn,
+  useSharedValue, useAnimatedStyle, withSpring, interpolateColor,
+} from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NoticeService, Notice, CreateNoticeRequest } from '../../src/services/commonServices';
 import { ClassService, ClassInfo } from '../../src/services/classService';
 import { Modal } from 'react-native';
@@ -22,39 +29,45 @@ import { useTranslation } from 'react-i18next';
 import { t_field } from '../../src/utils/lang';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DESIGN TOKENS
+// DESIGN TOKENS — rose clay accent (extends project clay system)
 // ─────────────────────────────────────────────────────────────────────────────
-const PINK = '#EC4899';
-const PINK_LT = '#FDF2F8';
-const PINK_MD = '#FCE7F3';
-const PINK_BD = '#F9A8D4';
+const ROSE = '#EC4899';
+const ROSE_DEEP = '#DB2777';
+const ROSE_SOFT = '#FDF2F8';
+const ROSE_MID = '#FCE7F3';
+const ROSE_EDGE = '#F9A8D4';
 
 const PRIORITY_META = {
-  high: { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA', dot: '#EF4444', icon: 'alert-circle', label: 'HIGH' },
-  medium: { bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B', icon: 'warning', label: 'MEDIUM' },
-  low: { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', dot: '#3B82F6', icon: 'information', label: 'LOW' },
-  normal: { bg: '#F3F4F6', text: '#374151', border: '#E5E7EB', dot: '#9CA3AF', icon: 'remove-circle', label: 'NORMAL' },
+  high: { bg: '#FEF2F2', text: '#991B1B', border: '#FECACA', dot: '#EF4444', icon: 'alert-circle' as const, label: 'HIGH', hint: 'Urgent — read now' },
+  medium: { bg: '#FFFBEB', text: '#92400E', border: '#FDE68A', dot: '#F59E0B', icon: 'warning' as const, label: 'MEDIUM', hint: 'Important update' },
+  low: { bg: '#EFF6FF', text: '#1E40AF', border: '#BFDBFE', dot: '#3B82F6', icon: 'information' as const, label: 'LOW', hint: 'FYI / soft reminder' },
+  normal: { bg: '#F3F4F6', text: '#374151', border: '#E5E7EB', dot: '#9CA3AF', icon: 'remove-circle' as const, label: 'NORMAL', hint: '' },
 };
 
-const AUDIENCE_META: Record<string, { icon: string; color: string; bg: string; lib: 'ion' | 'fa5' }> = {
-  all: { icon: 'globe-outline', color: '#8B5CF6', bg: '#EDE9FE', lib: 'ion' },
-  students: { icon: 'graduation-cap', color: '#3B82F6', bg: '#DBEAFE', lib: 'fa5' },
-  staff: { icon: 'briefcase-outline', color: '#F59E0B', bg: '#FEF3C7', lib: 'ion' },
-  parents: { icon: 'people-outline', color: '#10B981', bg: '#D1FAE5', lib: 'ion' },
-  class: { icon: 'layers-outline', color: '#EC4899', bg: '#FCE7F3', lib: 'ion' },
+const AUDIENCE_META: Record<string, { icon: string; color: string; bg: string; soft: string; lib: 'ion' | 'fa5'; desc: string }> = {
+  all: { icon: 'globe-outline', color: '#7C3AED', bg: '#7C3AED', soft: '#EDE9FE', lib: 'ion', desc: 'Everyone' },
+  students: { icon: 'graduation-cap', color: '#2563EB', bg: '#2563EB', soft: '#DBEAFE', lib: 'fa5', desc: 'All students' },
+  staff: { icon: 'briefcase-outline', color: '#D97706', bg: '#D97706', soft: '#FEF3C7', lib: 'ion', desc: 'Teachers & staff' },
+  parents: { icon: 'people-outline', color: '#059669', bg: '#059669', soft: '#D1FAE5', lib: 'ion', desc: 'Parent portal' },
+  class: { icon: 'layers-outline', color: ROSE, bg: ROSE, soft: ROSE_MID, lib: 'ion', desc: 'One class only' },
 };
 
-// Pulsing dot for priority/pinned
+const TITLE_MAX = 80;
+const BODY_MAX = 500;
+
+// Soft pulse — used sparingly (pinned / high priority only)
 const PulseDot = ({ color, size = 6 }: { color: string; size?: number }) => {
   const scale = useRef(new RNAnimated.Value(1)).current;
   useEffect(() => {
-    RNAnimated.loop(
+    const anim = RNAnimated.loop(
       RNAnimated.sequence([
-        RNAnimated.timing(scale, { toValue: 1.9, duration: 900, useNativeDriver: true }),
+        RNAnimated.timing(scale, { toValue: 1.85, duration: 900, useNativeDriver: true }),
         RNAnimated.timing(scale, { toValue: 1, duration: 900, useNativeDriver: true }),
       ])
-    ).start();
-  }, []);
+    );
+    anim.start();
+    return () => anim.stop();
+  }, [scale]);
   return (
     <View style={{ width: size + 4, height: size + 4, justifyContent: 'center', alignItems: 'center' }}>
       <RNAnimated.View style={{
@@ -69,27 +82,75 @@ const PulseDot = ({ color, size = 6 }: { color: string; size?: number }) => {
   );
 };
 
-// Audience icon helper
 const AudienceIcon = ({ type, size = 12, color }: { type: string; size?: number; color: string }) => {
   const m = AUDIENCE_META[type] ?? AUDIENCE_META.all;
-  if (m.lib === 'fa5') return <FontAwesome5 name={m.icon} size={size} color={color} />;
+  if (m.lib === 'fa5') return <FontAwesome5 name={m.icon as any} size={size} color={color} />;
   return <Ionicons name={m.icon as any} size={size} color={color} />;
 };
+
+/** Springy clay toggle — UI-thread only */
+function ClayToggle({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  const p = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    p.value = withSpring(value ? 1 : 0, { damping: 16, stiffness: 220 });
+  }, [value, p]);
+  const knob = useAnimatedStyle(() => ({ transform: [{ translateX: p.value * 22 }] }));
+  const track = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(p.value, [0, 1], ['rgba(148,163,184,0.35)', ROSE]),
+  }));
+  return (
+    <Pressable onPress={() => onChange(!value)} hitSlop={10} accessibilityRole="switch" accessibilityState={{ checked: value }}>
+      <Animated.View style={[{ width: 52, height: 30, borderRadius: 15, padding: 3 }, track]}>
+        <Animated.View style={[{
+          width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFF',
+          ...(Platform.OS === 'android'
+            ? { elevation: 2 }
+            : { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 2 }),
+        }, knob]} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
+/** Press scale wrapper — transform only; outer view keeps flex layout intact */
+function PressScale({
+  onPress, children, disabled, style,
+}: {
+  onPress?: () => void; children: React.ReactNode; disabled?: boolean; style?: any;
+}) {
+  const scale = useSharedValue(1);
+  const aStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  return (
+    <Animated.View style={[style, aStyle]}>
+      <Pressable
+        disabled={disabled}
+        onPress={onPress}
+        onPressIn={() => { if (!disabled) scale.value = withSpring(0.96, { damping: 18, stiffness: 320 }); }}
+        onPressOut={() => { scale.value = withSpring(1, { damping: 14, stiffness: 220 }); }}
+        style={style?.flex === 1 ? { flex: 1 } : undefined}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 export default function AdminNotices() {
-  useTranslation(); // Subscribe so list rows re-render when language changes (t_field).
+  useTranslation();
   const { theme, isDark } = useTheme();
-  const styles = React.useMemo(() => getStyles(theme), [theme]);
+  const styles = useMemo(() => getStyles(theme, isDark), [theme, isDark]);
+  const insets = useSafeAreaInsets();
+  const { width: winW } = useWindowDimensions();
+  const isWide = winW >= 720;
 
   const [notices, setNotices] = useState<Notice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
 
-  // Create Modal States
   const [modalVisible, setModalVisible] = useState(false);
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -99,16 +160,18 @@ export default function AdminNotices() {
   const [isPinned, setIsPinned] = useState(false);
   const [classes, setClasses] = useState<ClassInfo[]>([]);
   const [creating, setCreating] = useState(false);
+  const [titleFocused, setTitleFocused] = useState(false);
+  const [bodyFocused, setBodyFocused] = useState(false);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-  // FAB animation
   const fabScale = useRef(new RNAnimated.Value(1)).current;
-  const onFabIn = () => RNAnimated.spring(fabScale, { toValue: 0.91, useNativeDriver: true }).start();
-  const onFabOut = () => RNAnimated.spring(fabScale, { toValue: 1, useNativeDriver: true }).start();
+  const onFabIn = () => RNAnimated.spring(fabScale, { toValue: 0.92, useNativeDriver: true, friction: 6 }).start();
+  const onFabOut = () => RNAnimated.spring(fabScale, { toValue: 1, useNativeDriver: true, friction: 5 }).start();
 
   useEffect(() => { fetchNotices(); fetchClasses(); }, []);
 
   const fetchClasses = async () => {
-    try { setClasses(await ClassService.getClasses()); } catch { }
+    try { setClasses(await ClassService.getClasses()); } catch { /* ignore */ }
   };
 
   const fetchNotices = async () => {
@@ -138,25 +201,44 @@ export default function AdminNotices() {
     n.content.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Sort: pinned first
   const sortedNotices = [...filteredNotices].sort((a, b) =>
     (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)
   );
 
+  const titleOk = title.trim().length > 0;
+  const bodyOk = content.trim().length > 0;
+  const classOk = audience !== 'class' || !!targetClassId;
+  const canPublish = titleOk && bodyOk && classOk;
+
+  const closeModal = useCallback(() => {
+    setModalVisible(false);
+    setAttemptedSubmit(false);
+    resetForm();
+  }, []);
+
   const handleCreate = async () => {
-    if (!title.trim() || !content.trim()) { alertCompat('Error', 'Title and Content are required'); return; }
-    if (audience === 'class' && !targetClassId) { alertCompat('Error', 'Please select a target class'); return; }
+    setAttemptedSubmit(true);
+    if (!titleOk || !bodyOk) {
+      alertCompat('Almost there', 'Add a title and body before publishing.');
+      return;
+    }
+    if (!classOk) {
+      alertCompat('Pick a class', 'Select which class should see this notice.');
+      return;
+    }
     try {
       setCreating(true);
       const payload: CreateNoticeRequest = {
-        title, content, audience, priority,
+        title: title.trim(),
+        content: content.trim(),
+        audience,
+        priority,
         is_pinned: isPinned,
         target_class_id: audience === 'class' ? targetClassId : undefined,
       };
       await NoticeService.create(payload);
-      alertCompat('Success', 'Notice published successfully');
-      setModalVisible(false);
-      resetForm();
+      alertCompat('Published', 'Your notice is live on the board.');
+      closeModal();
       fetchNotices();
     } catch (error: any) {
       alertCompat('Error', error.response?.data?.error || 'Failed to create notice');
@@ -168,121 +250,128 @@ export default function AdminNotices() {
   const resetForm = () => {
     setTitle(''); setContent(''); setAudience('all');
     setPriority('medium'); setTargetClassId(''); setIsPinned(false);
+    setTitleFocused(false); setBodyFocused(false);
   };
 
-  // Stats
   const pinnedCount = notices.filter(n => n.is_pinned).length;
   const highCount = notices.filter(n => (n.priority || '').toLowerCase() === 'high').length;
 
-  // ── RENDER ITEM ──────────────────────────────────────────────────────────
-  const renderItem = ({ item, index }: { item: Notice; index: number }) => {
+  const renderItem = useCallback(({ item, index }: { item: Notice; index: number }) => {
     const pKey = (item.priority || 'normal').toLowerCase() as keyof typeof PRIORITY_META;
     const pm = PRIORITY_META[pKey] ?? PRIORITY_META.normal;
     const am = AUDIENCE_META[item.audience] ?? AUDIENCE_META.all;
     const pinned = !!item.is_pinned;
 
     return (
-      <Animated.View entering={FadeInDown.delay(index * 70).duration(480).springify().damping(14)}>
-        <TouchableOpacity style={[styles.card, pinned && styles.cardPinned]} activeOpacity={0.8}>
-
-          {/* Priority accent stripe */}
-          <View style={[styles.cardStripe, { backgroundColor: pm.dot }]} />
-
-          <View style={styles.cardInner}>
-            {/* Top row: title + priority badge */}
-            <View style={styles.cardTop}>
-              <View style={styles.titleRow}>
-                {pinned && (
-                  <View style={styles.pinBadge}>
-                    <Ionicons name="pin" size={10} color={PINK} />
-                    <Text style={styles.pinText}>PINNED</Text>
-                  </View>
-                )}
-                <Text style={[styles.cardTitle, pinned && styles.cardTitlePinned]} numberOfLines={2}>
-                  {t_field(item.title, item.title_te)}
-                </Text>
+      <Animated.View entering={FadeInDown.delay(Math.min(index, 8) * 55).duration(380).springify().damping(16)}>
+        <PressScale>
+          <View style={[styles.card, pinned && styles.cardPinned]}>
+            <LinearGradient
+              colors={['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.7, y: 1 }}
+              style={[StyleSheet.absoluteFill, { borderRadius: 22 }]}
+              pointerEvents="none"
+            />
+            <View style={[styles.cardStripe, { backgroundColor: pm.dot }]} />
+            <View style={styles.cardInner}>
+              <View style={styles.cardTop}>
+                <View style={styles.titleRow}>
+                  {pinned && (
+                    <View style={styles.pinBadge}>
+                      <Ionicons name="pin" size={10} color={ROSE} />
+                      <Text style={styles.pinText}>PINNED</Text>
+                    </View>
+                  )}
+                  <Text style={styles.cardTitle} numberOfLines={2}>
+                    {t_field(item.title, item.title_te)}
+                  </Text>
+                </View>
+                <View style={[styles.priorityBadge, { backgroundColor: pm.bg, borderColor: pm.border }]}>
+                  {(pKey === 'high' || pinned) ? <PulseDot color={pm.dot} size={5} /> : (
+                    <View style={{ width: 5, height: 5, borderRadius: 2.5, backgroundColor: pm.dot }} />
+                  )}
+                  <Text style={[styles.priorityText, { color: pm.text }]}>{pm.label}</Text>
+                </View>
               </View>
-              <View style={[styles.priorityBadge, { backgroundColor: pm.bg, borderColor: pm.border }]}>
-                <PulseDot color={pm.dot} size={5} />
-                <Text style={[styles.priorityText, { color: pm.text }]}>{pm.label}</Text>
-              </View>
-            </View>
 
-            {/* Content preview */}
-            <Text style={styles.cardContent} numberOfLines={2}>{t_field(item.content, item.content_te)}</Text>
+              <Text style={styles.cardContent} numberOfLines={2}>{t_field(item.content, item.content_te)}</Text>
 
-            {/* Footer: audience + time */}
-            <View style={styles.cardFooter}>
-              <View style={[styles.audiencePill, { backgroundColor: am.bg }]}>
-                <AudienceIcon type={item.audience} size={11} color={am.color} />
-                <Text style={[styles.audienceText, { color: am.color }]}>
-                  {item.audience.charAt(0).toUpperCase() + item.audience.slice(1)}
-                </Text>
-              </View>
-              <View style={styles.timeRow}>
-                <Ionicons name="time-outline" size={11} color={theme.colors.textTertiary} style={{ marginRight: 3 }} />
-                <Text style={styles.dateText}>{formatTimeAgo(item.published_at || item.created_at)}</Text>
+              <View style={styles.cardFooter}>
+                <View style={[styles.audiencePill, { backgroundColor: am.soft }]}>
+                  <AudienceIcon type={item.audience} size={11} color={am.color} />
+                  <Text style={[styles.audienceText, { color: am.color }]}>
+                    {item.audience.charAt(0).toUpperCase() + item.audience.slice(1)}
+                  </Text>
+                </View>
+                <View style={styles.timeRow}>
+                  <Ionicons name="time-outline" size={11} color={theme.colors.textTertiary} style={{ marginRight: 3 }} />
+                  <Text style={styles.dateText}>{formatTimeAgo(item.published_at || item.created_at)}</Text>
+                </View>
               </View>
             </View>
           </View>
-        </TouchableOpacity>
+        </PressScale>
       </Animated.View>
     );
-  };
+  }, [styles, theme.colors.textTertiary]);
+
+  const priorityHint = PRIORITY_META[priority as keyof typeof PRIORITY_META]?.hint ?? '';
+  const audienceHint = AUDIENCE_META[audience]?.desc ?? '';
 
   // ── RENDER ───────────────────────────────────────────────────────────────
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor={theme.colors.background} />
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={theme.colors.background} />
       <AdminHeader title="Notice Board" showBackButton={true} />
 
-      {/* ── SEARCH ── */}
+      {/* Search */}
       <View style={[styles.searchContainer, ds.searchBarWrapper, searchFocused && styles.searchFocused]}>
         <Ionicons
           name="search-outline" size={17}
-          color={searchFocused ? PINK : '#9CA3AF'}
+          color={searchFocused ? ROSE : '#94A3B8'}
           style={styles.searchIcon}
         />
         <AppTextInput
           style={[ds.inputInChrome, styles.searchInput]}
           placeholder="Search notices..."
-          placeholderTextColor="#9CA3AF"
+          placeholderTextColor="#94A3B8"
           value={searchQuery}
           onChangeText={setSearchQuery}
           onFocus={() => setSearchFocused(true)}
           onBlur={() => setSearchFocused(false)}
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn}>
-            <Ionicons name="close" size={13} color="#fff" />
+          <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.clearBtn} hitSlop={8}>
+            <Ionicons name="close" size={12} color="#fff" />
           </TouchableOpacity>
         )}
       </View>
 
-      {/* ── STATS STRIP ── */}
+      {/* Stats */}
       {!loading && notices.length > 0 && (
-        <Animated.View entering={FadeInDown.duration(400)} style={styles.statsStrip}>
+        <Animated.View entering={FadeInDown.duration(360)} style={styles.statsStrip}>
           <View style={styles.statChip}>
             <Text style={styles.statNumber}>{notices.length}</Text>
             <Text style={styles.statLabel}>Total</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={[styles.statChip, { borderLeftColor: PINK }]}>
-            <Text style={[styles.statNumber, { color: PINK }]}>{pinnedCount}</Text>
+          <View style={styles.statChip}>
+            <Text style={[styles.statNumber, { color: ROSE }]}>{pinnedCount}</Text>
             <Text style={styles.statLabel}>Pinned</Text>
           </View>
           <View style={styles.statDivider} />
-          <View style={[styles.statChip, { borderLeftColor: '#EF4444' }]}>
+          <View style={styles.statChip}>
             <Text style={[styles.statNumber, { color: '#EF4444' }]}>{highCount}</Text>
-            <Text style={styles.statLabel}>High Priority</Text>
+            <Text style={styles.statLabel}>Urgent</Text>
           </View>
         </Animated.View>
       )}
 
-      {/* ── LIST ── */}
+      {/* List */}
       {loading ? (
         <View style={styles.centerContainer}>
-          <LogoLoader size={56} color={PINK} />
+          <LogoLoader size={56} color={ROSE} />
           <Text style={styles.loadingText}>Loading notices...</Text>
         </View>
       ) : (
@@ -294,205 +383,285 @@ export default function AdminNotices() {
           showsVerticalScrollIndicator={false}
           refreshing={loading}
           onRefresh={fetchNotices}
+          windowSize={7}
+          maxToRenderPerBatch={8}
+          initialNumToRender={8}
+          removeClippedSubviews={Platform.OS === 'android'}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
-              <Animated.View entering={ZoomIn.duration(400)} style={styles.emptyIconWrap}>
-                <Ionicons name="megaphone-outline" size={30} color="#F9A8D4" />
+              <Animated.View entering={ZoomIn.duration(380)} style={styles.emptyIconWrap}>
+                <LinearGradient
+                  colors={['rgba(255,255,255,0.5)', 'rgba(255,255,255,0)']}
+                  style={StyleSheet.absoluteFill}
+                  pointerEvents="none"
+                />
+                <Ionicons name="megaphone-outline" size={32} color={ROSE_EDGE} />
               </Animated.View>
               <Text style={styles.emptyTitle}>
-                {searchQuery ? 'No Results Found' : 'No Notices Yet'}
+                {searchQuery ? 'No matches' : 'Your board is quiet'}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {searchQuery
-                  ? `Nothing matched "${searchQuery}"`
-                  : 'Tap the button below to post your first notice'}
+                  ? `Nothing matched “${searchQuery}”`
+                  : 'Share an announcement — students, staff, and parents will see it instantly.'}
               </Text>
+              {!searchQuery && (
+                <PressScale onPress={() => setModalVisible(true)} style={styles.emptyCta}>
+                  <Text style={styles.emptyCtaText}>Post first notice</Text>
+                  <Ionicons name="arrow-forward" size={14} color="#fff" />
+                </PressScale>
+              )}
             </View>
           }
         />
       )}
 
-      {/* ── FAB ── */}
-      <RNAnimated.View style={[styles.fabWrapper, { transform: [{ scale: fabScale }] }]}>
-        <TouchableOpacity
-          style={styles.fab}
-          onPress={() => setModalVisible(true)}
-          onPressIn={onFabIn}
-          onPressOut={onFabOut}
-          activeOpacity={1}
-        >
-          <Ionicons name="megaphone-outline" size={20} color="#fff" />
-          <Text style={styles.fabLabel}>Post Notice</Text>
-        </TouchableOpacity>
-      </RNAnimated.View>
+      {/* FAB — hidden while composing (one primary action) */}
+      {!modalVisible && (
+        <RNAnimated.View style={[styles.fabWrapper, { transform: [{ scale: fabScale }], bottom: 28 + Math.max(insets.bottom - 8, 0) }]}>
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={() => setModalVisible(true)}
+            onPressIn={onFabIn}
+            onPressOut={onFabOut}
+            activeOpacity={1}
+            accessibilityLabel="Post a notice"
+          >
+            <LinearGradient
+              colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0.6, y: 1 }}
+              style={StyleSheet.absoluteFill}
+              pointerEvents="none"
+            />
+            <Ionicons name="megaphone" size={18} color="#fff" />
+            <Text style={styles.fabLabel}>Post Notice</Text>
+          </TouchableOpacity>
+        </RNAnimated.View>
+      )}
 
       {/* ══════════════════════════════════════════════════════════
-          CREATE MODAL — Bottom Sheet
+          CREATE MODAL — compact single-surface composer
       ══════════════════════════════════════════════════════════ */}
       <Modal
-        animationType="slide"
-        transparent={true}
+        animationType="fade"
+        transparent
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeModal}
+        statusBarTranslucent
       >
-        <KeyboardAvoidingView style={styles.sheetOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-          <Animated.View entering={FadeInUp.duration(320).springify()} style={styles.sheetContent}>
-            {/* Handle */}
-            <View style={styles.sheetHandle} />
+        <KeyboardAvoidingView
+          style={[styles.sheetOverlay, isWide && styles.sheetOverlayWide]}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeModal} accessibilityLabel="Dismiss" />
 
-            {/* Header */}
+          <Animated.View
+            entering={isWide ? ZoomIn.duration(260).springify().damping(18) : FadeInUp.duration(280).springify().damping(16)}
+            style={[
+              styles.sheetContent,
+              isWide && styles.sheetContentWide,
+              { paddingBottom: Math.max(insets.bottom, 14) },
+            ]}
+          >
+            <LinearGradient
+              colors={isDark ? ['rgba(236,72,153,0.10)', 'transparent'] : ['rgba(253,242,248,0.95)', 'rgba(255,255,255,0)']}
+              style={styles.sheetAura}
+              pointerEvents="none"
+            />
+
+            {!isWide && <View style={styles.sheetHandle} />}
+
             <View style={styles.sheetHeader}>
               <View style={styles.sheetTitleRow}>
                 <View style={styles.sheetIconBadge}>
-                  <Ionicons name="megaphone-outline" size={16} color={PINK} />
+                  <Ionicons name="megaphone" size={17} color={ROSE} />
                 </View>
-                <View>
+                <View style={{ flex: 1 }}>
                   <Text style={styles.sheetTitle}>Post a Notice</Text>
-                  <Text style={styles.sheetSubtitle}>Broadcast to your audience</Text>
+                  <Text style={styles.sheetSubtitle}>{audienceHint} · {priorityHint}</Text>
                 </View>
               </View>
-              <TouchableOpacity style={styles.closeBtn} onPress={() => { setModalVisible(false); resetForm(); }}>
-                <Ionicons name="close" size={18} color="#374151" />
-              </TouchableOpacity>
+              <PressScale onPress={closeModal} style={styles.closeBtn}>
+                <Ionicons name="close" size={18} color={isDark ? '#CBD5E1' : '#475569'} />
+              </PressScale>
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.sheetScroll}>
-
-              {/* Section: Content */}
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: PINK }]} />
-                <Text style={styles.sectionTitle}>CONTENT</Text>
+            <ScrollView
+              style={styles.sheetScrollView}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetScroll}
+              keyboardShouldPersistTaps="handled"
+              bounces={false}
+            >
+              {/* Title */}
+              <View style={styles.fieldBlock}>
+                <View style={styles.labelRow}>
+                  <Text style={[styles.label, { marginBottom: 0 }]}>Headline</Text>
+                  <Text style={[styles.charCount, { marginBottom: 0 }, title.length > TITLE_MAX * 0.9 && { color: ROSE }]}>
+                    {title.length}/{TITLE_MAX}
+                  </Text>
+                </View>
+                <View style={[styles.inputFrame, clayInset(isDark, titleFocused) as any, titleFocused && styles.inputFocused]}>
+                  <AppTextInput
+                    style={styles.input}
+                    placeholder="What’s happening?"
+                    placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
+                    value={title}
+                    onChangeText={(t) => setTitle(t.slice(0, TITLE_MAX))}
+                    onFocus={() => setTitleFocused(true)}
+                    onBlur={() => setTitleFocused(false)}
+                    returnKeyType="next"
+                  />
+                </View>
+                {attemptedSubmit && !titleOk && (
+                  <Text style={styles.fieldError}>Add a headline so people can scan the board</Text>
+                )}
               </View>
 
-              <Text style={styles.label}>TITLE</Text>
-              <AppTextInput
-                style={styles.input}
-                placeholder="Notice headline..."
-                placeholderTextColor="#9CA3AF"
-                value={title}
-                onChangeText={setTitle}
-              />
-
-              <Text style={styles.label}>BODY</Text>
-              <AppTextInput
-                style={[styles.input, styles.textArea]}
-                placeholder="Write the full notice details..."
-                placeholderTextColor="#9CA3AF"
-                value={content}
-                onChangeText={setContent}
-                multiline
-                numberOfLines={4}
-                textAlignVertical="top"
-              />
-
-              {/* Section: Targeting */}
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: '#8B5CF6' }]} />
-                <Text style={styles.sectionTitle}>TARGETING</Text>
+              {/* Body */}
+              <View style={styles.fieldBlock}>
+                <View style={styles.labelRow}>
+                  <Text style={[styles.label, { marginBottom: 0 }]}>Details</Text>
+                  <Text style={[styles.charCount, { marginBottom: 0 }, content.length > BODY_MAX * 0.9 && { color: ROSE }]}>
+                    {content.length}/{BODY_MAX}
+                  </Text>
+                </View>
+                <View style={[styles.inputFrame, styles.textAreaFrame, clayInset(isDark, bodyFocused) as any, bodyFocused && styles.inputFocused]}>
+                  <AppTextInput
+                    style={[styles.input, styles.textArea]}
+                    placeholder="Who, what, when…"
+                    placeholderTextColor={isDark ? '#475569' : '#94A3B8'}
+                    value={content}
+                    onChangeText={(t) => setContent(t.slice(0, BODY_MAX))}
+                    multiline
+                    numberOfLines={3}
+                    textAlignVertical="top"
+                    onFocus={() => setBodyFocused(true)}
+                    onBlur={() => setBodyFocused(false)}
+                  />
+                </View>
+                {attemptedSubmit && !bodyOk && (
+                  <Text style={styles.fieldError}>Add a short body with the key details</Text>
+                )}
               </View>
 
-              <Text style={styles.label}>AUDIENCE</Text>
-              <View style={styles.pillGrid}>
-                {(['all', 'students', 'staff', 'parents', 'class'] as const).map((a) => {
-                  const am = AUDIENCE_META[a];
-                  const active = audience === a;
-                  return (
-                    <TouchableOpacity
-                      key={a}
-                      style={[styles.audienceChip, active && { backgroundColor: am.bg, borderColor: am.color }]}
-                      onPress={() => setAudience(a)}
-                    >
-                      <AudienceIcon type={a} size={12} color={active ? am.color : '#9CA3AF'} />
-                      <Text style={[styles.chipText, active && { color: am.color, fontWeight: '700' }]}>
-                        {a.charAt(0).toUpperCase() + a.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View style={styles.divider} />
+
+              {/* Audience — equal-width segmented row */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Audience</Text>
+                <View style={styles.audienceTrack}>
+                  {(['all', 'students', 'staff', 'parents', 'class'] as const).map((a) => {
+                    const active = audience === a;
+                    const label = a === 'all' ? 'All'
+                      : a === 'students' ? 'Students'
+                      : a === 'staff' ? 'Staff'
+                      : a === 'parents' ? 'Parents'
+                      : 'Class';
+                    return (
+                      <PressScale key={a} onPress={() => setAudience(a)} style={styles.audienceSeg}>
+                        <View style={[styles.audienceChip, active && styles.audienceChipActive]}>
+                          <AudienceIcon type={a} size={14} color={active ? '#fff' : '#64748B'} />
+                          <Text
+                            style={[styles.chipText, active && styles.chipTextActive]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.85}
+                          >
+                            {label}
+                          </Text>
+                        </View>
+                      </PressScale>
+                    );
+                  })}
+                </View>
+
+                {audience === 'class' && (
+                  <Animated.View entering={FadeInDown.duration(220)} style={{ marginTop: 10 }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.classRow}>
+                      {classes.map((c) => {
+                        const active = targetClassId === c.id;
+                        return (
+                          <PressScale key={c.id} onPress={() => setTargetClassId(c.id)}>
+                            <View style={[styles.classChip, active && styles.classChipActive]}>
+                              <Text style={[styles.classChipText, active && styles.classChipTextActive]}>
+                                {c.name}
+                              </Text>
+                            </View>
+                          </PressScale>
+                        );
+                      })}
+                    </ScrollView>
+                    {attemptedSubmit && !classOk && (
+                      <Text style={styles.fieldError}>Pick a class to continue</Text>
+                    )}
+                  </Animated.View>
+                )}
               </View>
 
-              {audience === 'class' && (
-                <Animated.View entering={FadeInDown.duration(300)}>
-                  <Text style={styles.label}>SELECT CLASS</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.classRow}>
-                    {classes.map((c) => (
-                      <TouchableOpacity
-                        key={c.id}
-                        style={[styles.classChip, targetClassId === c.id && styles.classChipActive]}
-                        onPress={() => setTargetClassId(c.id)}
-                      >
-                        <Text style={[styles.classChipText, targetClassId === c.id && styles.classChipTextActive]}>
-                          {c.name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </Animated.View>
-              )}
-
-              {/* Section: Settings */}
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionDot, { backgroundColor: '#F59E0B' }]} />
-                <Text style={styles.sectionTitle}>SETTINGS</Text>
+              {/* Priority — rose selected state (brand-consistent); color dots carry meaning */}
+              <View style={styles.fieldBlock}>
+                <Text style={styles.label}>Priority</Text>
+                <View style={styles.priorityTrack}>
+                  {(['low', 'medium', 'high'] as const).map((p) => {
+                    const pm = PRIORITY_META[p];
+                    const active = priority === p;
+                    return (
+                      <PressScale key={p} onPress={() => setPriority(p)} style={styles.prioritySeg}>
+                        <View style={[styles.priorityChip, active && styles.priorityChipActive]}>
+                          <View style={[styles.priorityDot, { backgroundColor: active ? '#fff' : pm.dot }]} />
+                          <Text style={[
+                            styles.priorityChipText,
+                            active && styles.priorityChipTextActive,
+                          ]}>
+                            {p.charAt(0).toUpperCase() + p.slice(1)}
+                          </Text>
+                        </View>
+                      </PressScale>
+                    );
+                  })}
+                </View>
               </View>
 
-              <Text style={styles.label}>PRIORITY</Text>
-              <View style={styles.priorityGrid}>
-                {(['low', 'medium', 'high'] as const).map((p) => {
-                  const pm = PRIORITY_META[p];
-                  const active = priority === p;
-                  return (
-                    <TouchableOpacity
-                      key={p}
-                      style={[styles.priorityChip, active && { backgroundColor: pm.bg, borderColor: pm.dot }]}
-                      onPress={() => setPriority(p)}
-                    >
-                      <PulseDot color={active ? pm.dot : '#D1D5DB'} size={5} />
-                      <Text style={[styles.chipText, active && { color: pm.text, fontWeight: '700' }]}>
-                        {p.charAt(0).toUpperCase() + p.slice(1)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              {/* Pin toggle */}
-              <View style={[styles.pinRow, isPinned && styles.pinRowActive]}>
+              {/* Pin — compact inline row */}
+              <Pressable
+                onPress={() => setIsPinned(!isPinned)}
+                style={[styles.pinRow, isPinned && styles.pinRowActive]}
+              >
                 <View style={styles.pinRowLeft}>
                   <View style={[styles.pinIconBox, isPinned && styles.pinIconBoxActive]}>
-                    <Ionicons name="pin" size={16} color={isPinned ? '#fff' : '#9CA3AF'} />
+                    <Ionicons name="pin" size={14} color={isPinned ? '#fff' : '#94A3B8'} />
                   </View>
-                  <View>
-                    <Text style={styles.pinLabel}>Pin to Top</Text>
-                    <Text style={styles.pinSubLabel}>Stays above all other notices</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.pinLabel}>Pin to top</Text>
+                    <Text style={styles.pinSubLabel}>Stays above other notices</Text>
                   </View>
                 </View>
-                <Switch
-                  value={isPinned}
-                  onValueChange={setIsPinned}
-                  trackColor={{ false: theme.colors.card, true: PINK_BD }}
-                  thumbColor={isPinned ? PINK : '#E5E7EB'}
-                  ios_backgroundColor={theme.colors.card}
-                />
-              </View>
-
-              {/* Publish button */}
-              <TouchableOpacity
-                style={[styles.publishBtn, creating && { opacity: 0.7 }]}
-                onPress={handleCreate}
-                disabled={creating}
-              >
-                {creating ? (
-                  <LogoLoader color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="send-outline" size={17} color="#fff" style={{ marginRight: 8 }} />
-                    <Text style={styles.publishBtnText}>Publish Notice</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
+                <ClayToggle value={isPinned} onChange={setIsPinned} />
+              </Pressable>
             </ScrollView>
+
+            <View style={styles.stickyFooter}>
+              {!canPublish && attemptedSubmit && (
+                <Animated.View entering={FadeIn.duration(160)} style={styles.footerHint}>
+                  <Ionicons name="information-circle" size={14} color={ROSE} />
+                  <Text style={styles.footerHintText}>
+                    {!titleOk ? 'Add a headline' : !bodyOk ? 'Add details' : 'Pick a class'}
+                  </Text>
+                </Animated.View>
+              )}
+              <PremiumButton
+                title={creating ? 'Publishing…' : 'Publish Notice'}
+                onPress={handleCreate}
+                loading={creating}
+                disabled={creating}
+                height={48}
+                colors={canPublish ? [ROSE, ROSE_DEEP] : ['#F9A8D4', '#F472B6']}
+                icon={!creating ? <Ionicons name="send" size={14} color="#fff" style={{ marginLeft: 8 }} /> : undefined}
+                style={!canPublish ? { ...styles.publishBtn, opacity: 0.72 } : styles.publishBtn}
+              />
+            </View>
           </Animated.View>
         </KeyboardAvoidingView>
       </Modal>
@@ -503,69 +672,74 @@ export default function AdminNotices() {
 // ─────────────────────────────────────────────────────────────────────────────
 // STYLES
 // ─────────────────────────────────────────────────────────────────────────────
-const getStyles = (theme: Theme) => StyleSheet.create({
+const getStyles = (theme: Theme, isDark: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: 'transparent' },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 14, fontSize: 13, color: theme.colors.textSecondary, letterSpacing: 0.3 },
+  loadingText: { marginTop: 14, fontSize: 13, color: theme.colors.textSecondary, letterSpacing: 0.2 },
 
-  // ── SEARCH ────────────────────────────────────────────────
   searchContainer: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: theme.colors.background,
+    backgroundColor: isDark ? theme.colors.card : '#fff',
     marginHorizontal: 20, marginTop: 16,
-    paddingHorizontal: 14, borderRadius: 14, height: 50,
-    elevation: 2, borderWidth: 1.5, borderColor: '#CBD5E1',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 5,
+    paddingHorizontal: 14, borderRadius: 16, height: 50,
+    borderWidth: 1.5, borderColor: isDark ? theme.colors.border : '#E2E8F0',
+    ...(Platform.OS === 'android'
+      ? { elevation: 2 }
+      : { shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8 }),
   },
   searchFocused: {
-    borderColor: PINK,
-    shadowColor: PINK, shadowOpacity: 0.18, shadowRadius: 10, elevation: 5,
+    borderColor: ROSE_EDGE,
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: ROSE, shadowOpacity: 0.16, shadowRadius: 12 }
+      : { elevation: 4 }),
   },
   searchIcon: { marginRight: 10 },
-  searchInput: { flex: 1, fontSize: 14, color: '#1F2937', fontWeight: '500' },
+  searchInput: { flex: 1, fontSize: 14, color: theme.colors.textStrong, fontWeight: '500' },
   clearBtn: {
     width: 22, height: 22, borderRadius: 11,
-    backgroundColor: '#9CA3AF', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#94A3B8', justifyContent: 'center', alignItems: 'center',
   },
 
-  // ── STATS STRIP ───────────────────────────────────────────
   statsStrip: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.background,
+    backgroundColor: isDark ? theme.colors.card : '#fff',
     marginHorizontal: 20, marginTop: 12,
-    borderRadius: 14, paddingVertical: 13, paddingHorizontal: 18,
-    elevation: 2, alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 5,
+    borderRadius: 18, paddingVertical: 14, paddingHorizontal: 10,
+    borderWidth: 1, borderColor: isDark ? theme.colors.border : 'rgba(148,163,184,0.18)',
+    alignItems: 'center',
+    ...(Platform.OS === 'android' ? { elevation: 2 } : {
+      shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8,
+    }),
   },
-  statChip: { flex: 1, alignItems: 'center', borderLeftWidth: 3, borderLeftColor: '#E5E7EB', paddingLeft: 10 },
-  statDivider: { width: 1, height: 30, backgroundColor: theme.colors.card, marginHorizontal: 4 },
-  statNumber: { fontSize: 18, fontWeight: '900', color: '#111827', letterSpacing: -0.5 },
-  statLabel: { fontSize: 10, color: theme.colors.textTertiary, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 2 },
+  statChip: { flex: 1, alignItems: 'center' },
+  statDivider: { width: 1, height: 28, backgroundColor: isDark ? theme.colors.border : '#E2E8F0' },
+  statNumber: { fontSize: 20, fontWeight: '800', color: theme.colors.textStrong, letterSpacing: -0.6 },
+  statLabel: {
+    fontSize: 10, color: theme.colors.textTertiary, fontWeight: '600',
+    textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 3,
+  },
 
-  // ── LIST ──────────────────────────────────────────────────
-  listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 110 },
+  listContent: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 120 },
 
-  // ── CARD ──────────────────────────────────────────────────
   card: {
-    backgroundColor: theme.colors.background,
-    borderRadius: 20, marginBottom: 14,
+    backgroundColor: isDark ? theme.colors.card : '#fff',
+    borderRadius: 22, marginBottom: 12,
     flexDirection: 'row', overflow: 'hidden',
-    elevation: 4,
-    shadowColor: '#1F1F2E',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.09, shadowRadius: 12,
+    borderWidth: 1, borderColor: isDark ? theme.colors.border : 'rgba(148,163,184,0.16)',
+    borderBottomWidth: 1.5, borderBottomColor: isDark ? theme.colors.border : 'rgba(100,116,139,0.14)',
+    ...(Platform.OS === 'android' ? { elevation: 3 } : {
+      shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.09, shadowRadius: 12,
+    }),
   },
   cardPinned: {
-    borderWidth: 1.5, borderColor: PINK_BD,
-    shadowColor: PINK, shadowOpacity: 0.14, shadowRadius: 14, elevation: 6,
+    borderColor: ROSE_EDGE,
+    borderBottomColor: ROSE_EDGE,
+    ...(Platform.OS === 'ios'
+      ? { shadowColor: ROSE, shadowOpacity: 0.14, shadowRadius: 14 }
+      : { elevation: 4 }),
   },
   cardStripe: { width: 4 },
   cardInner: { flex: 1, padding: 16 },
-
   cardTop: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'flex-start', marginBottom: 8, gap: 8,
@@ -573,29 +747,23 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   titleRow: { flex: 1 },
   pinBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: PINK_MD, paddingHorizontal: 7, paddingVertical: 3,
-    borderRadius: 6, alignSelf: 'flex-start', marginBottom: 6,
-    borderWidth: 1, borderColor: PINK_BD,
+    backgroundColor: ROSE_MID, paddingHorizontal: 7, paddingVertical: 3,
+    borderRadius: 8, alignSelf: 'flex-start', marginBottom: 6,
   },
-  pinText: { fontSize: 9, fontWeight: '900', color: PINK, letterSpacing: 0.8 },
-
+  pinText: { fontSize: 9, fontWeight: '800', color: ROSE, letterSpacing: 0.7 },
   cardTitle: {
-    fontSize: 15, fontWeight: '700', color: '#111827', letterSpacing: -0.3, lineHeight: 22,
+    fontSize: 15, fontWeight: '700', color: theme.colors.textStrong, letterSpacing: -0.3, lineHeight: 21,
   },
-  cardTitlePinned: { color: '#1F2937' },
-
   priorityBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: 9, paddingVertical: 5,
     borderRadius: 20, borderWidth: 1, flexShrink: 0,
   },
-  priorityText: { fontSize: 9, fontWeight: '900', letterSpacing: 0.7 },
-
+  priorityText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
   cardContent: {
     fontSize: 13, color: theme.colors.textSecondary,
     lineHeight: 19, marginBottom: 12,
   },
-
   cardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   audiencePill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,
@@ -605,155 +773,227 @@ const getStyles = (theme: Theme) => StyleSheet.create({
   timeRow: { flexDirection: 'row', alignItems: 'center' },
   dateText: { fontSize: 11, color: theme.colors.textTertiary, fontWeight: '500' },
 
-  // ── EMPTY ─────────────────────────────────────────────────
-  emptyContainer: { alignItems: 'center', paddingTop: 70 },
+  emptyContainer: { alignItems: 'center', paddingTop: 64, paddingHorizontal: 28 },
   emptyIconWrap: {
-    width: 84, height: 84, borderRadius: 42,
-    backgroundColor: PINK_LT,
-    justifyContent: 'center', alignItems: 'center', marginBottom: 18,
-    elevation: 3, shadowColor: PINK,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15, shadowRadius: 10,
+    width: 88, height: 88, borderRadius: 28,
+    backgroundColor: ROSE_SOFT,
+    justifyContent: 'center', alignItems: 'center', marginBottom: 20,
+    overflow: 'hidden',
+    borderWidth: 1, borderColor: ROSE_EDGE,
   },
-  emptyTitle: { fontSize: 17, fontWeight: '800', color: '#374151', letterSpacing: -0.3 },
-  emptySubtitle: { fontSize: 13, color: theme.colors.textTertiary, marginTop: 6, textAlign: 'center', paddingHorizontal: 44 },
+  emptyTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.textStrong, letterSpacing: -0.4 },
+  emptySubtitle: {
+    fontSize: 14, color: theme.colors.textSecondary, marginTop: 8,
+    textAlign: 'center', lineHeight: 21, maxWidth: 300,
+  },
+  emptyCta: {
+    marginTop: 22, flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: ROSE, paddingHorizontal: 20, paddingVertical: 12,
+    borderRadius: 16, overflow: 'hidden',
+  },
+  emptyCtaText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
-  // ── FAB ───────────────────────────────────────────────────
-  fabWrapper: { position: 'absolute', bottom: 28, right: 18 },
+  fabWrapper: { position: 'absolute', right: 18 },
   fab: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: PINK,
-    paddingVertical: 15, paddingHorizontal: 24,
-    borderRadius: 32, gap: 8,
-    elevation: 12,
-    shadowColor: PINK,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45, shadowRadius: 16,
+    backgroundColor: ROSE,
+    paddingVertical: 15, paddingHorizontal: 22,
+    borderRadius: 28, gap: 8, overflow: 'hidden',
+    borderBottomWidth: 1.5, borderBottomColor: 'rgba(0,0,0,0.12)',
+    ...(Platform.OS === 'android' ? { elevation: 8 } : {
+      shadowColor: ROSE, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.38, shadowRadius: 16,
+    }),
   },
-  fabLabel: { color: '#fff', fontWeight: '900', fontSize: 14, letterSpacing: 0.2 },
+  fabLabel: { color: '#fff', fontWeight: '800', fontSize: 14, letterSpacing: 0.2 },
 
-  // ── BOTTOM SHEET ──────────────────────────────────────────
+  // ── Sheet ─────────────────────────────────────────────────
   sheetOverlay: {
-    flex: 1, backgroundColor: 'rgba(8,8,24,0.58)', justifyContent: 'flex-end',
+    flex: 1, backgroundColor: 'rgba(15,23,42,0.55)',
+    justifyContent: 'flex-end',
+  },
+  sheetOverlayWide: {
+    justifyContent: 'center', alignItems: 'center', padding: 24,
   },
   sheetContent: {
-    backgroundColor: theme.colors.background,
-    borderTopLeftRadius: 30, borderTopRightRadius: 30,
-    paddingHorizontal: 22, paddingBottom: 10, paddingTop: 12,
-    maxHeight: '92%',
-    elevation: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.18, shadowRadius: 22,
+    backgroundColor: isDark ? theme.colors.card : '#FFFFFF',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 20, paddingTop: 10,
+    maxHeight: '90%',
+    width: '100%',
+    overflow: 'hidden',
+    ...(Platform.OS === 'android' ? { elevation: 16 } : {
+      shadowColor: '#0F172A', shadowOffset: { width: 0, height: -8 }, shadowOpacity: 0.22, shadowRadius: 28,
+    }),
+  },
+  sheetContentWide: {
+    maxWidth: 480, maxHeight: '84%',
+    borderRadius: 28,
+  },
+  sheetAura: {
+    position: 'absolute', top: 0, left: 0, right: 0, height: 100,
   },
   sheetHandle: {
-    width: 42, height: 4, borderRadius: 2,
-    backgroundColor: '#D1D5DB', alignSelf: 'center', marginBottom: 20,
+    width: 36, height: 4, borderRadius: 2,
+    backgroundColor: isDark ? 'rgba(255,255,255,0.18)' : 'rgba(148,163,184,0.4)',
+    alignSelf: 'center', marginBottom: 12,
   },
   sheetHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 4,
+    alignItems: 'center', marginBottom: 14, gap: 10,
   },
-  sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  sheetTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   sheetIconBadge: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: PINK_MD,
+    width: 40, height: 40, borderRadius: 14,
+    backgroundColor: ROSE_MID,
     justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: ROSE_EDGE,
   },
-  sheetTitle: { fontSize: 18, fontWeight: '900', color: '#111827', letterSpacing: -0.4 },
-  sheetSubtitle: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 1 },
+  sheetTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.textStrong, letterSpacing: -0.4 },
+  sheetSubtitle: { fontSize: 12, color: theme.colors.textSecondary, marginTop: 2 },
   closeBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: theme.colors.card,
+    width: 40, height: 40, borderRadius: 14,
+    backgroundColor: isDark ? theme.colors.background : '#F1F5F9',
     justifyContent: 'center', alignItems: 'center',
   },
-  sheetScroll: { paddingTop: 16, paddingBottom: 36 },
+  sheetScrollView: { flexGrow: 0, flexShrink: 1 },
+  sheetScroll: { paddingBottom: 8 },
 
-  // ── SECTION HEADERS ───────────────────────────────────────
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    marginTop: 20, marginBottom: 4,
-  },
-  sectionDot: { width: 8, height: 8, borderRadius: 4 },
-  sectionTitle: {
-    fontSize: 10, fontWeight: '800', color: '#9CA3AF',
-    letterSpacing: 1.4, textTransform: 'uppercase',
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: isDark ? theme.colors.border : '#E2E8F0',
+    marginVertical: 4, marginBottom: 14,
   },
 
-  // ── FORM ──────────────────────────────────────────────────
+  fieldBlock: { marginBottom: 14 },
+  labelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 },
   label: {
-    fontSize: 10, fontWeight: '800', color: '#9CA3AF',
-    letterSpacing: 1.2, textTransform: 'uppercase',
-    marginTop: 14, marginBottom: 8,
+    fontSize: 11, fontWeight: '700', color: theme.colors.textTertiary,
+    letterSpacing: 0.7, textTransform: 'uppercase', marginBottom: 7, paddingLeft: 1,
   },
+  charCount: { fontSize: 11, fontWeight: '600', color: theme.colors.textTertiary, marginBottom: 7 },
+  inputFrame: {
+    borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12,
+    overflow: 'hidden',
+    backgroundColor: isDark ? '#121824' : '#F1F5F9',
+    borderWidth: 1.5,
+    borderColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(148,163,184,0.2)',
+  },
+  inputFocused: {
+    borderColor: ROSE_EDGE,
+    backgroundColor: isDark ? '#0F172A' : '#FFFBFE',
+  },
+  textAreaFrame: { paddingVertical: 12 },
   input: {
-    backgroundColor: theme.colors.card,
-    borderWidth: 1.5, borderColor: theme.colors.border,
-    borderRadius: 13, padding: 14,
-    fontSize: 15, color: '#1F2937', fontWeight: '500',
+    fontSize: 15, color: theme.colors.textStrong, fontWeight: '500',
+    backgroundColor: 'transparent', borderWidth: 0, padding: 0,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'none' as any } : {}),
   },
-  textArea: { height: 110, textAlignVertical: 'top' },
+  textArea: { minHeight: 80, textAlignVertical: 'top', lineHeight: 22 },
+  fieldError: {
+    fontSize: 12, color: ROSE, marginTop: 6, fontWeight: '600', paddingLeft: 2,
+  },
 
-  // Audience chips
-  pillGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 6 },
+  audienceTrack: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : '#F1F5F9',
+    borderRadius: 14, padding: 4, gap: 4,
+  },
+  audienceSeg: { flex: 1, minWidth: 0 },
   audienceChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9,
-    borderRadius: 22,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1.5, borderColor: 'transparent',
+    flex: 1,
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    minHeight: 52,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    borderRadius: 11,
   },
-  chipText: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '500' },
+  audienceChipActive: {
+    backgroundColor: ROSE,
+    ...(Platform.OS === 'android' ? { elevation: 2 } : {
+      shadowColor: ROSE, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.28, shadowRadius: 4,
+    }),
+  },
+  chipText: {
+    fontSize: 11, color: '#64748B', fontWeight: '600',
+    textAlign: 'center', lineHeight: 13,
+    ...(Platform.OS === 'web' ? { whiteSpace: 'nowrap' as any } : {}),
+  },
+  chipTextActive: { color: '#fff', fontWeight: '700' },
 
-  // Class row
-  classRow: { marginBottom: 4 },
+  classRow: { gap: 8, paddingVertical: 2 },
   classChip: {
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 22,
-    backgroundColor: theme.colors.card, marginRight: 8,
+    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 999,
+    backgroundColor: isDark ? theme.colors.background : '#F1F5F9',
     borderWidth: 1.5, borderColor: 'transparent',
   },
-  classChipActive: { backgroundColor: PINK_MD, borderColor: PINK },
-  classChipText: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '500' },
-  classChipTextActive: { color: PINK, fontWeight: '700' },
+  classChipActive: { backgroundColor: ROSE, borderColor: ROSE },
+  classChipText: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '600' },
+  classChipTextActive: { color: '#fff', fontWeight: '700' },
 
-  // Priority chips
-  priorityGrid: { flexDirection: 'row', gap: 10, marginBottom: 6 },
+  priorityTrack: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 4,
+    backgroundColor: isDark ? 'rgba(0,0,0,0.25)' : '#F1F5F9',
+    borderRadius: 14, padding: 4,
+  },
+  prioritySeg: { flex: 1, minWidth: 0 },
   priorityChip: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7,
-    paddingVertical: 12, borderRadius: 14,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1.5, borderColor: 'transparent',
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 7,
+    minHeight: 44,
+    paddingVertical: 10,
+    borderRadius: 11,
   },
+  priorityChipActive: {
+    backgroundColor: ROSE,
+    ...(Platform.OS === 'android' ? { elevation: 2 } : {
+      shadowColor: ROSE, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.28, shadowRadius: 4,
+    }),
+  },
+  priorityDot: { width: 7, height: 7, borderRadius: 3.5 },
+  priorityChipText: { fontSize: 13, color: theme.colors.textSecondary, fontWeight: '600' },
+  priorityChipTextActive: { color: '#fff', fontWeight: '700' },
 
-  // Pin toggle
   pinRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: theme.colors.card,
-    borderRadius: 16, padding: 14,
-    marginTop: 6, marginBottom: 4,
-    borderWidth: 1.5, borderColor: 'transparent',
+    backgroundColor: isDark ? theme.colors.background : '#F8FAFC',
+    borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12,
+    borderWidth: 1.5, borderColor: isDark ? theme.colors.border : '#E2E8F0',
+    marginBottom: 4,
   },
-  pinRowActive: { backgroundColor: PINK_LT, borderColor: PINK_BD },
-  pinRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  pinRowActive: { backgroundColor: ROSE_SOFT, borderColor: ROSE_EDGE },
+  pinRowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, paddingRight: 8 },
   pinIconBox: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: theme.colors.background,
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: isDark ? theme.colors.card : '#E2E8F0',
     justifyContent: 'center', alignItems: 'center',
   },
-  pinIconBoxActive: { backgroundColor: PINK },
-  pinLabel: { fontSize: 14, fontWeight: '700', color: '#111827' },
+  pinIconBoxActive: { backgroundColor: ROSE },
+  pinLabel: { fontSize: 13, fontWeight: '700', color: theme.colors.textStrong },
   pinSubLabel: { fontSize: 11, color: theme.colors.textSecondary, marginTop: 1 },
 
-  // Publish button
-  publishBtn: {
-    backgroundColor: PINK,
-    padding: 17, borderRadius: 16,
-    alignItems: 'center', flexDirection: 'row', justifyContent: 'center',
-    marginTop: 20,
-    elevation: 8,
-    shadowColor: PINK,
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.45, shadowRadius: 14,
+  stickyFooter: {
+    paddingTop: 12, paddingBottom: 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: isDark ? theme.colors.border : '#E2E8F0',
   },
-  publishBtnText: { color: '#fff', fontWeight: '900', fontSize: 15, letterSpacing: 0.3 },
+  footerHint: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginBottom: 8, paddingHorizontal: 2,
+  },
+  footerHintText: { fontSize: 12, color: ROSE, fontWeight: '600' },
+  publishBtn: {
+    borderRadius: 14, overflow: 'hidden',
+    ...(Platform.OS === 'android' ? { elevation: 4 } : {
+      shadowColor: ROSE, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10,
+    }),
+  },
 });

@@ -291,7 +291,7 @@ export default function DriverBusStopAttendanceScreen() {
   if (isEnabled === false) {
     return (
       <View style={[styles.container, { backgroundColor: pageBg }]}>
-        <StudentHeader title="Bus Attendance" menuUserType="driver" />
+        <StudentHeader title="Bus Attendance" menuUserType="driver" showBackButton={false} />
         <View style={styles.centerBox}>
           <Ionicons name="lock-closed-outline" size={60} color={subColor} />
           <Text style={[styles.emptyTitle, { color: titleColor }]}>Feature Disabled</Text>
@@ -306,7 +306,7 @@ export default function DriverBusStopAttendanceScreen() {
   if (!trip) {
     return (
       <View style={[styles.container, { backgroundColor: pageBg }]}>
-        <StudentHeader title="Bus Attendance" menuUserType="driver" />
+        <StudentHeader title="Bus Attendance" menuUserType="driver" showBackButton={false} />
         <View style={styles.centerBox}>
           <Ionicons name="bus-outline" size={64} color={subColor} />
           <Text style={[styles.emptyTitle, { color: titleColor }]}>No Active Trip</Text>
@@ -327,7 +327,7 @@ export default function DriverBusStopAttendanceScreen() {
       <View style={[styles.orb1, { backgroundColor: orb1Color }]} />
       <View style={[styles.orb2, { backgroundColor: orb2Color }]} />
 
-      <StudentHeader title="Bus Attendance" menuUserType="driver" />
+      <StudentHeader title="Bus Attendance" menuUserType="driver" showBackButton={false} />
 
       <Animated.ScrollView
         onScroll={onScroll}

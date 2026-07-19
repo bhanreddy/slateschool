@@ -13,9 +13,15 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import AppTextInput from '@/src/components/AppTextInput';
-import { styles as ds } from '@/src/theme/styles';
-import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeInDown, FadeIn } from 'react-native-reanimated';
+import { clay, clayCard, clayInset } from '@/src/theme/clayStyles';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import Animated, {
+  FadeIn,
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import AdminHeader from '../../../src/components/AdminHeader';
 import LogoLoader from '../../../src/components/LogoLoader';
 import PaymentDeletionActions from '../../../src/components/accounts/PaymentDeletionActions';
@@ -51,6 +57,12 @@ const EMPTY_FILTERS: CollectionFilters = {
   feeType: 'all',
   search: '',
 };
+
+const ACCENT = '#0D9488';
+const ACCENT_SOFT = '#CCFBF1';
+const ACCENT_DEEP = '#0F766E';
+const MONEY = '#059669';
+const FONT = Platform.OS === 'ios' ? 'SF Pro Display' : 'System';
 
 function applyCollectionFilters(rows: FeeTransaction[], filters: CollectionFilters): FeeTransaction[] {
   let list = rows;
@@ -107,6 +119,47 @@ function formatTodayLabel(isoDate: string): string {
   });
 }
 
+function formatShortDate(isoDate: string): string {
+  const date = new Date(`${isoDate}T12:00:00`);
+  return date.toLocaleDateString('en-IN', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+}
+
+const PressableScale = ({
+  children,
+  onPress,
+  disabled,
+  style,
+}: {
+  children: React.ReactNode;
+  onPress?: () => void;
+  disabled?: boolean;
+  style?: any;
+}) => {
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 16, stiffness: 280 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 16, stiffness: 280 });
+      }}
+    >
+      <Animated.View style={[style, animStyle, disabled && { opacity: 0.55 }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+};
+
 const TransactionCard = React.memo(function TransactionCard({
   item,
   index,
@@ -118,70 +171,58 @@ const TransactionCard = React.memo(function TransactionCard({
   isDark: boolean;
   onChanged: () => void | Promise<void>;
 }) {
-  const cardBg = isDark ? '#1C1F2A' : '#FFFFFF';
-  const textPri = isDark ? '#F9FAFB' : '#111827';
-  const textSec = isDark ? 'rgba(255,255,255,0.45)' : '#6B7280';
+  const textPri = isDark ? '#F1F5F9' : '#0F172A';
+  const textSec = isDark ? 'rgba(255,255,255,0.45)' : '#64748B';
+  const enterDelay = Math.min(index, 8) * 45;
 
   return (
-    <Animated.View entering={FadeInDown.delay(index * 40).duration(350).springify()}>
+    <Animated.View entering={FadeInDown.delay(enterDelay).duration(320)}>
       <View
         style={[
           cardStyles.card,
-          {
-            backgroundColor: cardBg,
-            borderWidth: 0,
-            borderTopWidth: 1.5,
-            borderTopColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.85)',
-            borderBottomWidth: 3.5,
-            borderBottomColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(76,90,120,0.06)',
-            shadowColor: isDark ? '#000' : '#6B7A99',
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: isDark ? 0.22 : 0.08,
-            shadowRadius: 10,
-            elevation: 3,
-            position: 'relative',
-          }
+          clayCard(isDark, 'sm'),
+          { backgroundColor: isDark ? '#1A2332' : '#F8FAFC', borderWidth: 0 },
         ]}
       >
-        <View style={[StyleSheet.absoluteFill, { borderRadius: 18, overflow: 'hidden' }]}>
-          <LinearGradient
-            colors={isDark ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.4)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        </View>
-
-        <View style={[cardStyles.accent, { backgroundColor: '#10B981', width: 5, borderRadius: 3, marginVertical: 12, marginLeft: 2 }]} />
-        <View style={[cardStyles.inner, { zIndex: 2 }]}>
+        <View style={[cardStyles.accent, { backgroundColor: MONEY }]} />
+        <View style={cardStyles.inner}>
           <View style={cardStyles.topRow}>
+            <View style={[cardStyles.avatar, { backgroundColor: isDark ? 'rgba(13,148,136,0.18)' : ACCENT_SOFT }]}>
+              <Text style={[cardStyles.avatarText, { color: ACCENT_DEEP }]}>
+                {(item.student_name ?? '?').charAt(0).toUpperCase()}
+              </Text>
+            </View>
             <View style={cardStyles.titleBlock}>
-              <Text style={[cardStyles.student, { color: textPri }]} numberOfLines={1}>
+              <Text style={[cardStyles.student, { color: textPri, fontFamily: FONT }]} numberOfLines={1}>
                 {item.student_name ?? '—'}
               </Text>
               {item.father_name ? (
-                <Text style={[cardStyles.father, { color: textSec }]} numberOfLines={1}>
+                <Text style={[cardStyles.father, { color: textSec, fontFamily: FONT }]} numberOfLines={1}>
                   {item.father_name}
                 </Text>
               ) : null}
             </View>
-            <Text style={[cardStyles.amount, { color: '#10B981' }]}>
-              {formatAmount(Number(item.amount || 0))}
-            </Text>
+            <View style={cardStyles.amountBlock}>
+              <Text style={[cardStyles.amount, { color: MONEY, fontFamily: FONT }]}>
+                {formatAmount(Number(item.amount || 0))}
+              </Text>
+              <Text style={[cardStyles.timeHint, { color: textSec, fontFamily: FONT }]}>
+                {formatTime(item.paid_at)}
+              </Text>
+            </View>
           </View>
 
           <View style={cardStyles.metaRow}>
             <MetaChip label={item.fee_type ?? 'Fee'} isDark={isDark} />
-            <MetaChip label={formatPaymentMethod(item.payment_method)} isDark={isDark} accent="#6366F1" />
+            <MetaChip label={formatPaymentMethod(item.payment_method)} isDark={isDark} accent={ACCENT} />
             <MetaChip
               label={formatClassSection(item.class_name, item.section_name)}
               isDark={isDark}
             />
           </View>
 
-          <View style={cardStyles.detailRow}>
+          <View style={[cardStyles.detailRow, { borderTopColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(15,23,42,0.06)' }]}>
             <DetailCell label="Adm no" value={item.admission_no ?? '—'} color={textSec} />
-            <DetailCell label="Time" value={formatTime(item.paid_at)} color={textSec} />
             <DetailCell label="Ref" value={item.transaction_ref ?? '—'} color={textSec} flex />
           </View>
           <PaymentDeletionActions transaction={item} isDark={isDark} onChanged={onChanged} />
@@ -198,17 +239,17 @@ function MetaChip({ label, isDark, accent }: { label: string; isDark: boolean; a
         cardStyles.chip,
         {
           backgroundColor: accent
-            ? `${accent}18`
+            ? `${accent}14`
             : isDark
               ? 'rgba(255,255,255,0.06)'
-              : '#F3F4F6',
+              : '#EEF2F7',
         },
       ]}
     >
       <Text
         style={[
           cardStyles.chipText,
-          { color: accent ?? (isDark ? 'rgba(255,255,255,0.65)' : '#475569') },
+          { color: accent ?? (isDark ? 'rgba(255,255,255,0.65)' : '#475569'), fontFamily: FONT },
         ]}
         numberOfLines={1}
       >
@@ -231,8 +272,8 @@ function DetailCell({
 }) {
   return (
     <View style={[cardStyles.detailCell, flex ? { flex: 1 } : undefined]}>
-      <Text style={[cardStyles.detailLabel, { color }]}>{label}</Text>
-      <Text style={[cardStyles.detailValue, { color }]} numberOfLines={1}>
+      <Text style={[cardStyles.detailLabel, { color, fontFamily: FONT }]}>{label}</Text>
+      <Text style={[cardStyles.detailValue, { color, fontFamily: FONT }]} numberOfLines={1}>
         {value}
       </Text>
     </View>
@@ -246,91 +287,84 @@ function SummaryStrip({
   totals: ReturnType<typeof computeCollectionTotals>;
   isDark: boolean;
 }) {
-  const bg = isDark ? '#1D2433' : '#3B82F6';
-  const textSec = isDark ? 'rgba(255,255,255,0.5)' : 'rgba(255,255,255,0.85)';
+  const modeChips = PAYMENT_MODES.map((mode) => {
+    const bucket = totals.byMode[mode];
+    if (!bucket || bucket.count === 0) return null;
+    return (
+      <View
+        key={mode}
+        style={[
+          sumStyles.modeChip,
+          {
+            backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.05)',
+          },
+        ]}
+      >
+        <Text style={[sumStyles.modeLabel, { color: isDark ? 'rgba(255,255,255,0.45)' : '#64748B', fontFamily: FONT }]}>
+          {formatPaymentMethod(mode)}
+        </Text>
+        <Text style={[sumStyles.modeValue, { color: isDark ? '#F8FAFC' : '#0F172A', fontFamily: FONT }]}>
+          {formatAmount(bucket.total)}
+        </Text>
+        <Text style={[sumStyles.modeCount, { color: isDark ? 'rgba(255,255,255,0.35)' : '#94A3B8', fontFamily: FONT }]}>
+          {bucket.count} txn
+        </Text>
+      </View>
+    );
+  }).filter(Boolean);
 
   return (
-    <Animated.View
-      entering={FadeIn.duration(400)}
-      style={[
-        sumStyles.wrap,
-        {
-          backgroundColor: bg,
-          borderTopWidth: 1.5,
-          borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.45)',
-          borderBottomWidth: 3.5,
-          borderBottomColor: isDark ? 'rgba(0,0,0,0.5)' : 'rgba(29,78,216,0.3)',
-          shadowColor: isDark ? '#000' : '#2563EB',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: isDark ? 0.35 : 0.25,
-          shadowRadius: 16,
-          elevation: 6,
-          position: 'relative',
-          overflow: 'visible',
-        }
-      ]}
-    >
-      <View style={[StyleSheet.absoluteFill, { borderRadius: 18, overflow: 'hidden' }]}>
-        <LinearGradient
-          colors={isDark ? ['rgba(255,255,255,0.12)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.4)', 'rgba(255,255,255,0)']}
-          start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
+    <Animated.View entering={FadeInDown.delay(60).duration(360)} style={sumStyles.wrap}>
+      <View style={sumStyles.statRow}>
+        <View
+          style={[
+            sumStyles.statCard,
+            clayCard(isDark, 'md'),
+            { backgroundColor: isDark ? '#1A2332' : '#F4F7FB', borderWidth: 0 },
+          ]}
+        >
+          <View style={[sumStyles.statIcon, { backgroundColor: isDark ? 'rgba(13,148,136,0.2)' : ACCENT_SOFT }]}>
+            <Ionicons name="receipt-outline" size={18} color={ACCENT} />
+          </View>
+          <Text style={[sumStyles.statLabel, { color: isDark ? 'rgba(255,255,255,0.45)' : '#64748B', fontFamily: FONT }]}>
+            Transactions
+          </Text>
+          <Text style={[sumStyles.statValue, { color: isDark ? '#F8FAFC' : '#0F172A', fontFamily: FONT }]}>
+            {totals.count}
+          </Text>
+        </View>
+
+        <View
+          style={[
+            sumStyles.statCard,
+            clayCard(isDark, 'md'),
+            { backgroundColor: isDark ? '#1A2332' : '#F4F7FB', borderWidth: 0, overflow: 'hidden' },
+          ]}
+        >
+          <LinearGradient
+            colors={isDark ? ['rgba(16,185,129,0.18)', 'rgba(16,185,129,0)'] : ['rgba(204,251,241,0.9)', 'rgba(244,247,251,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <View style={[sumStyles.statIcon, { backgroundColor: isDark ? 'rgba(16,185,129,0.2)' : '#D1FAE5' }]}>
+            <Ionicons name="wallet-outline" size={18} color={MONEY} />
+          </View>
+          <Text style={[sumStyles.statLabel, { color: isDark ? 'rgba(255,255,255,0.45)' : '#64748B', fontFamily: FONT }]}>
+            Grand total
+          </Text>
+          <Text style={[sumStyles.statValueMoney, { color: MONEY, fontFamily: FONT }]} numberOfLines={1}>
+            {formatAmount(totals.grandTotal)}
+          </Text>
+        </View>
       </View>
 
-      <View style={[sumStyles.topRow, { zIndex: 2 }]}>
-        <SumCell label="Transactions" value={String(totals.count)} color="#FFFFFF" sec={textSec} />
-        <View style={[sumStyles.sep, { backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.3)' }]} />
-        <SumCell label="Grand total" value={formatAmount(totals.grandTotal)} color={isDark ? '#4ADE80' : '#A7F3D0'} sec={textSec} />
-      </View>
-
-      <View style={[sumStyles.modeRow, { zIndex: 2 }]}>
-        {PAYMENT_MODES.map((mode) => {
-          const bucket = totals.byMode[mode];
-          if (!bucket || bucket.count === 0) return null;
-          return (
-            <View
-              key={mode}
-              style={[
-                sumStyles.modeChip,
-                {
-                  backgroundColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.12)',
-                  borderTopWidth: 1.5,
-                  borderTopColor: isDark ? 'rgba(0,0,0,0.15)' : 'rgba(0,0,0,0.06)',
-                  borderBottomWidth: 1,
-                  borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.12)',
-                  borderRadius: 12,
-                }
-              ]}
-            >
-              <Text style={[sumStyles.modeLabel, { color: isDark ? 'rgba(255,255,255,0.45)' : 'rgba(255,255,255,0.7)' }]}>{formatPaymentMethod(mode)}</Text>
-              <Text style={sumStyles.modeValue}>{formatAmount(bucket.total)}</Text>
-              <Text style={[sumStyles.modeCount, { color: isDark ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.6)' }]}>{bucket.count} txn</Text>
-            </View>
-          );
-        })}
-      </View>
+      {modeChips.length > 0 ? (
+        <View style={sumStyles.modeRow}>{modeChips}</View>
+      ) : null}
     </Animated.View>
-  );
-}
-
-function SumCell({
-  label,
-  value,
-  color,
-  sec,
-}: {
-  label: string;
-  value: string;
-  color: string;
-  sec: string;
-}) {
-  return (
-    <View style={sumStyles.cell}>
-      <Text style={[sumStyles.label, { color: sec }]}>{label}</Text>
-      <Text style={[sumStyles.value, { color }]}>{value}</Text>
-    </View>
   );
 }
 
@@ -347,61 +381,49 @@ function FilterChip({
   isDark: boolean;
   count?: number;
 }) {
-  const idleBg = isDark ? '#0A0B12' : '#E2E8F0';
-  const idleText = isDark ? 'rgba(255,255,255,0.45)' : '#64748B';
+  const idleText = isDark ? 'rgba(255,255,255,0.5)' : '#64748B';
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={[
-        filterStyles.chip,
-        active ? {
-          backgroundColor: '#3B82F6',
-          borderWidth: 0,
-          borderTopWidth: 1.5,
-          borderTopColor: 'rgba(255,255,255,0.45)',
-          borderBottomWidth: 3,
-          borderBottomColor: 'rgba(29,78,216,0.3)',
-          shadowColor: '#3B82F6',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.22,
-          shadowRadius: 6,
-          elevation: 2,
-          position: 'relative',
-          overflow: 'hidden',
-        } : {
-          backgroundColor: idleBg,
-          borderWidth: 0,
-          borderTopWidth: 1.2,
-          borderTopColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.08)',
-          borderBottomWidth: 1,
-          borderBottomColor: isDark ? 'rgba(255,255,255,0.05)' : '#FFFFFF',
-        }
-      ]}
-    >
-      {active && (
-        <View style={[StyleSheet.absoluteFill, { borderRadius: 18, overflow: 'hidden' }]}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-        </View>
-      )}
-      <Text style={[filterStyles.chipText, { color: active ? '#fff' : idleText, zIndex: 2 }]}>{label}</Text>
-      {count !== undefined && count > 0 ? (
-        <View style={[
-          filterStyles.chipBadge, 
-          { 
-            backgroundColor: active ? 'rgba(255,255,255,0.25)' : (isDark ? 'rgba(255,255,255,0.12)' : '#CBD5E1'),
-            zIndex: 2,
-          }
-        ]}>
-          <Text style={[filterStyles.chipBadgeText, { color: active ? '#fff' : idleText }]}>{count}</Text>
-        </View>
-      ) : null}
-    </Pressable>
+    <PressableScale onPress={onPress}>
+      <View
+        style={[
+          filterStyles.chip,
+          active
+            ? {
+                backgroundColor: ACCENT,
+                ...clay(isDark, 'sm'),
+                borderWidth: 0,
+              }
+            : {
+                backgroundColor: isDark ? '#151C28' : '#EEF2F7',
+                ...(clayInset(isDark) as any),
+                borderWidth: 0,
+              },
+        ]}
+      >
+        <Text style={[filterStyles.chipText, { color: active ? '#fff' : idleText, fontFamily: FONT }]}>
+          {label}
+        </Text>
+        {count !== undefined && count > 0 ? (
+          <View
+            style={[
+              filterStyles.chipBadge,
+              {
+                backgroundColor: active
+                  ? 'rgba(255,255,255,0.22)'
+                  : isDark
+                    ? 'rgba(255,255,255,0.1)'
+                    : 'rgba(15,23,42,0.08)',
+              },
+            ]}
+          >
+            <Text style={[filterStyles.chipBadgeText, { color: active ? '#fff' : idleText, fontFamily: FONT }]}>
+              {count}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </PressableScale>
   );
 }
 
@@ -424,8 +446,9 @@ function CollectionFiltersPanel({
   feeTypes: string[];
   allRows: FeeTransaction[];
 }) {
-  const chipText = isDark ? 'rgba(255,255,255,0.55)' : '#6B7280';
+  const chipText = isDark ? 'rgba(255,255,255,0.55)' : '#64748B';
   const active = hasActiveCollectionFilters(filters);
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const modeCounts = useMemo(() => {
     const counts: Record<string, number> = { all: allRows.length };
@@ -444,132 +467,96 @@ function CollectionFiltersPanel({
   }, [allRows, feeTypes]);
 
   return (
-    <View style={filterStyles.wrap}>
-      <Pressable
-        style={[
-          filterStyles.toggleRow,
-          {
-            backgroundColor: isDark ? '#1F2433' : '#EEF1F8',
-            borderWidth: 0,
-            borderTopWidth: 1.5,
-            borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.85)',
-            borderBottomWidth: 3,
-            borderBottomColor: isDark ? 'rgba(0,0,0,0.35)' : 'rgba(76,90,120,0.12)',
-            shadowColor: isDark ? '#000' : '#6B7A99',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: isDark ? 0.2 : 0.06,
-            shadowRadius: 8,
-            elevation: 2,
-            position: 'relative',
-          }
-        ]}
-        onPress={onToggle}
-      >
-        <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
-          <LinearGradient
-            colors={isDark ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-            start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
+    <Animated.View entering={FadeInDown.delay(100).duration(360)} style={filterStyles.wrap}>
+      {/* Always-visible search */}
+      <View style={[filterStyles.searchOuter, clayCard(isDark, 'sm'), { backgroundColor: isDark ? '#1A2332' : '#F4F7FB', borderWidth: 0 }]}>
+        <View style={[filterStyles.searchInner, clayInset(isDark, searchFocused) as any]}>
+          <Ionicons
+            name="search"
+            size={16}
+            color={searchFocused ? ACCENT : isDark ? '#64748B' : '#94A3B8'}
           />
-        </View>
-        <View style={[filterStyles.toggleLeft, { zIndex: 2 }]}>
-          <Ionicons name="options-outline" size={16} color={active ? '#3B82F6' : chipText} />
-          <Text style={[filterStyles.toggleText, { color: active ? '#3B82F6' : chipText }]}>
-            Filters{active ? ' · active' : ''}
-          </Text>
-        </View>
-        <View style={[filterStyles.toggleRight, { zIndex: 2 }]}>
-          {active ? (
-            <Pressable onPress={(e) => { e.stopPropagation?.(); onClear(); }} hitSlop={8}>
-              <Text style={filterStyles.clearText}>Clear</Text>
+          <AppTextInput
+            style={[
+              filterStyles.searchInput,
+              {
+                color: isDark ? '#F8FAFC' : '#0F172A',
+                fontFamily: FONT,
+                backgroundColor: 'transparent',
+                borderWidth: 0,
+                ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : {}),
+              } as any,
+            ]}
+            placeholder="Search name, admission no, ref…"
+            placeholderTextColor={isDark ? 'rgba(255,255,255,0.28)' : '#94A3B8'}
+            value={filters.search}
+            onChangeText={(search) => onChange({ search })}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+          />
+          {filters.search.trim().length > 0 ? (
+            <Pressable onPress={() => onChange({ search: '' })} hitSlop={8}>
+              <Ionicons name="close-circle" size={18} color={isDark ? '#64748B' : '#94A3B8'} />
             </Pressable>
           ) : null}
-          <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={chipText} />
         </View>
-      </Pressable>
+      </View>
+
+      <PressableScale onPress={onToggle}>
+        <View
+          style={[
+            filterStyles.toggleRow,
+            clayCard(isDark, 'sm'),
+            {
+              backgroundColor: isDark ? '#1A2332' : '#F4F7FB',
+              borderWidth: 0,
+            },
+          ]}
+        >
+          <View style={filterStyles.toggleLeft}>
+            <View
+              style={[
+                filterStyles.filterIconWrap,
+                { backgroundColor: active ? (isDark ? 'rgba(13,148,136,0.2)' : ACCENT_SOFT) : isDark ? 'rgba(255,255,255,0.06)' : '#E8EEF6' },
+              ]}
+            >
+              <Ionicons name="options-outline" size={15} color={active ? ACCENT : chipText} />
+            </View>
+            <Text style={[filterStyles.toggleText, { color: active ? ACCENT : chipText, fontFamily: FONT }]}>
+              {active ? 'Filters active' : 'More filters'}
+            </Text>
+            {active ? (
+              <View style={[filterStyles.activeDot, { backgroundColor: ACCENT }]} />
+            ) : null}
+          </View>
+          <View style={filterStyles.toggleRight}>
+            {active ? (
+              <Pressable
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  onClear();
+                }}
+                hitSlop={8}
+              >
+                <Text style={[filterStyles.clearText, { fontFamily: FONT }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={16} color={chipText} />
+          </View>
+        </View>
+      </PressableScale>
 
       {expanded ? (
         <Animated.View
-          entering={FadeIn.duration(250)}
+          entering={FadeIn.duration(220)}
           style={[
             filterStyles.panel,
-            {
-              backgroundColor: isDark ? '#1C2030' : '#FFFFFF',
-              borderWidth: 0,
-              borderTopWidth: 1.5,
-              borderTopColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.85)',
-              borderBottomWidth: 3.5,
-              borderBottomColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(76,90,120,0.06)',
-              shadowColor: isDark ? '#000' : '#6B7A99',
-              shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: isDark ? 0.22 : 0.08,
-              shadowRadius: 10,
-              elevation: 3,
-              position: 'relative',
-            }
+            clayCard(isDark, 'sm'),
+            { backgroundColor: isDark ? '#1A2332' : '#F8FAFC', borderWidth: 0 },
           ]}
         >
-          <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
-            <LinearGradient
-              colors={isDark ? ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-              start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-          </View>
-
-          <Text style={[filterStyles.label, { color: chipText, zIndex: 2 }]}>SEARCH</Text>
-          <View style={[
-            filterStyles.inputFrame,
-            {
-              backgroundColor: isDark ? '#2A3142' : '#EEF1F8',
-              borderTopWidth: 1.5,
-              borderTopColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.85)',
-              borderBottomWidth: 2.5,
-              borderBottomColor: isDark ? 'rgba(0,0,0,0.45)' : 'rgba(76,90,120,0.15)',
-              shadowColor: isDark ? '#000' : '#6B7A99',
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: isDark ? 0.22 : 0.08,
-              shadowRadius: 5,
-              elevation: 1,
-              zIndex: 2,
-            }
-          ]}>
-            <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
-              <LinearGradient
-                colors={isDark ? ['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)'] : ['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-                start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-                style={StyleSheet.absoluteFill}
-                pointerEvents="none"
-              />
-            </View>
-            <AppTextInput
-              style={[
-                ds.inputInChrome, 
-                filterStyles.searchInput, 
-                { 
-                  backgroundColor: isDark ? '#0A0B12' : '#D5E0ED', 
-                  color: isDark ? '#F9FAFB' : '#111827', 
-                  borderWidth: 0,
-                  borderTopWidth: 1.5,
-                  borderTopColor: isDark ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.08)',
-                  borderBottomWidth: 1,
-                  borderBottomColor: isDark ? 'rgba(255,255,255,0.08)' : '#FFFFFF',
-                  borderRadius: 10,
-                  height: 38,
-                  zIndex: 2,
-                }
-              ]}
-              placeholder="Student name, admission no, ref…"
-              placeholderTextColor={isDark ? 'rgba(255,255,255,0.25)' : '#94A3B8'}
-              value={filters.search}
-              onChangeText={(search) => onChange({ search })}
-            />
-          </View>
-
-          <Text style={[filterStyles.label, { color: chipText, zIndex: 2 }]}>PAYMENT MODE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[filterStyles.chipRow, { zIndex: 2 }]}>
+          <Text style={[filterStyles.label, { color: chipText, fontFamily: FONT }]}>Payment mode</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={filterStyles.chipRow}>
             <FilterChip
               label="All modes"
               active={filters.paymentMode === 'all'}
@@ -593,8 +580,8 @@ function CollectionFiltersPanel({
             })}
           </ScrollView>
 
-          <Text style={[filterStyles.label, { color: chipText, zIndex: 2 }]}>FEE TYPE</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[filterStyles.chipRow, { zIndex: 2 }]}>
+          <Text style={[filterStyles.label, { color: chipText, fontFamily: FONT, marginTop: 4 }]}>Fee type</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={filterStyles.chipRow}>
             <FilterChip
               label="All fees"
               active={filters.feeType === 'all'}
@@ -615,7 +602,7 @@ function CollectionFiltersPanel({
           </ScrollView>
         </Animated.View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }
 
@@ -630,7 +617,7 @@ export default function TodayCollectionScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [printing, setPrinting] = useState(false);
-  const [filtersExpanded, setFiltersExpanded] = useState(true);
+  const [filtersExpanded, setFiltersExpanded] = useState(false);
   const [filters, setFilters] = useState<CollectionFilters>(EMPTY_FILTERS);
   const [schoolFeeTypes, setSchoolFeeTypes] = useState<string[]>([]);
 
@@ -755,21 +742,50 @@ export default function TodayCollectionScreen() {
     setFilters(EMPTY_FILTERS);
   }, []);
 
+  const renderItem = useCallback(
+    ({ item, index }: { item: FeeTransaction; index: number }) => (
+      <TransactionCard item={item} index={index} isDark={isDark} onChanged={handleRefresh} />
+    ),
+    [handleRefresh, isDark],
+  );
+
   const ListHeader = (
     <View>
-      <Animated.View entering={FadeInDown.duration(400)} style={styles.hero}>
-        <Text style={[styles.schoolName, { color: isDark ? '#F9FAFB' : '#111827' }]}>
-          {SCHOOL_NAME}
-        </Text>
-        <Text style={[styles.heroTitle, { color: isDark ? '#818CF8' : '#4F46E5' }]}>
-          Today&apos;s Collection
-        </Text>
-        <Text style={[styles.heroMeta, { color: isDark ? 'rgba(255,255,255,0.55)' : '#64748B' }]}>
-          {accountantName} · {formatTodayLabel(reportDate)}
-        </Text>
-        <Text style={[styles.scopeNote, { color: isDark ? 'rgba(255,255,255,0.4)' : '#94A3B8' }]}>
-          Showing only fees you collected today
-        </Text>
+      <Animated.View entering={FadeInDown.duration(360)} style={styles.hero}>
+        <View style={styles.heroTop}>
+          <View style={styles.heroCopy}>
+            <Text style={[styles.heroEyebrow, { color: isDark ? 'rgba(255,255,255,0.4)' : '#94A3B8', fontFamily: FONT }]}>
+              Daily audit · yours only
+            </Text>
+            <Text style={[styles.heroTitle, { color: isDark ? '#F8FAFC' : '#0F172A', fontFamily: FONT }]}>
+              Today&apos;s Collection
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.datePill,
+              clayCard(isDark, 'sm'),
+              { backgroundColor: isDark ? '#1A2332' : '#F4F7FB', borderWidth: 0 },
+            ]}
+          >
+            <View style={[styles.liveDot, { backgroundColor: MONEY }]} />
+            <Text style={[styles.datePillText, { color: isDark ? '#CBD5E1' : '#475569', fontFamily: FONT }]}>
+              {formatShortDate(reportDate)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.heroMetaRow}>
+          <View style={[styles.collectorChip, { backgroundColor: isDark ? 'rgba(13,148,136,0.15)' : ACCENT_SOFT }]}>
+            <Ionicons name="person" size={12} color={ACCENT_DEEP} />
+            <Text style={[styles.collectorText, { color: ACCENT_DEEP, fontFamily: FONT }]} numberOfLines={1}>
+              {accountantName}
+            </Text>
+          </View>
+          <Text style={[styles.scopeNote, { color: isDark ? 'rgba(255,255,255,0.35)' : '#94A3B8', fontFamily: FONT }]}>
+            Fees you collected today
+          </Text>
+        </View>
       </Animated.View>
 
       <SummaryStrip totals={totals} isDark={isDark} />
@@ -785,110 +801,106 @@ export default function TodayCollectionScreen() {
         allRows={allRows}
       />
 
-      <View style={styles.actionRow}>
-        <Pressable
-          style={[
-            styles.actionBtn, 
-            styles.exportBtn, 
-            {
-              borderTopWidth: 1.5,
-              borderTopColor: 'rgba(255,255,255,0.45)',
-              borderBottomWidth: 3.5,
-              borderBottomColor: 'rgba(4,120,87,0.25)',
-              shadowColor: '#059669',
-              shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.25,
-              shadowRadius: 10,
-              elevation: 4,
-              position: 'relative',
-              overflow: 'hidden',
-            },
-            exporting && styles.actionDisabled
-          ]}
+      <Animated.View entering={FadeInDown.delay(140).duration(360)} style={styles.actionRow}>
+        <PressableScale
           onPress={handleExport}
           disabled={exporting || loading}
+          style={[
+            styles.actionBtn,
+            styles.exportBtn,
+            clayCard(isDark, 'sm'),
+            {
+              backgroundColor: isDark ? '#1A2332' : '#F4F7FB',
+              borderWidth: 0,
+            },
+          ]}
         >
-          <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-              start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-          </View>
           {exporting ? (
-            <ActivityIndicator size="small" color="#fff" style={{ zIndex: 2 }} />
+            <ActivityIndicator size="small" color={ACCENT} />
           ) : (
             <>
-              <Ionicons name="document-text-outline" size={16} color="#fff" style={{ zIndex: 2 }} />
-              <Text style={[styles.actionBtnText, { zIndex: 2 }]}>Export to Excel</Text>
+              <Ionicons name="download-outline" size={16} color={ACCENT} />
+              <Text style={[styles.actionBtnTextSecondary, { color: ACCENT, fontFamily: FONT }]}>Export</Text>
             </>
           )}
-        </Pressable>
-        <Pressable
-          style={[
-            styles.actionBtn, 
-            styles.printBtn, 
-            {
-              borderTopWidth: 1.5,
-              borderTopColor: 'rgba(255,255,255,0.45)',
-              borderBottomWidth: 3.5,
-              borderBottomColor: 'rgba(67,56,202,0.25)',
-              shadowColor: '#4F46E5',
-              shadowOffset: { width: 0, height: 6 },
-              shadowOpacity: 0.25,
-              shadowRadius: 10,
-              elevation: 4,
-              position: 'relative',
-              overflow: 'hidden',
-            },
-            printing && styles.actionDisabled
-          ]}
+        </PressableScale>
+
+        <PressableScale
           onPress={handlePrint}
           disabled={printing || loading}
+          style={[
+            styles.actionBtn,
+            styles.printBtn,
+            {
+              backgroundColor: ACCENT,
+              ...clay(isDark, 'md'),
+              borderWidth: 0,
+              overflow: 'hidden',
+            },
+          ]}
         >
-          <View style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: 'hidden' }]}>
-            <LinearGradient
-              colors={['rgba(255,255,255,0.45)', 'rgba(255,255,255,0)']}
-              start={{ x: 0, y: 0 }} end={{ x: 0.6, y: 0.9 }}
-              style={StyleSheet.absoluteFill}
-              pointerEvents="none"
-            />
-          </View>
+          <LinearGradient
+            colors={['rgba(255,255,255,0.28)', 'rgba(255,255,255,0)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0.7, y: 1 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           {printing ? (
             <ActivityIndicator size="small" color="#fff" style={{ zIndex: 2 }} />
           ) : (
             <>
               <Ionicons name="print-outline" size={16} color="#fff" style={{ zIndex: 2 }} />
-              <Text style={[styles.actionBtnText, { zIndex: 2 }]}>Print</Text>
+              <Text style={[styles.actionBtnText, { fontFamily: FONT, zIndex: 2 }]}>Print report</Text>
             </>
           )}
-        </Pressable>
-      </View>
+        </PressableScale>
+      </Animated.View>
 
-      <Text style={[styles.sectionTitle, { color: isDark ? '#F9FAFB' : '#111827' }]}>
-        Transactions ({totals.count}{allRows.length !== totals.count ? ` of ${allRows.length}` : ''})
-      </Text>
+      <View style={styles.sectionHead}>
+        <Text style={[styles.sectionTitle, { color: isDark ? '#F8FAFC' : '#0F172A', fontFamily: FONT }]}>
+          Transactions
+        </Text>
+        <View style={[styles.countPill, { backgroundColor: isDark ? 'rgba(13,148,136,0.18)' : ACCENT_SOFT }]}>
+          <Text style={[styles.countPillText, { color: ACCENT_DEEP, fontFamily: FONT }]}>
+            {totals.count}
+            {allRows.length !== totals.count ? ` / ${allRows.length}` : ''}
+          </Text>
+        </View>
+      </View>
     </View>
   );
 
   const EmptyState = (
     <Animated.View entering={FadeInDown.duration(400)} style={styles.emptyWrap}>
-      <View style={[styles.emptyIcon, { backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : '#F3F4F6' }]}>
-        <Ionicons
-          name={filtersActive ? 'filter-outline' : 'wallet-outline'}
-          size={28}
-          color={isDark ? 'rgba(255,255,255,0.35)' : '#9CA3AF'}
-        />
+      <View
+        style={[
+          styles.emptyGlow,
+          clayCard(isDark, 'lg'),
+          { backgroundColor: isDark ? '#1A2332' : '#F4F7FB', borderWidth: 0 },
+        ]}
+      >
+        <View style={[styles.emptyIconRing, { backgroundColor: isDark ? 'rgba(13,148,136,0.15)' : ACCENT_SOFT }]}>
+          <MaterialCommunityIcons
+            name={filtersActive ? 'filter-off-outline' : 'wallet-outline'}
+            size={32}
+            color={ACCENT}
+          />
+        </View>
+        <Text style={[styles.emptyTitle, { color: isDark ? '#F8FAFC' : '#0F172A', fontFamily: FONT }]}>
+          {filtersActive ? 'Nothing matches' : 'Quiet day so far'}
+        </Text>
+        <Text style={[styles.emptySub, { color: isDark ? 'rgba(255,255,255,0.45)' : '#64748B', fontFamily: FONT }]}>
+          {filtersActive
+            ? 'Try clearing filters or pick a different payment mode / fee type.'
+            : 'Payments you collect today will land here for a clean end-of-day audit.'}
+        </Text>
+        {filtersActive ? (
+          <PressableScale onPress={clearFilters} style={[styles.emptyCta, { backgroundColor: ACCENT }]}>
+            <Text style={[styles.emptyCtaText, { fontFamily: FONT }]}>Clear filters</Text>
+          </PressableScale>
+        ) : null}
       </View>
-      <Text style={[styles.emptyTitle, { color: isDark ? '#F9FAFB' : '#111827' }]}>
-        {filtersActive ? 'No matching transactions' : 'No collections today'}
-      </Text>
-      <Text style={[styles.emptySub, { color: isDark ? 'rgba(255,255,255,0.45)' : '#6B7280' }]}>
-        {filtersActive
-          ? 'Try clearing filters or choose a different payment mode or fee type.'
-          : 'Fee payments you collect today will appear here for end-of-day auditing.'}
-      </Text>
     </Animated.View>
   );
 
@@ -911,9 +923,7 @@ export default function TodayCollectionScreen() {
       <FlatList
         data={filteredRows}
         keyExtractor={(item) => item.id}
-        renderItem={({ item, index }) => (
-          <TransactionCard item={item} index={index} isDark={isDark} onChanged={handleRefresh} />
-        )}
+        renderItem={renderItem}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={ListHeader}
@@ -922,12 +932,14 @@ export default function TodayCollectionScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#3B82F6"
-            colors={['#3B82F6']}
+            tintColor={ACCENT}
+            colors={[ACCENT]}
           />
         }
         initialNumToRender={12}
         maxToRenderPerBatch={10}
+        windowSize={7}
+        removeClippedSubviews={Platform.OS === 'android'}
       />
     </View>
   );
@@ -936,116 +948,152 @@ export default function TodayCollectionScreen() {
 const cardStyles = StyleSheet.create({
   card: {
     flexDirection: 'row',
-    borderRadius: 18,
-    marginBottom: 10,
-    borderWidth: 1,
+    borderRadius: 22,
+    marginBottom: 12,
     overflow: 'hidden',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.06,
-        shadowRadius: 8,
-      },
-      android: { elevation: 3 },
-    }),
   },
-  accent: { width: 4, alignSelf: 'stretch' },
+  accent: { width: 4, alignSelf: 'stretch', borderRadius: 4, marginVertical: 14, marginLeft: 10 },
   inner: { flex: 1, padding: 14, paddingLeft: 12 },
-  topRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 10 },
-  titleBlock: { flex: 1 },
-  student: { fontSize: 15, fontWeight: '700' },
-  father: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-  amount: { fontSize: 16, fontWeight: '800' },
+  topRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontSize: 15, fontWeight: '800' },
+  titleBlock: { flex: 1, minWidth: 0 },
+  student: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  father: { fontSize: 12, fontWeight: '500', marginTop: 2 },
+  amountBlock: { alignItems: 'flex-end' },
+  amount: { fontSize: 16, fontWeight: '800', letterSpacing: -0.3 },
+  timeHint: { fontSize: 10, fontWeight: '600', marginTop: 2 },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
-  chip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, maxWidth: '100%' },
-  chipText: { fontSize: 10, fontWeight: '800' },
-  detailRow: { flexDirection: 'row', gap: 12 },
+  chip: { paddingHorizontal: 9, paddingVertical: 5, borderRadius: 10, maxWidth: '100%' },
+  chipText: { fontSize: 11, fontWeight: '700' },
+  detailRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
   detailCell: { minWidth: 72 },
-  detailLabel: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', marginBottom: 2 },
-  detailValue: { fontSize: 11, fontWeight: '600' },
+  detailLabel: { fontSize: 9, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 2 },
+  detailValue: { fontSize: 12, fontWeight: '600' },
 });
 
 const sumStyles = StyleSheet.create({
   wrap: {
-    marginHorizontal: 16,
     marginBottom: 14,
-    borderRadius: 18,
-    padding: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#2563EB',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.2,
-        shadowRadius: 14,
-      },
-      android: { elevation: 6 },
-    }),
   },
-  topRow: { flexDirection: 'row', marginBottom: 14 },
-  sep: { width: 1, backgroundColor: 'rgba(255,255,255,0.08)', marginVertical: 2 },
-  cell: { flex: 1, alignItems: 'center' },
-  label: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5, marginBottom: 4, textTransform: 'uppercase' },
-  value: { fontSize: 18, fontWeight: '800' },
-  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  statRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    borderRadius: 22,
+    padding: 16,
+    minHeight: 118,
+  },
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    letterSpacing: -0.8,
+  },
+  statValueMoney: {
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.6,
+  },
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   modeChip: {
     minWidth: '30%',
     flexGrow: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
   },
-  modeLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.55)', textTransform: 'uppercase' },
-  modeValue: { fontSize: 14, fontWeight: '800', color: '#F9FAFB', marginTop: 2 },
-  modeCount: { fontSize: 10, fontWeight: '600', color: 'rgba(255,255,255,0.45)', marginTop: 2 },
+  modeLabel: { fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3 },
+  modeValue: { fontSize: 14, fontWeight: '800', marginTop: 3, letterSpacing: -0.2 },
+  modeCount: { fontSize: 10, fontWeight: '600', marginTop: 2 },
 });
 
 const filterStyles = StyleSheet.create({
-  wrap: { marginBottom: 14 },
+  wrap: { marginBottom: 14, gap: 10 },
+  searchOuter: {
+    borderRadius: 18,
+    padding: 5,
+  },
+  searchInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '500',
+    height: 44,
+    paddingVertical: 0,
+  },
   toggleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  toggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  toggleText: { fontSize: 13, fontWeight: '700' },
-  toggleRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  clearText: { fontSize: 12, fontWeight: '800', color: '#3B82F6' },
-  panel: {
-    marginTop: 8,
     borderRadius: 16,
-    padding: 14,
-    gap: 12,
-  },
-  label: { fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
-  inputFrame: {
-    borderRadius: 14,
-    padding: 4,
-    position: 'relative',
-  },
-  searchInput: {
-    borderRadius: 10,
     paddingHorizontal: 12,
-    height: 38,
-    fontSize: 14,
-    fontWeight: '500',
+    paddingVertical: 11,
+    minHeight: 48,
   },
-  chipRow: { gap: 8, paddingVertical: 4 },
+  toggleLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  filterIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  toggleText: { fontSize: 13, fontWeight: '700' },
+  activeDot: { width: 6, height: 6, borderRadius: 3 },
+  toggleRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  clearText: { fontSize: 12, fontWeight: '800', color: ACCENT },
+  panel: {
+    borderRadius: 18,
+    padding: 14,
+    gap: 10,
+  },
+  label: { fontSize: 11, fontWeight: '700', letterSpacing: 0.2, textTransform: 'uppercase' },
+  chipRow: { gap: 8, paddingVertical: 2, paddingRight: 8 },
   chip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 18,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 14,
+    minHeight: 36,
   },
   chipText: { fontSize: 12, fontWeight: '700' },
-  chipBadge: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8 },
+  chipBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
   chipBadgeText: { fontSize: 10, fontWeight: '800' },
 });
 
@@ -1057,39 +1105,77 @@ const getStyles = (theme: any, isDark: boolean) =>
     },
     listContent: {
       paddingHorizontal: 16,
-      paddingBottom: 40,
-      paddingTop: 8,
+      paddingBottom: 48,
+      paddingTop: 6,
     },
     hero: {
-      marginBottom: 14,
-      paddingTop: 4,
+      marginBottom: 16,
+      paddingTop: 2,
     },
-    schoolName: {
-      fontSize: 13,
+    heroTop: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    heroCopy: { flex: 1, minWidth: 0 },
+    heroEyebrow: {
+      fontSize: 11,
       fontWeight: '700',
-      letterSpacing: 0.2,
+      letterSpacing: 0.4,
       textTransform: 'uppercase',
+      marginBottom: 4,
     },
     heroTitle: {
-      fontSize: 24,
+      fontSize: 26,
       fontWeight: '800',
-      letterSpacing: -0.5,
-      marginTop: 4,
+      letterSpacing: -0.7,
     },
-    heroMeta: {
-      fontSize: 13,
-      fontWeight: '500',
-      marginTop: 4,
+    datePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderRadius: 14,
+    },
+    liveDot: {
+      width: 7,
+      height: 7,
+      borderRadius: 4,
+    },
+    datePillText: {
+      fontSize: 12,
+      fontWeight: '700',
+    },
+    heroMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 10,
+      marginTop: 12,
+    },
+    collectorChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      maxWidth: '70%',
+    },
+    collectorText: {
+      fontSize: 12,
+      fontWeight: '700',
     },
     scopeNote: {
-      fontSize: 11,
-      fontWeight: '600',
-      marginTop: 6,
+      fontSize: 12,
+      fontWeight: '500',
     },
     actionRow: {
       flexDirection: 'row',
       gap: 10,
-      marginBottom: 16,
+      marginBottom: 18,
     },
     actionBtn: {
       flex: 1,
@@ -1097,31 +1183,62 @@ const getStyles = (theme: any, isDark: boolean) =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      paddingVertical: 12,
-      borderRadius: 14,
+      height: 48,
+      borderRadius: 16,
     },
-    exportBtn: { backgroundColor: '#059669' },
-    printBtn: { backgroundColor: '#4F46E5' },
-    actionDisabled: { opacity: 0.65 },
-    actionBtnText: { color: '#fff', fontSize: 13, fontWeight: '800' },
+    exportBtn: {},
+    printBtn: {},
+    actionBtnText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+    actionBtnTextSecondary: { fontSize: 14, fontWeight: '800' },
+    sectionHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 12,
+    },
     sectionTitle: {
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '800',
-      marginBottom: 10,
+      letterSpacing: -0.3,
+    },
+    countPill: {
+      paddingHorizontal: 9,
+      paddingVertical: 3,
+      borderRadius: 999,
+    },
+    countPillText: {
+      fontSize: 12,
+      fontWeight: '800',
     },
     emptyWrap: {
       alignItems: 'center',
-      paddingVertical: 48,
-      paddingHorizontal: 24,
+      paddingVertical: 28,
+      paddingHorizontal: 8,
     },
-    emptyIcon: {
-      width: 64,
-      height: 64,
-      borderRadius: 20,
+    emptyGlow: {
+      width: '100%',
+      alignItems: 'center',
+      paddingVertical: 36,
+      paddingHorizontal: 28,
+      borderRadius: 28,
+    },
+    emptyIconRing: {
+      width: 72,
+      height: 72,
+      borderRadius: 24,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 14,
+      marginBottom: 16,
     },
-    emptyTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
-    emptySub: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
+    emptyTitle: { fontSize: 18, fontWeight: '800', marginBottom: 8, letterSpacing: -0.3 },
+    emptySub: { fontSize: 14, textAlign: 'center', lineHeight: 21, maxWidth: 300 },
+    emptyCta: {
+      marginTop: 18,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 14,
+      minHeight: 44,
+      justifyContent: 'center',
+    },
+    emptyCtaText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   });

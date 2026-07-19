@@ -9,8 +9,14 @@ export interface StudentRiskProfile {
     name: string;
     class: string;
     riskLevel: RiskLevel;
-    factors: string[]; // e.g., ["Marks ↓ 15%", "Attendance < 75%"]
-    trend: number[]; // Last 5 test scores for tiny graph
+    /** Composite urgency 0–100 (higher = contact sooner) */
+    riskScore?: number;
+    attendancePct?: number;
+    failedCount?: number;
+    factors: string[]; // e.g., ["Attendance 67%", "Marks ↓ 15%"]
+    primaryFactor?: string;
+    recommendation?: string;
+    trend: number[]; // Last 5 test scores, oldest → newest
 }
 
 export interface HeatmapData {

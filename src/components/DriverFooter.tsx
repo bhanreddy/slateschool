@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { View, Pressable, StyleSheet, Dimensions, Platform } from 'react-native';
+import { View, Pressable, StyleSheet, Dimensions, Platform, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialTopTabBarProps } from '@react-navigation/material-top-tabs';
 import Animated, {
@@ -8,28 +8,29 @@ import Animated, {
     useSharedValue,
     withSpring,
     withTiming,
-    FadeIn,
 } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useTheme } from '../hooks/useTheme';
 import { useStaffPortalConfig } from '../hooks/useStaffPortalConfig';
 import { BusAttendanceService } from '../services/busAttendanceService';
+import * as Haptics from '../utils/haptics';
 
 const { width } = Dimensions.get('window');
 
-const TAB_CONFIG: Record<string, { icon: string; label: string }> = {
-    'trip': { icon: 'navigate-outline', label: 'My Trip' },
-    'dashboard': { icon: 'bus-outline', label: 'Route' },
-    'students': { icon: 'people-outline', label: 'Students' },
-    'bus-attendance': { icon: 'clipboard-outline', label: 'Attendance' },
-    'payslip': { icon: 'wallet-outline', label: 'Payslips' },
-    'profile': { icon: 'person-outline', label: 'Profile' },
+const TAB_CONFIG: Record<string, { icon: string; iconActive: string; label: string }> = {
+    'trip': { icon: 'navigate-outline', iconActive: 'navigate', label: 'Trip' },
+    'dashboard': { icon: 'bus-outline', iconActive: 'bus', label: 'Route' },
+    'students': { icon: 'people-outline', iconActive: 'people', label: 'Students' },
+    'bus-attendance': { icon: 'clipboard-outline', iconActive: 'clipboard', label: 'Attend' },
+    'payslip': { icon: 'wallet-outline', iconActive: 'wallet', label: 'Pay' },
+    'profile': { icon: 'person-outline', iconActive: 'person', label: 'Profile' },
 };
 
 const ORDERED_TABS = ['trip', 'dashboard', 'students', 'bus-attendance', 'payslip', 'profile'];
+const ALLOW_REAL_BLUR = Platform.OS === 'ios';
 
-export default function DriverFooter({ state, descriptors, navigation }: MaterialTopTabBarProps) {
+export default function DriverFooter({ state, navigation }: MaterialTopTabBarProps) {
     const { t } = useTranslation();
     const { theme, isDark } = useTheme();
     const { payslipsEnabled } = useStaffPortalConfig();
@@ -49,54 +50,64 @@ export default function DriverFooter({ state, descriptors, navigation }: Materia
         orderedTabs = orderedTabs.filter((tab) => tab !== 'bus-attendance');
     }
 
-    // Filter and sort routes to only show the main tabs
     const visibleRoutes = state.routes
         .filter(route => orderedTabs.includes(route.name))
         .sort((a, b) => orderedTabs.indexOf(a.name) - orderedTabs.indexOf(b.name));
 
-    // Calculate active index relative to visible routes
     const currentRouteName = state.routes[state.index].name;
     const activeIndex = visibleRoutes.findIndex(route => route.name === currentRouteName);
     const isFooterVisible = activeIndex !== -1;
 
-    // Calculate tab width
     const totalTabs = visibleRoutes.length;
-    const tabWidth = (width - 40) / (totalTabs || 1);
+    const tabWidth = (width - 32) / (totalTabs || 1);
 
     const indicatorPosition = useSharedValue(0);
 
     useEffect(() => {
         if (activeIndex !== -1) {
             indicatorPosition.value = withSpring(activeIndex * tabWidth, {
-                damping: 15,
-                stiffness: 150,
+                damping: 16,
+                stiffness: 160,
             });
         }
-    }, [activeIndex, tabWidth]);
+    }, [activeIndex, tabWidth, indicatorPosition]);
 
     const indicatorStyle = useAnimatedStyle(() => {
         return {
             transform: [{ translateX: indicatorPosition.value }],
             width: tabWidth,
-            opacity: withTiming(isFooterVisible ? 1 : 0),
+            opacity: withTiming(isFooterVisible ? 1 : 0, { duration: 160 }),
         };
     });
 
     const styles = useMemo(() => StyleSheet.create({
         container: {
             position: 'absolute',
-            bottom: theme.spacing.xl,
-            left: theme.spacing.xl,
-            right: theme.spacing.xl,
+            bottom: theme.spacing.lg,
+            left: theme.spacing.md,
+            right: theme.spacing.md,
             alignItems: 'center',
         },
         barWrapper: {
             flexDirection: 'row',
             width: '100%',
-            height: 64,
-            borderRadius: theme.shape.borderRadiusFull,
+            height: 68,
+            borderRadius: 24,
             overflow: 'hidden',
-            ...theme.shadows.md,
+            ...Platform.select({
+                ios: {
+                    shadowColor: theme.colors.primaryDark,
+                    shadowOffset: { width: 0, height: 8 },
+                    shadowOpacity: 0.18,
+                    shadowRadius: 16,
+                },
+                android: { elevation: 6 },
+                default: {},
+            }),
+        },
+        fakeGlass: {
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: isDark ? 'rgba(30, 41, 59, 0.92)' : 'rgba(255, 255, 255, 0.92)',
         },
         barContent: {
             flexDirection: 'row',
@@ -105,7 +116,7 @@ export default function DriverFooter({ state, descriptors, navigation }: Materia
             alignItems: 'center',
             paddingHorizontal: 0,
             borderWidth: 1,
-            borderRadius: theme.shape.borderRadiusFull,
+            borderRadius: 24,
         },
         activeIndicatorContainer: {
             position: 'absolute',
@@ -115,14 +126,9 @@ export default function DriverFooter({ state, descriptors, navigation }: Materia
             zIndex: 0,
         },
         activeIndicator: {
-            width: '70%',
-            height: 60,
-            borderRadius: theme.shape.borderRadiusXL + 2,
-            shadowColor: theme.colors.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 6,
+            width: '78%',
+            height: 52,
+            borderRadius: 18,
         },
         tabItem: {
             flex: 1,
@@ -131,34 +137,40 @@ export default function DriverFooter({ state, descriptors, navigation }: Materia
             alignItems: 'center',
             zIndex: 1,
             flexDirection: 'column',
-            gap: theme.spacing.xs,
+            gap: 2,
+            minWidth: 48,
         },
         iconContainer: {
             alignItems: 'center',
             justifyContent: 'center',
+            height: 26,
         },
         label: {
-            fontSize: theme.typography.fontSizeXS,
-            fontWeight: '600',
-            letterSpacing: 0.2,
+            fontSize: 10,
+            fontWeight: '700',
+            letterSpacing: 0.15,
         },
-    }), [theme]);
+    }), [theme, isDark]);
 
     return (
-        <View style={styles.container}>
+        <View style={styles.container} pointerEvents="box-none">
             <View style={styles.barWrapper}>
-                <BlurView
-                    intensity={Platform.OS === 'ios' ? 80 : 30}
-                    tint={isDark ? 'dark' : 'light'}
-                    style={StyleSheet.absoluteFill}
-                />
+                {ALLOW_REAL_BLUR ? (
+                    <BlurView
+                        intensity={80}
+                        tint={isDark ? 'dark' : 'light'}
+                        style={StyleSheet.absoluteFill}
+                    />
+                ) : (
+                    <View style={styles.fakeGlass} />
+                )}
                 <LinearGradient
                     colors={isDark
-                        ? ['rgba(30, 41, 59, 0.7)', 'rgba(15, 23, 42, 0.8)']
-                        : ['rgba(255, 255, 255, 0.8)', 'rgba(241, 245, 249, 0.9)']}
+                        ? ['rgba(30, 41, 59, 0.55)', 'rgba(15, 23, 42, 0.72)']
+                        : ['rgba(255, 255, 255, 0.55)', 'rgba(248, 250, 252, 0.78)']}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={[styles.barContent, { borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.6)' }]}
+                    style={[styles.barContent, { borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.7)' }]}
                 >
                     <Animated.View style={[styles.activeIndicatorContainer, indicatorStyle]}>
                         <LinearGradient
@@ -170,11 +182,11 @@ export default function DriverFooter({ state, descriptors, navigation }: Materia
                     </Animated.View>
 
                     {visibleRoutes.map((route) => {
-                        const { options } = descriptors[route.key];
-                        const config = TAB_CONFIG[route.name] || { icon: 'ellipse', label: 'Tab' };
+                        const config = TAB_CONFIG[route.name] || { icon: 'ellipse', iconActive: 'ellipse', label: 'Tab' };
                         const isFocused = currentRouteName === route.name;
 
                         const onPress = () => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             const event = navigation.emit({
                                 type: 'tabPress',
                                 target: route.key,
@@ -189,24 +201,31 @@ export default function DriverFooter({ state, descriptors, navigation }: Materia
                             <Pressable
                                 key={route.key}
                                 onPress={onPress}
-                                style={[styles.tabItem, Platform.OS === 'web' && { cursor: 'pointer' }]}
+                                accessibilityRole="tab"
+                                accessibilityState={{ selected: isFocused }}
+                                accessibilityLabel={t(`driver_ui.${route.name}`, config.label)}
+                                style={({ pressed }) => [
+                                    styles.tabItem,
+                                    Platform.OS === 'web' && { cursor: 'pointer' },
+                                    pressed && { opacity: 0.75, transform: [{ scale: 0.96 }] },
+                                ]}
                             >
                                 <View style={styles.iconContainer}>
                                     <Ionicons
-                                        name={config.icon as any}
+                                        name={(isFocused ? config.iconActive : config.icon) as any}
                                         size={22}
                                         color={isFocused ? theme.colors.surface : theme.colors.textSecondary}
                                     />
                                 </View>
-                                {isFocused && (
-                                    <Animated.Text
-                                        entering={FadeIn.duration(200)}
-                                        style={[styles.label, { color: theme.colors.surface }]}
-                                        numberOfLines={1}
-                                    >
-                                        {t(`driver_ui.${route.name}`, config.label)}
-                                    </Animated.Text>
-                                )}
+                                <Text
+                                    style={[
+                                        styles.label,
+                                        { color: isFocused ? theme.colors.surface : theme.colors.textMuted },
+                                    ]}
+                                    numberOfLines={1}
+                                >
+                                    {t(`driver_ui.${route.name}_short`, config.label)}
+                                </Text>
                             </Pressable>
                         );
                     })}

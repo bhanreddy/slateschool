@@ -193,7 +193,7 @@ export default function DriverProfile() {
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F1A" />
-      <StudentHeader title="My Profile" menuUserType="driver" />
+      <StudentHeader title="My Profile" menuUserType="driver" showBackButton={false} />
       <ScrollView
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}>

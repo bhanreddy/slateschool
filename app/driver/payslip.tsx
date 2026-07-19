@@ -67,7 +67,7 @@ export default function DriverPayslip() {
   return (
     <View style={styles.screen}>
       <StatusBar barStyle="light-content" backgroundColor="#0F0F1A" />
-      <StudentHeader title="My Payslips" menuUserType="driver" />
+      <StudentHeader title="My Payslips" menuUserType="driver" showBackButton={false} />
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         {!configLoading && !payslipsEnabled ? (
           <View style={styles.emptyBox}>
