@@ -99,6 +99,7 @@ export interface Student {
     readonly admission_no: string;
     readonly pen_number?: string;
     readonly apar_number?: string | null;
+    readonly village?: string | null;
     readonly admission_date: string;
     readonly first_name: string;
     readonly middle_name?: string;

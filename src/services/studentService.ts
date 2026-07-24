@@ -35,6 +35,7 @@ export interface CreateStudentRequest {
     admission_no: string;
     pen_number?: string;
     apar_number?: string | null;
+    village?: string | null;
     admission_date: string;
     status_id: number;
     category_id: number;
@@ -59,6 +60,7 @@ export interface UpdateStudentRequest {
     admission_no?: string;
     pen_number?: string;
     apar_number?: string | null;
+    village?: string | null;
     admission_date?: string;
     status_id?: number;
     category_id?: number;

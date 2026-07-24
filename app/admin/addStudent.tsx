@@ -286,6 +286,7 @@ export default function AddStudentScreen() {
     admission_no: '',
     pen_number: '',
     apar_number: '',
+    village: '',
     admission_date: new Date().toISOString().split('T')[0],
     status_id: 1,
     // Default: Active
@@ -377,6 +378,7 @@ export default function AddStudentScreen() {
           admission_no: data.admission_no || '',
           pen_number: data.pen_number || '',
           apar_number: data.apar_number || '',
+          village: data.village || '',
           admission_date: normalizeDateInput(data.admission_date),
           status_id: data.status_id || 1,
           category_id: data.category_id || 1,
@@ -501,6 +503,7 @@ export default function AddStudentScreen() {
           admission_no: formData.admission_no,
           ...(formData.pen_number?.trim() ? { pen_number: formData.pen_number.trim() } : {}),
           apar_number: formData.apar_number || null,
+          village: formData.village?.trim() || null,
           admission_date: formData.admission_date,
           status_id: formData.status_id,
           category_id: formData.category_id,
@@ -595,6 +598,10 @@ export default function AddStudentScreen() {
             maximumDate={new Date()}
             containerStyle={styles.inputGroup}
           />
+          <InputField label="Village" placeholder="Village (optional)" value={formData.village || ''} onChangeText={(t: string) => setFormData({
+            ...formData,
+            village: t
+          })} icon="location-outline" fieldKey="ims-stu-village" />
         </Animated.View>
         {/* Section: Academic Info */}
         <Animated.View entering={FadeInDown.delay(200).duration(500)} style={styles.section}>

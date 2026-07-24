@@ -467,7 +467,7 @@ export default function AddStudentScreen() {
   const [formData, setFormData] = useState<CreateStudentRequest>({
     first_name: '', middle_name: '', last_name: '',
     dob: '', gender_id: 1,
-    admission_no: '', pen_number: '', apar_number: '', admission_date: new Date().toISOString().split('T')[0],
+    admission_no: '', pen_number: '', apar_number: '', village: '', admission_date: new Date().toISOString().split('T')[0],
     status_id: 1, category_id: 1, religion_id: 1, blood_group_id: 1,
     email: '', phone: '', password: '', role_code: 'student',
     class_id: '', section_id: '', academic_year_id: '',
@@ -520,6 +520,7 @@ export default function AddStudentScreen() {
           gender_id: data.gender_id || 1, admission_no: data.admission_no || '',
           pen_number: data.pen_number || '',
           apar_number: data.apar_number || '',
+          village: data.village || '',
           admission_date: data.admission_date || '', status_id: data.status_id || 1,
           category_id: data.category_id || 1, religion_id: data.religion_id || 1,
           blood_group_id: data.blood_group_id || 1, email: data.email || '',
@@ -736,6 +737,9 @@ export default function AddStudentScreen() {
               showSelectedBadge
               containerStyle={styles.inputGroup}
             />
+            <InputField label="Village" placeholder="Village (optional)" value={formData.village || ''}
+              onChangeText={(t: string) => update('village', t)} icon="location-outline"
+              accentColor={SECTION_COLORS.personal.accent} />
           </SectionCard>
 
           {/* ── SECTION 2: ACADEMIC ── */}

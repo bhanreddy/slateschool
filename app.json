@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "New Master Minds School Gokafasalwad",
-    "slug": "newmastermindsschoolgokafasalwad",
+    "name": "Slate School Kosgi",
+    "slug": "slateschool",
     "version": "1.5.1",
     "platforms": [
       "android",
@@ -16,7 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "requireFullScreen": false,
-      "bundleIdentifier": "com.nexsyrussims.nmsgokafasalwad",
+      "bundleIdentifier": "com.nexsyrussims.slateschool",
       "buildNumber": "1",
       "googleServicesFile": "./GoogleService-Info.plist",
       "infoPlist": {
@@ -31,7 +31,7 @@
       }
     },
     "android": {
-      "package": "com.nexsyrussims.nmsgokafasalwad",
+      "package": "com.nexsyrussims.slateschool",
       "jsEngine": "hermes",
       "versionCode": 1,
       "googleServicesFile": "./google-services.json",
@@ -52,6 +52,7 @@
       ]
     },
     "web": {
+      "bundler": "metro",
       "favicon": "./assets/images/icon.png"
     },
     "notification": {
@@ -92,7 +93,8 @@
             "./assets/sounds/notification_default.wav",
             "./assets/sounds/emergency.wav",
             "./assets/sounds/fee_reminder.wav",
-            "./assets/sounds/voice_alert.wav"
+            "./assets/sounds/voice_alert.wav",
+            "./assets/sounds/bus_present.wav"
           ]
         }
       ],
@@ -116,9 +118,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e51574e5-1701-4e8c-828d-32ca5f3fe8ea"
+        "projectId": "092e54fd-6629-4c8c-ab8d-a21a3ea7633c"
       }
     },
-    "owner": "nexsyrus1"
+    "owner": "nexsyrus"
   }
 }
